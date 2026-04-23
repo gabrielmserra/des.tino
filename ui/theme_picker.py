@@ -16,6 +16,18 @@ class ThemePickerDialog(ctk.CTkToplevel):
         self._center(parent)
         self.lift()
         self.focus()
+        self.after(100, self._set_icon)
+
+    def _set_icon(self) -> None:
+        try:
+            import sys, os
+            if getattr(sys, "frozen", False):
+                path = os.path.join(sys._MEIPASS, "assets", "app.ico")
+            else:
+                path = os.path.join(os.path.dirname(__file__), "..", "assets", "app.ico")
+            self.iconbitmap(os.path.abspath(path))
+        except Exception:
+            pass
 
     def _center(self, parent) -> None:
         self.update_idletasks()

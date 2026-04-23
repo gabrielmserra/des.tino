@@ -12,12 +12,36 @@ class LoginFrame(ctk.CTkFrame):
     def __init__(self, parent, on_login: Callable[[str], None]):
         super().__init__(parent, fg_color=T.BG)
         self._on_login = on_login
+        self._current_page = "login"
         self._build_login()
 
     # ------------------------------------------------------------------
     def _clear(self) -> None:
         for w in self.winfo_children():
             w.destroy()
+
+    def _add_theme_btn(self) -> None:
+        btn = ctk.CTkButton(
+            self, text="🎨", width=36, height=36,
+            corner_radius=10, font=F(16),
+            fg_color=T.CARD, hover_color=T.CARD2,
+            border_width=1, border_color=T.BORDER,
+            text_color=T.MUTED,
+            command=self._open_theme_picker,
+        )
+        btn.place(relx=1.0, rely=1.0, anchor="se", x=-16, y=-16)
+
+    def _open_theme_picker(self) -> None:
+        from ui.theme_picker import ThemePickerDialog
+        def _on_select(_name):
+            self.configure(fg_color=T.BG)
+            if self._current_page == "login":
+                self._build_login()
+            elif self._current_page == "register":
+                self._build_register()
+            elif self._current_page == "forgot":
+                self._build_forgot_password()
+        ThemePickerDialog(self.winfo_toplevel(), _on_select)
 
     # ------------------------------------------------------------------
     def _build_login(self) -> None:
@@ -105,6 +129,8 @@ class LoginFrame(ctk.CTkFrame):
             text_color=T.TEXT, font=F(14, "bold"),
         ).grid(row=9, column=0, padx=32, pady=(8, 32))
 
+        self._current_page = "login"
+        self._add_theme_btn()
         self._email.focus()
 
     # ------------------------------------------------------------------
@@ -207,6 +233,8 @@ class LoginFrame(ctk.CTkFrame):
             text_color=T.TEXT, font=F(14, "bold"),
         ).grid(row=12, column=0, padx=32, pady=(8, 32))
 
+        self._current_page = "register"
+        self._add_theme_btn()
         self._reg_email.focus()
 
     # ------------------------------------------------------------------
@@ -314,6 +342,8 @@ class LoginFrame(ctk.CTkFrame):
             text_color=T.TEXT, font=F(14, "bold"),
         ).grid(row=6, column=0, padx=32, pady=(8, 32))
 
+        self._current_page = "forgot"
+        self._add_theme_btn()
         self._reset_email.focus()
 
     # ------------------------------------------------------------------

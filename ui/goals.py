@@ -233,12 +233,24 @@ class _ContributionDialog(ctk.CTkToplevel):
         self._build(goal_name)
         self._center(parent)
         self.lift(); self.focus()
+        self.after(100, self._set_icon)
+
+    def _set_icon(self) -> None:
+        try:
+            import sys, os
+            if getattr(sys, "frozen", False):
+                path = os.path.join(sys._MEIPASS, "assets", "app.ico")
+            else:
+                path = os.path.join(os.path.dirname(__file__), "..", "assets", "app.ico")
+            self.iconbitmap(os.path.abspath(path))
+        except Exception:
+            pass
 
     def _center(self, parent) -> None:
         self.update_idletasks()
         px = parent.winfo_x() + (parent.winfo_width()  - 360) // 2
-        py = parent.winfo_y() + (parent.winfo_height() - 180) // 2
-        self.geometry(f"360x180+{px}+{py}")
+        py = parent.winfo_y() + (parent.winfo_height() - 220) // 2
+        self.geometry(f"360x220+{px}+{py}")
 
     def _build(self, goal_name: str) -> None:
         self.grid_columnconfigure(0, weight=1)
