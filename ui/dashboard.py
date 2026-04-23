@@ -44,21 +44,24 @@ class Dashboard(ctk.CTkScrollableFrame):
         # ── Guru Financeiro ───────────────────────────────────────────
         tips_card = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14,
                                  border_width=1, border_color=T.BORDER)
-        tips_card.grid(row=1, column=0, sticky="ew", padx=28, pady=(14, 0))
+        tips_card.grid(row=1, column=0, sticky="ew", padx=28, pady=(16, 0))
         tips_card.grid_columnconfigure(0, weight=1)
 
         header_row = ctk.CTkFrame(tips_card, fg_color="transparent")
-        header_row.grid(row=0, column=0, sticky="ew", padx=20, pady=(14, 8))
-        ctk.CTkLabel(header_row, text="🧠", font=F(16)).pack(side="left", padx=(0, 6))
+        header_row.grid(row=0, column=0, sticky="ew", padx=20, pady=(14, 6))
+        ctk.CTkLabel(header_row, text="🧠", font=F(15)).pack(side="left", padx=(0, 6))
         ctk.CTkLabel(header_row, text="Guru Financeiro",
-                     font=F(13, "bold"), text_color=T.TEXT, anchor="w").pack(side="left")
+                     font=F(13, "bold"), text_color=T.GREEN, anchor="w").pack(side="left")
+        ctk.CTkLabel(header_row, text="dicas personalizadas do mês",
+                     font=F(11), text_color=T.MUTED, anchor="w").pack(side="left", padx=(8, 0))
 
         self._tips_frame = ctk.CTkFrame(tips_card, fg_color="transparent")
-        self._tips_frame.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 14))
+        self._tips_frame.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 14))
+        self._tips_frame.grid_columnconfigure((0, 1, 2), weight=1)
 
         # ── Charts ────────────────────────────────────────────────────
         charts = ctk.CTkFrame(self, fg_color="transparent")
-        charts.grid(row=2, column=0, sticky="nsew", padx=28, pady=(14, 0))
+        charts.grid(row=2, column=0, sticky="nsew", padx=28, pady=(16, 0))
         charts.grid_columnconfigure((0, 1), weight=1)
 
         pie_card = ctk.CTkFrame(charts, fg_color=T.CARD, corner_radius=14,
@@ -86,7 +89,7 @@ class Dashboard(ctk.CTkScrollableFrame):
         # ── Savings bar ───────────────────────────────────────────────
         self._savings_card = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14,
                                           border_width=1, border_color=T.BORDER)
-        self._savings_card.grid(row=3, column=0, sticky="ew", padx=28, pady=(14, 24))
+        self._savings_card.grid(row=3, column=0, sticky="ew", padx=28, pady=(16, 0))
         self._savings_card.grid_columnconfigure(2, weight=1)
 
         ctk.CTkLabel(self._savings_card, text="Taxa de poupança:",
@@ -106,6 +109,26 @@ class Dashboard(ctk.CTkScrollableFrame):
             self._savings_card, text="", font=F(12), text_color=T.MUTED)
         self._savings_label.grid(row=0, column=3, padx=(4, 22))
 
+        # ── Metas de poupança ─────────────────────────────────────────
+        goals_card = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14,
+                                  border_width=1, border_color=T.BORDER)
+        goals_card.grid(row=4, column=0, sticky="ew", padx=28, pady=(16, 28))
+        goals_card.grid_columnconfigure(0, weight=1)
+
+        hdr = ctk.CTkFrame(goals_card, fg_color="transparent")
+        hdr.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 8))
+        hdr.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(hdr, text="🎯  Metas de Poupança",
+                     font=F(13, "bold"), text_color=T.TEXT, anchor="w").grid(
+            row=0, column=0, sticky="w")
+        self._goals_count_lbl = ctk.CTkLabel(
+            hdr, text="", font=F(11), text_color=T.MUTED, anchor="e")
+        self._goals_count_lbl.grid(row=0, column=1, sticky="e")
+
+        self._goals_frame = ctk.CTkFrame(goals_card, fg_color="transparent")
+        self._goals_frame.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 16))
+        self._goals_frame.grid_columnconfigure(0, weight=1)
+
     # ------------------------------------------------------------------
     @staticmethod
     def _make_kpi(parent, label: str, color: str) -> ctk.CTkFrame:
@@ -121,6 +144,7 @@ class Dashboard(ctk.CTkScrollableFrame):
 
     # ------------------------------------------------------------------
     def refresh(self) -> None:
+        import threading
         s = db.get_month_summary(self.month_id)
 
         for key, (lbl, default_color) in self._card_lbls.items():
@@ -132,6 +156,15 @@ class Dashboard(ctk.CTkScrollableFrame):
         self._draw_bar(s)
         self._draw_savings(s)
         self._draw_tips(s)
+
+        def _fetch_goals():
+            try:
+                goals = db.get_goals()
+            except Exception:
+                goals = []
+            self.after(0, lambda: self._draw_goals(goals))
+
+        threading.Thread(target=_fetch_goals, daemon=True).start()
 
     # ------------------------------------------------------------------
     def _draw_pie(self) -> None:
@@ -219,13 +252,57 @@ class Dashboard(ctk.CTkScrollableFrame):
         ax.spines["bottom"].set_color(T.BORDER)
         ax.tick_params(colors=T.MUTED, length=0)
         for lbl in ax.get_xticklabels():
-            lbl.set_color(T.MUTED); lbl.set_fontsize(11); lbl.set_fontweight("bold")
+            lbl.set_color(T.TEXT); lbl.set_fontsize(11); lbl.set_fontweight("bold")
 
         fig.tight_layout(pad=0.8)
         canvas = FigureCanvasTkAgg(fig, master=self._bar_host)
         canvas.draw()
         canvas.get_tk_widget().pack(fill="both", expand=True)
         plt.close(fig)
+
+    # ------------------------------------------------------------------
+    def _draw_goals(self, goals: list) -> None:
+        for w in self._goals_frame.winfo_children():
+            w.destroy()
+
+        n = len(goals)
+        done = sum(1 for g in goals if float(g.get("saved_amount") or 0) >= float(g.get("target_amount") or 1))
+        self._goals_count_lbl.configure(
+            text=f"{done}/{n} concluída{'s' if done != 1 else ''}" if n else "")
+
+        if not goals:
+            ctk.CTkLabel(self._goals_frame,
+                         text="Nenhuma meta criada. Acesse a aba Metas para começar.",
+                         font=F(12), text_color=T.MUTED, anchor="w").pack(anchor="w", pady=(0, 4))
+            return
+
+        for goal in goals:
+            target = float(goal.get("target_amount") or 0)
+            saved  = float(goal.get("saved_amount")  or 0)
+            pct    = min(1.0, saved / target) if target > 0 else 0.0
+            done   = pct >= 1.0
+            color  = T.GREEN if done else T.BLUE
+
+            row = ctk.CTkFrame(self._goals_frame, fg_color="transparent")
+            row.pack(fill="x", pady=(0, 10))
+            row.grid_columnconfigure(1, weight=1)
+
+            # Nome + status
+            ctk.CTkLabel(row, text=goal["name"], font=F(12, "bold"),
+                         text_color=T.TEXT, anchor="w").grid(
+                row=0, column=0, sticky="w")
+            status = "✓ Concluída" if done else f"{pct*100:.0f}%"
+            ctk.CTkLabel(row, text=f"{format_currency(saved)} / {format_currency(target)}  {status}",
+                         font=F(11), text_color=color, anchor="e").grid(
+                row=0, column=1, sticky="e")
+
+            # Barra de progresso
+            bar_bg = ctk.CTkFrame(row, height=6, fg_color=T.CARD2, corner_radius=3)
+            bar_bg.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+            bar_bg.grid_propagate(False)
+            bar_bg.update_idletasks()
+            ctk.CTkFrame(bar_bg, height=6, fg_color=color, corner_radius=3).place(
+                x=0, y=0, relheight=1, relwidth=pct)
 
     # ------------------------------------------------------------------
     def _draw_tips(self, s: dict) -> None:
@@ -236,22 +313,26 @@ class Dashboard(ctk.CTkScrollableFrame):
         if not tips:
             ctk.CTkLabel(self._tips_frame,
                          text="Adicione lançamentos para receber dicas personalizadas.",
-                         font=F(12), text_color=T.MUTED, anchor="w").pack(anchor="w")
+                         font=F(12), text_color=T.MUTED, anchor="w").grid(
+                row=0, column=0, columnspan=3, sticky="w", pady=8)
             return
 
-        for icon, title, body, color, dim in tips:
-            row = ctk.CTkFrame(self._tips_frame, fg_color=dim, corner_radius=10)
-            row.pack(fill="x", pady=(0, 8))
-            row.grid_columnconfigure(1, weight=1)
+        for col, (icon, title, body, color, dim) in enumerate(tips):
+            card = ctk.CTkFrame(self._tips_frame, fg_color=dim, corner_radius=10)
+            card.grid(row=0, column=col, sticky="nsew",
+                      padx=(0 if col == 0 else 6, 0))
+            card.grid_columnconfigure(0, weight=1)
 
-            ctk.CTkLabel(row, text=icon, font=F(18), text_color=color, width=36).grid(
-                row=0, column=0, rowspan=2, padx=(14, 0), pady=12)
-            ctk.CTkLabel(row, text=title, font=F(12, "bold"),
-                         text_color=color, anchor="w").grid(
-                row=0, column=1, sticky="w", padx=(10, 14), pady=(10, 0))
-            ctk.CTkLabel(row, text=body, font=F(11),
-                         text_color=T.MUTED, anchor="w", wraplength=700, justify="left").grid(
-                row=1, column=1, sticky="w", padx=(10, 14), pady=(0, 10))
+            hdr = ctk.CTkFrame(card, fg_color="transparent")
+            hdr.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 4))
+            ctk.CTkLabel(hdr, text=icon, font=F(15), text_color=color,
+                         width=22).pack(side="left")
+            ctk.CTkLabel(hdr, text=title, font=F(12, "bold"),
+                         text_color=color, anchor="w").pack(side="left", padx=(6, 0))
+
+            ctk.CTkLabel(card, text=body, font=F(11), text_color=T.MUTED,
+                         anchor="w", wraplength=300, justify="left").grid(
+                row=1, column=0, sticky="ew", padx=12, pady=(0, 12))
 
     # ------------------------------------------------------------------
     def _draw_savings(self, s: dict) -> None:
