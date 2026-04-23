@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 120 120" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0B2E22"></stop>
+      <stop offset="100%" stop-color="#144D35"></stop>
+    </linearGradient>
+    <radialGradient id="glow" cx="60" cy="60" r="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1DB37A" stop-opacity="0.15"></stop>
+      <stop offset="100%" stop-color="#1DB37A" stop-opacity="0"></stop>
+    </radialGradient>
+    <linearGradient id="dot" x1="48" y1="48" x2="72" y2="72" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1DB37A"></stop>
+      <stop offset="100%" stop-color="#F5A623"></stop>
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" rx="116" fill="url(#bg)"></rect>
+  <rect width="120" height="120" rx="116" fill="url(#glow)"></rect>
+  <path d="M 25 72 Q 40 55 60 60" stroke="#1DB37A" stroke-width="2" stroke-opacity="0.3" stroke-linecap="round" fill="none"></path>
+  <path d="M 60 60 Q 80 65 95 48" stroke="#1DB37A" stroke-width="2" stroke-opacity="0.3" stroke-linecap="round" fill="none"></path>
+  <circle cx="25" cy="72" r="3" fill="#1DB37A" fill-opacity="0.35"></circle>
+  <circle cx="95" cy="48" r="3" fill="#1DB37A" fill-opacity="0.35"></circle>
+  <circle cx="60" cy="60" r="18" fill="#1DB37A" fill-opacity="0.12"></circle>
+  <circle cx="60" cy="60" r="12" fill="url(#dot)"></circle>
+  <circle cx="60" cy="60" r="12" fill="none" stroke="#1DB37A" stroke-width="1.5" stroke-opacity="0.6"></circle>
+  <circle cx="60" cy="60" r="4.5" fill="#F5A623"></circle>
+  <line x1="20" y1="20" x2="30" y2="20" stroke="#1DB37A" stroke-width="1.5" stroke-opacity="0.4" stroke-linecap="round"></line>
+  <line x1="20" y1="20" x2="20" y2="30" stroke="#1DB37A" stroke-width="1.5" stroke-opacity="0.4" stroke-linecap="round"></line>
+  <line x1="100" y1="100" x2="90" y2="100" stroke="#1DB37A" stroke-width="1.5" stroke-opacity="0.4" stroke-linecap="round"></line>
+  <line x1="100" y1="100" x2="100" y2="90" stroke="#1DB37A" stroke-width="1.5" stroke-opacity="0.4" stroke-linecap="round"></line>
+</svg>
