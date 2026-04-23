@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ambiente virtual
+venv/
+.venv/
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# Ferramentas de desenvolvimento
+tools/
+
+# Configurações locais / dados sensíveis
+*.session
+.env
+
+# Sistema
+.DS_Store
+Thumbs.db
