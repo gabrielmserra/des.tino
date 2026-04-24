@@ -80,7 +80,7 @@ class CardPresetsBar(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
         self._build_header()
         self._chips_frame = ctk.CTkScrollableFrame(
-            self, fg_color="transparent", height=190,
+            self, fg_color="transparent", height=235,
             orientation="horizontal",
             scrollbar_button_color=T.BORDER,
             scrollbar_button_hover_color=T.MUTED,
@@ -167,9 +167,18 @@ class CardPresetsBar(ctk.CTkFrame):
         body = ctk.CTkFrame(chip, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=10, pady=(6, 4))
 
-        # Nome
-        ctk.CTkLabel(body, text=card["name"], font=F(14, "bold"),
-                     text_color=T.TEXT, anchor="w", width=180).pack(anchor="w")
+        # Nome + botão editar
+        name_row = ctk.CTkFrame(body, fg_color="transparent")
+        name_row.pack(fill="x", anchor="w")
+        ctk.CTkLabel(name_row, text=card["name"], font=F(14, "bold"),
+                     text_color=T.TEXT, anchor="w").pack(side="left")
+        ctk.CTkButton(
+            name_row, text="✏", width=28, height=24, corner_radius=6,
+            fg_color=T.CARD2, hover_color=T.BORDER_L,
+            border_width=1, border_color=T.BORDER_L,
+            text_color=T.MUTED, font=F(11),
+            command=lambda c=card: self._edit_card(c),
+        ).pack(side="right")
 
         # Status fatura
         if cycle_open:
@@ -213,14 +222,6 @@ class CardPresetsBar(ctk.CTkFrame):
                 ctk.CTkFrame(bar_bg, height=5, width=max(4, int(180 * pct)),
                              fg_color=fill_col, corner_radius=3).place(x=0, y=0)
 
-        # Botão editar
-        ctk.CTkButton(
-            body, text="✏  Editar", height=26, corner_radius=6,
-            fg_color=T.CARD2, hover_color=T.BORDER_L,
-            border_width=1, border_color=T.BORDER_L,
-            text_color=T.MUTED, font=F(11),
-            command=lambda c=card: self._edit_card(c),
-        ).pack(fill="x", pady=(6, 0))
 
     # ------------------------------------------------------------------
     def _add_card(self) -> None:

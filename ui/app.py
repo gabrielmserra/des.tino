@@ -89,6 +89,24 @@ class FinanceApp(ctk.CTkFrame):
                 self._select_month(m["id"], m["name"])
                 return
 
+        # Mês atual não existe — criar automaticamente
+        self._auto_create_month(months, name, now.year, now.month)
+
+    def _auto_create_month(self, existing_months: list, name: str, year: int, month_num: int) -> None:
+        def _do():
+            try:
+                db.create_month(name, year, month_num)
+                months = db.get_months()
+                if existing_months:
+                    prev_id   = existing_months[0]["id"]
+                    new_month = next((m for m in months if m["name"] == name), None)
+                    if new_month:
+                        db.copy_transactions_to_month(prev_id, new_month["id"])
+                self.after(0, lambda: self._after_add_month(name, months))
+            except Exception:
+                pass
+        threading.Thread(target=_do, daemon=True).start()
+
     # ------------------------------------------------------------------
     def _select_month(self, month_id: int, month_name: str) -> None:
         self._current_id = month_id

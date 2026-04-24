@@ -44,7 +44,7 @@ class Dashboard(ctk.CTkScrollableFrame):
         # ── Guru Financeiro ───────────────────────────────────────────
         tips_card = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14,
                                  border_width=1, border_color=T.BORDER)
-        tips_card.grid(row=1, column=0, sticky="ew", padx=28, pady=(16, 0))
+        tips_card.grid(row=2, column=0, sticky="ew", padx=28, pady=(16, 0))
         tips_card.grid_columnconfigure(0, weight=1)
 
         header_row = ctk.CTkFrame(tips_card, fg_color="transparent")
@@ -61,7 +61,7 @@ class Dashboard(ctk.CTkScrollableFrame):
 
         # ── Charts ────────────────────────────────────────────────────
         charts = ctk.CTkFrame(self, fg_color="transparent")
-        charts.grid(row=2, column=0, sticky="nsew", padx=28, pady=(16, 0))
+        charts.grid(row=3, column=0, sticky="nsew", padx=28, pady=(16, 0))
         charts.grid_columnconfigure((0, 1), weight=1)
 
         pie_card = ctk.CTkFrame(charts, fg_color=T.CARD, corner_radius=14,
@@ -89,7 +89,7 @@ class Dashboard(ctk.CTkScrollableFrame):
         # ── Savings bar ───────────────────────────────────────────────
         self._savings_card = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14,
                                           border_width=1, border_color=T.BORDER)
-        self._savings_card.grid(row=3, column=0, sticky="ew", padx=28, pady=(16, 0))
+        self._savings_card.grid(row=4, column=0, sticky="ew", padx=28, pady=(16, 0))
         self._savings_card.grid_columnconfigure(2, weight=1)
 
         ctk.CTkLabel(self._savings_card, text="Taxa de poupança:",
@@ -109,10 +109,27 @@ class Dashboard(ctk.CTkScrollableFrame):
             self._savings_card, text="", font=F(12), text_color=T.MUTED)
         self._savings_label.grid(row=0, column=3, padx=(4, 22))
 
+        # ── Situação dos Cartões ──────────────────────────────────────
+        credit_outer = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14,
+                                    border_width=1, border_color=T.BORDER)
+        credit_outer.grid(row=1, column=0, sticky="ew", padx=28, pady=(16, 0))
+        credit_outer.grid_columnconfigure(0, weight=1)
+
+        credit_hdr = ctk.CTkFrame(credit_outer, fg_color="transparent")
+        credit_hdr.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 6))
+        ctk.CTkLabel(credit_hdr, text="💳", font=F(15)).pack(side="left", padx=(0, 6))
+        ctk.CTkLabel(credit_hdr, text="Situação dos Cartões",
+                     font=F(13, "bold"), text_color=T.TEXT, anchor="w").pack(side="left")
+        ctk.CTkLabel(credit_hdr, text="limite, gastos e alertas do ciclo atual",
+                     font=F(11), text_color=T.MUTED, anchor="w").pack(side="left", padx=(8, 0))
+
+        self._credit_frame = ctk.CTkFrame(credit_outer, fg_color="transparent")
+        self._credit_frame.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 16))
+
         # ── Metas de poupança ─────────────────────────────────────────
         goals_card = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14,
                                   border_width=1, border_color=T.BORDER)
-        goals_card.grid(row=4, column=0, sticky="ew", padx=28, pady=(16, 28))
+        goals_card.grid(row=5, column=0, sticky="ew", padx=28, pady=(16, 28))
         goals_card.grid_columnconfigure(0, weight=1)
 
         hdr = ctk.CTkFrame(goals_card, fg_color="transparent")
@@ -157,14 +174,19 @@ class Dashboard(ctk.CTkScrollableFrame):
         self._draw_savings(s)
         self._draw_tips(s)
 
-        def _fetch_goals():
+        def _fetch_async():
             try:
                 goals = db.get_goals()
             except Exception:
                 goals = []
+            try:
+                cards = db.get_cards()
+            except Exception:
+                cards = []
             self.after(0, lambda: self._draw_goals(goals))
+            self.after(0, lambda: self._draw_credit_panel(cards, s))
 
-        threading.Thread(target=_fetch_goals, daemon=True).start()
+        threading.Thread(target=_fetch_async, daemon=True).start()
 
     # ------------------------------------------------------------------
     def _draw_pie(self) -> None:
@@ -335,6 +357,81 @@ class Dashboard(ctk.CTkScrollableFrame):
                 row=1, column=0, sticky="ew", padx=12, pady=(0, 12))
 
     # ------------------------------------------------------------------
+    def _draw_credit_panel(self, cards: list, s: dict) -> None:
+        from ui.credit_cards import _card_spending, _days_until
+
+        for w in self._credit_frame.winfo_children():
+            w.destroy()
+
+        if not cards:
+            ctk.CTkLabel(
+                self._credit_frame,
+                text="Nenhum cartão cadastrado. Adicione em Saídas Variáveis para ver a análise aqui.",
+                font=F(12), text_color=T.MUTED, anchor="w",
+            ).pack(anchor="w")
+            return
+
+        free_cash = max(0.0, s.get("dinheiro_livre", 0))
+
+        for i, card in enumerate(cards):
+            if i > 0:
+                ctk.CTkFrame(self._credit_frame, height=1,
+                             fg_color=T.BORDER).pack(fill="x", pady=(10, 10))
+
+            color       = card.get("color", "#6C8EFF")
+            limit       = float(card.get("limit") or 0)
+            due_day     = card.get("due_day", 10)
+            closing_day = card.get("closing_day", 1)
+            spent       = _card_spending(card["id"], self.month_id, closing_day)
+            days_cls    = _days_until(closing_day)
+            days_due    = _days_until(due_day)
+            avail       = max(0.0, limit - spent) if limit > 0 else None
+            pct_used    = spent / limit if limit > 0 else 0.0
+
+            safety_msg, safety_color = _credit_safety(
+                pct_used, days_due, spent, free_cash, avail)
+
+            # Linha superior: ponto colorido + nome + indicador
+            top = ctk.CTkFrame(self._credit_frame, fg_color="transparent")
+            top.pack(fill="x")
+
+            name_box = ctk.CTkFrame(top, fg_color="transparent")
+            name_box.pack(side="left")
+            ctk.CTkFrame(name_box, width=10, height=10,
+                         fg_color=color, corner_radius=5).pack(side="left", padx=(0, 7))
+            ctk.CTkLabel(name_box, text=card["name"], font=F(13, "bold"),
+                         text_color=T.TEXT).pack(side="left")
+
+            badge = ctk.CTkFrame(top, fg_color="transparent")
+            badge.pack(side="right")
+            ctk.CTkFrame(badge, width=8, height=8,
+                         fg_color=safety_color, corner_radius=4).pack(side="left", padx=(0, 5))
+            ctk.CTkLabel(badge, text=safety_msg,
+                         font=F(11), text_color=safety_color).pack(side="left")
+
+            # Linha de info
+            info_parts = [f"Gasto: {format_currency(spent)}"]
+            if avail is not None:
+                info_parts.append(f"Disponível: {format_currency(avail)}")
+            info_parts += [f"Fecha em {days_cls}d", f"Vence em {days_due}d"]
+            ctk.CTkLabel(self._credit_frame,
+                         text="  •  ".join(info_parts),
+                         font=F(11), text_color=T.MUTED, anchor="w").pack(
+                fill="x", pady=(3, 0))
+
+            # Barra de progresso (só se tiver limite)
+            if limit > 0:
+                bar_bg = ctk.CTkFrame(self._credit_frame, height=4,
+                                      fg_color=T.CARD2, corner_radius=2)
+                bar_bg.pack(fill="x", pady=(6, 0))
+                bar_bg.pack_propagate(False)
+                if pct_used > 0:
+                    fill_col = T.RED if pct_used > 0.85 else color
+                    ctk.CTkFrame(bar_bg, height=4, fg_color=fill_col,
+                                 corner_radius=2).place(
+                        x=0, y=0, relheight=1, relwidth=min(pct_used, 1.0))
+
+    # ------------------------------------------------------------------
     def _draw_savings(self, s: dict) -> None:
         entradas = s.get("total_entradas", 0)
         saldo    = s.get("saldo", 0)
@@ -353,6 +450,26 @@ class Dashboard(ctk.CTkScrollableFrame):
 
 
 # ──────────────────────────────────────────────────────────────────────
+def _credit_safety(pct_used: float, days_due: int, spent: float,
+                   free_cash: float, avail) -> tuple:
+    """Retorna (mensagem, cor) do indicador de segurança do cartão."""
+    if pct_used >= 0.90:
+        return ("Limite quase esgotado — evite novos gastos", T.RED)
+    if days_due <= 3 and spent > 0 and free_cash < spent * 0.8:
+        return (f"Vence em {days_due}d e saldo livre pode não cobrir a fatura", T.RED)
+    if pct_used >= 0.70:
+        return (f"{pct_used*100:.0f}% do limite usado — reduza os gastos", T.GOLD)
+    if days_due <= 7 and spent > 0 and free_cash < spent:
+        return (f"Vence em {days_due}d — saldo livre menor que a fatura", T.GOLD)
+    if days_due <= 5:
+        return (f"Vencimento em {days_due} dias — prepare o pagamento", T.GOLD)
+    if spent == 0:
+        return ("Nenhum gasto neste ciclo", T.GREEN)
+    if avail is not None:
+        return (f"Pode gastar mais — {format_currency(avail)} disponível", T.GREEN)
+    return ("Situação tranquila", T.GREEN)
+
+
 def _build_tips(s: dict) -> list:
     entradas = s.get("total_entradas", 0)
     if entradas <= 0:
