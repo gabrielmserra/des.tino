@@ -1,6 +1,0 @@
-- Fazer o cartão caber e com o botão de editar
-
-- Fazer com que o app veja que dia é e crie o mês automaticamente, além de mudar as configurações do cartão para ver se
-a fatura fechou/venceu ou não
-
-- Fazer com que o app mostre quanto você pode gastar no crédito tendo em base os dias de vencimento, fechamento, entradas, tudo.
