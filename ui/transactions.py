@@ -82,14 +82,14 @@ class TransactionsTab(ctk.CTkFrame):
     def _build_form(self, row: int = 0) -> None:
         form = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=12,
                             border_width=1, border_color=T.BORDER)
-        form.grid(row=row, column=0, sticky="ew", padx=28, pady=(20, 0))
+        form.grid(row=row, column=0, sticky="ew", padx=28, pady=(10, 0))
         form.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
         self._form_title = ctk.CTkLabel(
             form, text="Novo Lançamento",
             font=F(13, "bold"), text_color=T.TEXT, anchor="w")
         self._form_title.grid(row=0, column=0, columnspan=4,
-                              padx=18, pady=(14, 8), sticky="w")
+                              padx=18, pady=(8, 5), sticky="w")
 
         # Labels row
         ctk.CTkLabel(form, text="DESCRIÇÃO", font=F(11, "bold"),

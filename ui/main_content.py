@@ -1,6 +1,7 @@
 """Área principal: header + tabs customizadas + conteúdo."""
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
+from datetime import date
 
 import database as db
 import ui.theme as T
@@ -8,7 +9,7 @@ from ui.theme import F
 from ui.dashboard    import Dashboard
 from ui.transactions import TransactionsTab
 from ui.goals        import GoalsTab
-from utils.helpers   import TRANSACTION_TYPES
+from utils.helpers   import TRANSACTION_TYPES, MONTHS_PT
 
 _TABS = [("dashboard", "Dashboard")] + list(TRANSACTION_TYPES.items()) + [("metas", "Metas")]
 
@@ -42,8 +43,10 @@ class MainContent(ctk.CTkFrame):
             title_box, text=self.month_name,
             font=F(26, "bold"), text_color=T.TEXT, anchor="w",
         ).pack(anchor="w")
+        today = date.today()
+        date_str = f"Hoje, {today.day} de {MONTHS_PT[today.month - 1].lower()} de {today.year}"
         ctk.CTkLabel(
-            title_box, text="Atualizado agora há pouco",
+            title_box, text=date_str,
             font=F(12), text_color=T.MUTED, anchor="w",
         ).pack(anchor="w", pady=(2, 0))
 
