@@ -1,6 +1,6 @@
 """Aba de lançamentos: formulário + tabela com badges de categoria."""
 import customtkinter as ctk
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 import database as db
 import ui.theme as T
@@ -22,12 +22,14 @@ class TransactionsTab(ctk.CTkFrame):
         self.month_id  = month_id
         self.tx_type   = tx_type
         self.on_change = on_change
-        self.is_expense    = tx_type in EXPENSE_TYPES
-        self.is_investment = tx_type == "investimento"
+        self.is_expense      = tx_type in EXPENSE_TYPES
+        self.is_investment   = tx_type == "investimento"
+        self._is_var_expense = tx_type == "saida_variavel"
 
         self._editing_id: Optional[int] = None
+        self._card_id_map: dict = {}   # card name → card id
+        self._card_info:   dict = {}   # card id   → {name, color}
 
-        # Cor semântica por tipo (avaliada em runtime para pegar o tema atual)
         if tx_type in ("entrada_fixa", "entrada_variavel"):
             self._style = {"color": T.GREEN,  "dim": T.GREEN_DIM}
         elif tx_type in ("saida_fixa", "saida_variavel"):
@@ -38,17 +40,49 @@ class TransactionsTab(ctk.CTkFrame):
             self._style = {"color": T.BLUE,   "dim": T.BLUE_DIM}
 
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)
 
-        self._build_form()
-        self._build_table()
+        if self._is_var_expense:
+            self.grid_rowconfigure(2, weight=1)
+            self._build_card_bar()   # row 0
+            self._build_form(row=1)
+            self._build_table(row=2)
+        else:
+            self.grid_rowconfigure(1, weight=1)
+            self._build_form(row=0)
+            self._build_table(row=1)
+
         self.refresh()
 
     # ------------------------------------------------------------------
-    def _build_form(self) -> None:
+    def _build_card_bar(self) -> None:
+        from ui.credit_cards import CardPresetsBar
+        wrap = ctk.CTkFrame(
+            self, fg_color=T.CARD, corner_radius=12,
+            border_width=1, border_color=T.BORDER,
+        )
+        wrap.grid(row=0, column=0, sticky="ew", padx=28, pady=(20, 0))
+        bar = CardPresetsBar(wrap, month_id=self.month_id, on_cards_changed=self._on_cards_changed)
+        bar.pack(fill="x", padx=16, pady=14)
+        self._card_bar = bar
+
+    def _on_cards_changed(self, cards: List[dict]) -> None:
+        self._card_id_map = {c["name"]: c["id"] for c in cards}
+        self._card_info   = {
+            c["id"]: {"name": c["name"], "color": c.get("color", "#6C8EFF")}
+            for c in cards
+        }
+        names = ["Nenhum"] + [c["name"] for c in cards]
+        if hasattr(self, "_card_combo"):
+            self._card_combo.configure(values=names)
+        # Re-render table so card badges appear after cards load
+        if hasattr(self, "_list"):
+            self.refresh()
+
+    # ------------------------------------------------------------------
+    def _build_form(self, row: int = 0) -> None:
         form = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=12,
                             border_width=1, border_color=T.BORDER)
-        form.grid(row=0, column=0, sticky="ew", padx=28, pady=(20, 0))
+        form.grid(row=row, column=0, sticky="ew", padx=28, pady=(20, 0))
         form.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
         self._form_title = ctk.CTkLabel(
@@ -57,10 +91,18 @@ class TransactionsTab(ctk.CTkFrame):
         self._form_title.grid(row=0, column=0, columnspan=4,
                               padx=18, pady=(14, 8), sticky="w")
 
-        # Descrição
+        # Labels row
         ctk.CTkLabel(form, text="DESCRIÇÃO", font=F(11, "bold"),
                      text_color=T.MUTED, anchor="w").grid(
             row=1, column=0, padx=(18, 6), sticky="w")
+        ctk.CTkLabel(form, text="VALOR (R$)", font=F(11, "bold"),
+                     text_color=T.MUTED, anchor="w").grid(
+            row=1, column=1, padx=6, sticky="w")
+        ctk.CTkLabel(form, text="CATEGORIA", font=F(11, "bold"),
+                     text_color=T.MUTED, anchor="w").grid(
+            row=1, column=2, padx=6, sticky="w")
+
+        # Inputs row
         self._desc = ctk.CTkEntry(
             form, placeholder_text=_PLACEHOLDER.get(self.tx_type, "Descrição…"),
             fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
@@ -69,10 +111,6 @@ class TransactionsTab(ctk.CTkFrame):
         self._desc.grid(row=2, column=0, padx=(18, 6), pady=(4, 0), sticky="ew")
         self._desc.bind("<Return>", lambda _: self._amount.focus())
 
-        # Valor
-        ctk.CTkLabel(form, text="VALOR (R$)", font=F(11, "bold"),
-                     text_color=T.MUTED, anchor="w").grid(
-            row=1, column=1, padx=6, sticky="w")
         self._amount = ctk.CTkEntry(
             form, placeholder_text="0,00",
             fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
@@ -81,15 +119,7 @@ class TransactionsTab(ctk.CTkFrame):
         self._amount.grid(row=2, column=1, padx=6, pady=(4, 0), sticky="ew")
         self._amount.bind("<Return>", lambda _: self._submit())
 
-        # Categoria
-        ctk.CTkLabel(form, text="CATEGORIA", font=F(11, "bold"),
-                     text_color=T.MUTED, anchor="w").grid(
-            row=1, column=2, padx=6, sticky="w")
-        if self.is_investment:
-            self._cat_var = ctk.StringVar(value="Ações")
-        else:
-            self._cat_var = ctk.StringVar(value="Outros")
-
+        self._cat_var = ctk.StringVar(value="Ações" if self.is_investment else "Outros")
         if self.is_expense:
             _values = CATEGORIES
         elif self.is_investment:
@@ -106,7 +136,6 @@ class TransactionsTab(ctk.CTkFrame):
         )
         self._cat_combo.grid(row=2, column=2, padx=6, pady=(4, 0), sticky="ew")
 
-        # Botões
         ctk.CTkLabel(form, text="").grid(row=1, column=3)
         btn_wrap = ctk.CTkFrame(form, fg_color="transparent")
         btn_wrap.grid(row=2, column=3, padx=(6, 18), pady=(4, 0), sticky="ew")
@@ -128,15 +157,33 @@ class TransactionsTab(ctk.CTkFrame):
             text_color=T.MUTED, font=F(12),
         )
 
+        # Card selector — saida_variavel only
+        _err_row = 3
+        if self._is_var_expense:
+            ctk.CTkLabel(form, text="CARTÃO (opcional)", font=F(11, "bold"),
+                         text_color=T.MUTED, anchor="w").grid(
+                row=3, column=0, padx=(18, 6), pady=(10, 2), sticky="w")
+            self._card_combo_var = ctk.StringVar(value="Nenhum")
+            self._card_combo = ctk.CTkComboBox(
+                form, values=["Nenhum"],
+                variable=self._card_combo_var,
+                fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+                button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
+                dropdown_text_color=T.TEXT, corner_radius=8, width=240,
+            )
+            self._card_combo.grid(row=3, column=1, columnspan=2,
+                                  padx=6, pady=(10, 2), sticky="w")
+            _err_row = 4
+
         self._error_lbl = ctk.CTkLabel(
             form, text="", font=F(11), text_color=T.RED, anchor="w")
-        self._error_lbl.grid(row=3, column=0, columnspan=4,
+        self._error_lbl.grid(row=_err_row, column=0, columnspan=4,
                               padx=18, pady=(6, 12), sticky="w")
 
     # ------------------------------------------------------------------
-    def _build_table(self) -> None:
+    def _build_table(self, row: int = 1) -> None:
         wrapper = ctk.CTkFrame(self, fg_color="transparent")
-        wrapper.grid(row=1, column=0, sticky="nsew", padx=28, pady=(14, 24))
+        wrapper.grid(row=row, column=0, sticky="nsew", padx=28, pady=(14, 24))
         wrapper.grid_columnconfigure(0, weight=1)
         wrapper.grid_rowconfigure(1, weight=1)
 
@@ -188,10 +235,7 @@ class TransactionsTab(ctk.CTkFrame):
     def _submit(self) -> None:
         desc       = self._desc.get().strip()
         amount_raw = self._amount.get().strip().replace(",", ".")
-        if self.is_expense or self.is_investment:
-            category = self._cat_var.get()
-        else:
-            category = "Receita"
+        category   = self._cat_var.get() if (self.is_expense or self.is_investment) else "Receita"
 
         if not desc:
             self._show_error("Preencha a descrição.")
@@ -206,13 +250,19 @@ class TransactionsTab(ctk.CTkFrame):
             self._amount.focus()
             return
 
+        card_id: Optional[int] = None
+        if self._is_var_expense and hasattr(self, "_card_combo"):
+            card_id = self._card_id_map.get(self._card_combo.get())
+
         self._hide_error()
 
         if self._editing_id is not None:
-            db.update_transaction(self._editing_id, self.month_id, desc, amount, category)
+            db.update_transaction(
+                self._editing_id, self.month_id, desc, amount, category, card_id=card_id)
             self._cancel_edit()
         else:
-            db.add_transaction(self.month_id, self.tx_type, desc, amount, category)
+            db.add_transaction(
+                self.month_id, self.tx_type, desc, amount, category, card_id=card_id)
             self._desc.delete(0, "end")
             self._amount.delete(0, "end")
             self._desc.focus()
@@ -236,6 +286,10 @@ class TransactionsTab(ctk.CTkFrame):
         self._amount.insert(0, str(tx["amount"]))
         if self.is_expense:
             self._cat_var.set(tx["category"] or "Outros")
+        if self._is_var_expense and hasattr(self, "_card_combo"):
+            card_id   = tx.get("card_id")
+            card_name = self._card_info.get(card_id, {}).get("name", "Nenhum") if card_id else "Nenhum"
+            self._card_combo.set(card_name)
         self._form_title.configure(text="✏  Editando lançamento")
         self._add_btn.configure(text="✓ Salvar")
         self._cancel_btn.grid(row=1, column=0, sticky="ew", pady=(4, 0))
@@ -247,6 +301,8 @@ class TransactionsTab(ctk.CTkFrame):
         self._amount.delete(0, "end")
         if self.is_expense:
             self._cat_var.set("Outros")
+        if self._is_var_expense and hasattr(self, "_card_combo"):
+            self._card_combo.set("Nenhum")
         self._form_title.configure(text="Novo Lançamento")
         self._add_btn.configure(text="+ Adicionar")
         self._cancel_btn.grid_forget()
@@ -281,23 +337,39 @@ class TransactionsTab(ctk.CTkFrame):
                 row.grid_columnconfigure(1, weight=2)
                 row.grid_columnconfigure(2, weight=1)
 
+                # Description + optional card badge
+                desc_cell = ctk.CTkFrame(row, fg_color="transparent")
+                desc_cell.grid(row=0, column=0, padx=20, pady=(20, 20), sticky="ew")
+
                 ctk.CTkLabel(
-                    row, text=tx["description"],
-                    font=F(14, "bold"), text_color=T.TEXT, anchor="w",
-                ).grid(row=0, column=0, padx=16, pady=(10, 2), sticky="ew")
+                    desc_cell, text=tx["description"],
+                    font=F(17, "bold"), text_color=T.TEXT, anchor="w",
+                ).pack(anchor="w")
+
+                if self._is_var_expense and tx.get("card_id"):
+                    info = self._card_info.get(tx["card_id"])
+                    if info:
+                        ctk.CTkLabel(
+                            desc_cell,
+                            text=f"  {info['name']} ",
+                            font=F(10, "bold"),
+                            text_color=info["color"],
+                            fg_color=T.CARD2,
+                            corner_radius=4,
+                        ).pack(anchor="w", pady=(2, 0))
 
                 ctk.CTkLabel(
                     row,
                     text=f" {tx['category'] or 'Outros'} ",
-                    font=F(11, "bold"), text_color=color,
-                    fg_color=dim, corner_radius=5,
-                ).grid(row=0, column=1, padx=10, pady=10, sticky="w")
+                    font=F(13, "bold"), text_color=color,
+                    fg_color=dim, corner_radius=6,
+                ).grid(row=0, column=1, padx=10, pady=20, sticky="w")
 
                 ctk.CTkLabel(
                     row,
                     text=format_currency(tx["amount"]),
-                    font=F(15, "bold"), text_color=color, anchor="w",
-                ).grid(row=0, column=2, padx=10, pady=10, sticky="w")
+                    font=F(18, "bold"), text_color=color, anchor="w",
+                ).grid(row=0, column=2, padx=10, pady=20, sticky="w")
 
                 actions = ctk.CTkFrame(row, fg_color="transparent")
                 actions.grid(row=0, column=3, padx=(0, 12), pady=8)

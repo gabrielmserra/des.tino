@@ -48,6 +48,24 @@ INVESTMENT_CATEGORIES = [
 ]
 
 
+def apply_app_icon(dialog) -> None:
+    """Aplica o ícone do app em qualquer CTkToplevel."""
+    import sys, os
+    def _set():
+        try:
+            if getattr(sys, "frozen", False):
+                path = os.path.join(sys._MEIPASS, "assets", "app.ico")
+            else:
+                path = os.path.join(os.path.dirname(__file__), "..", "assets", "app.ico")
+            path = os.path.abspath(path)
+            dialog.iconbitmap(path)
+        except Exception:
+            pass
+    # CTkToplevel sobrescreve o ícone durante o __init__ — esperar 200ms garante que o
+    # nosso ícone seja aplicado por último.
+    dialog.after(200, _set)
+
+
 def format_currency(value: float) -> str:
     """Formata um número como moeda brasileira: R$ 1.234,56"""
     abs_val = abs(value)

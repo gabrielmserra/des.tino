@@ -56,15 +56,17 @@ class MainContent(ctk.CTkFrame):
             text_color=T.TEXT, font=F(13, "bold"),
         ).grid(row=0, column=1, sticky="e")
 
-        # ── Tab bar ───────────────────────────────────────────────────
-        tab_wrap = ctk.CTkFrame(self, fg_color=T.BG, corner_radius=0)
-        tab_wrap.grid(row=1, column=0, sticky="ew", padx=28, pady=(20, 0))
-
-        tab_bar = ctk.CTkFrame(
-            tab_wrap, fg_color=T.CARD,
+        # ── Tab bar (scrollável horizontalmente) ──────────────────────
+        tab_bar = ctk.CTkScrollableFrame(
+            self,
+            fg_color=T.CARD,
             border_width=1, border_color=T.BORDER, corner_radius=10,
+            orientation="horizontal",
+            height=50,
+            scrollbar_button_color=T.BORDER_L,
+            scrollbar_button_hover_color=T.MUTED,
         )
-        tab_bar.pack(side="left")
+        tab_bar.grid(row=1, column=0, sticky="ew", padx=28, pady=(20, 0))
 
         for tab_id, label in _TABS:
             btn = ctk.CTkButton(

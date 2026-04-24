@@ -14,11 +14,6 @@ def _invalidate(month_id: int) -> None:
     _tx_cache.pop(month_id, None)
 
 
-def clear_cache() -> None:
-    """Limpa todo o cache (chamado no logout)."""
-    _tx_cache.clear()
-
-
 def is_cached(month_id: int) -> bool:
     return month_id in _tx_cache
 
@@ -89,17 +84,21 @@ def add_transaction(
     description: str,
     amount: float,
     category: str = "Outros",
+    card_id: Optional[int] = None,
 ) -> None:
     client  = get_client()
     user_id = client.auth.get_user().user.id
-    client.table("transactions").insert({
+    row = {
         "month_id":    month_id,
         "user_id":     user_id,
         "type":        tx_type,
         "description": description,
         "amount":      amount,
         "category":    category,
-    }).execute()
+    }
+    if card_id is not None:
+        row["card_id"] = card_id
+    client.table("transactions").insert(row).execute()
     _invalidate(month_id)
 
 
@@ -109,11 +108,13 @@ def update_transaction(
     description: str,
     amount: float,
     category: str,
+    card_id: Optional[int] = None,
 ) -> None:
     get_client().table("transactions").update({
         "description": description,
         "amount":      amount,
         "category":    category,
+        "card_id":     card_id,
     }).eq("id", transaction_id).execute()
     _invalidate(month_id)
 
@@ -152,6 +153,50 @@ def get_month_summary(month_id: int) -> Dict[str, float]:
         "saldo":               saldo,
         "dinheiro_livre":      dinheiro_livre,
     }
+
+
+def copy_transactions_to_month(from_month_id: int, to_month_id: int) -> int:
+    """Copia investimentos e gastos pós-fechamento de cartão para o novo mês."""
+    from datetime import date as _date
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+
+    # Mapeamento card_id → closing_day para filtrar pelo ciclo correto
+    cards        = get_cards()
+    card_closing = {c["id"]: c.get("closing_day", 1) for c in cards}
+
+    rows    = get_transactions(from_month_id)
+    to_copy = []
+    for r in rows:
+        if r["type"] == "investimento":
+            to_copy.append(r)
+        elif r["type"] == "saida_variavel" and r.get("card_id"):
+            # Só copia se foi adicionado APÓS o fechamento (pertence ao próximo ciclo)
+            card_id  = r["card_id"]
+            closing  = card_closing.get(card_id, 1)
+            raw_date = str(r.get("created_at") or "")[:10]
+            try:
+                tx_day = _date.fromisoformat(raw_date).day
+                if tx_day > closing:
+                    to_copy.append(r)
+            except ValueError:
+                pass  # data inválida → não copia
+
+    for r in to_copy:
+        row = {
+            "month_id":    to_month_id,
+            "user_id":     user_id,
+            "type":        r["type"],
+            "description": r["description"],
+            "amount":      float(r["amount"]),
+            "category":    r["category"] or "Outros",
+        }
+        if r.get("card_id"):
+            row["card_id"] = r["card_id"]
+        client.table("transactions").insert(row).execute()
+
+    _invalidate(to_month_id)
+    return len(to_copy)
 
 
 def get_expenses_by_category(month_id: int) -> List[dict]:
@@ -208,6 +253,77 @@ def add_goal_contribution(goal_id: int, amount: float) -> None:
 
 def delete_goal(goal_id: int) -> None:
     get_client().table("goals").delete().eq("id", goal_id).execute()
+
+
+# ---------------------------------------------------------------------------
+# Cartões de Crédito
+# ---------------------------------------------------------------------------
+
+_card_tx_cache: Dict[str, list] = {}  # key: "{card_id}_{month_id}"
+
+
+def get_cards() -> List[dict]:
+    resp = get_client().table("credit_cards").select("*").order("created_at").execute()
+    return resp.data or []
+
+
+def create_card(name: str, limit: float, due_day: int, closing_day: int, color: str) -> Optional[dict]:
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    resp = client.table("credit_cards").insert({
+        "name": name, "limit": limit, "due_day": due_day,
+        "closing_day": closing_day, "color": color, "user_id": user_id,
+    }).execute()
+    return resp.data[0] if resp.data else None
+
+
+def update_card(card_id: int, name: str, limit: float, due_day: int, closing_day: int, color: str) -> None:
+    get_client().table("credit_cards").update({
+        "name": name, "limit": limit, "due_day": due_day,
+        "closing_day": closing_day, "color": color,
+    }).eq("id", card_id).execute()
+
+
+def delete_card(card_id: int) -> None:
+    get_client().table("credit_cards").delete().eq("id", card_id).execute()
+    # Limpa cache de transações deste cartão
+    keys = [k for k in _card_tx_cache if k.startswith(f"{card_id}_")]
+    for k in keys:
+        _card_tx_cache.pop(k, None)
+
+
+def get_card_transactions(card_id: int, month_id: int) -> List[dict]:
+    key = f"{card_id}_{month_id}"
+    if key not in _card_tx_cache:
+        resp = get_client().table("card_transactions") \
+            .select("*") \
+            .eq("card_id", card_id) \
+            .eq("month_id", month_id) \
+            .order("id", desc=True) \
+            .execute()
+        _card_tx_cache[key] = resp.data or []
+    return list(_card_tx_cache[key])
+
+
+def add_card_transaction(card_id: int, month_id: int, description: str, amount: float) -> None:
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    client.table("card_transactions").insert({
+        "card_id": card_id, "month_id": month_id,
+        "description": description, "amount": amount, "user_id": user_id,
+    }).execute()
+    _card_tx_cache.pop(f"{card_id}_{month_id}", None)
+
+
+def delete_card_transaction(tx_id: int, card_id: int, month_id: int) -> None:
+    get_client().table("card_transactions").delete().eq("id", tx_id).execute()
+    _card_tx_cache.pop(f"{card_id}_{month_id}", None)
+
+
+def clear_cache() -> None:
+    """Limpa todo o cache (chamado no logout)."""
+    _tx_cache.clear()
+    _card_tx_cache.clear()
 
 
 def export_month_csv(month_id: int) -> str:
