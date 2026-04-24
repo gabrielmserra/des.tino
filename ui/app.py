@@ -10,7 +10,7 @@ import ui.theme as T
 from ui.theme import F
 from ui.sidebar      import Sidebar
 from ui.main_content import MainContent
-from utils.helpers   import MONTHS_PT, APP_NAME, APP_VERSION
+from utils.helpers   import MONTHS_PT, APP_NAME, APP_VERSION, apply_app_icon
 
 
 class FinanceApp(ctk.CTkFrame):
@@ -133,9 +133,11 @@ class FinanceApp(ctk.CTkFrame):
     def _add_month(self) -> None:
         from tkinter import messagebox
         try:
-            existing_names = {m["name"] for m in db.get_months()}
+            existing_months = db.get_months()
+            existing_names  = {m["name"] for m in existing_months}
         except Exception:
-            existing_names = set()
+            existing_months = []
+            existing_names  = set()
         dlg = _AddMonthDialog(self.winfo_toplevel(), existing_names)
         self.winfo_toplevel().wait_window(dlg)
         if dlg.result:
@@ -143,6 +145,12 @@ class FinanceApp(ctk.CTkFrame):
             try:
                 db.create_month(name, year, month_num)
                 months = db.get_months()
+                # Copia investimentos e faturas do mês anterior
+                if existing_months:
+                    prev_id  = existing_months[0]["id"]  # já ordenado: mais recente primeiro
+                    new_month = next((m for m in months if m["name"] == name), None)
+                    if new_month:
+                        db.copy_transactions_to_month(prev_id, new_month["id"])
                 self._after_add_month(name, months)
             except Exception as e:
                 messagebox.showerror("Erro ao criar período", str(e))
@@ -244,6 +252,7 @@ class _AddMonthDialog(ctk.CTkToplevel):
         self.configure(fg_color=T.CARD)
         self.result = None
         self._existing = existing_names or set()
+        apply_app_icon(self)
         self._build()
         _center_on_parent(self, parent, 380, 240)
         self.lift()
@@ -317,6 +326,7 @@ class _ConfirmDialog(ctk.CTkToplevel):
         self.grab_set()
         self.configure(fg_color=T.CARD)
         self.confirmed = False
+        apply_app_icon(self)
         self._build(title, message)
         _center_on_parent(self, parent, 380, 180)
         self.lift()
