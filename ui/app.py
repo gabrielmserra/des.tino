@@ -133,19 +133,21 @@ class FinanceApp(ctk.CTkFrame):
             self._placeholder = None
 
         if self._main_content:
-            self._main_content.grid_forget()
+            # Reutiliza o MainContent existente — evita destruir e recriar todos os tabs
             try:
-                self._main_content.destroy()
+                self._main_content.switch_month(month_id, month_name)
             except Exception:
-                pass
-
-        try:
-            self._main_content = MainContent(self, month_id, month_name)
-            self._main_content.grid(row=0, column=1, sticky="nsew")
-        except Exception:
-            import traceback
-            from tkinter import messagebox
-            messagebox.showerror("Erro ao abrir mês", traceback.format_exc())
+                import traceback
+                from tkinter import messagebox
+                messagebox.showerror("Erro ao trocar mês", traceback.format_exc())
+        else:
+            try:
+                self._main_content = MainContent(self, month_id, month_name)
+                self._main_content.grid(row=0, column=1, sticky="nsew")
+            except Exception:
+                import traceback
+                from tkinter import messagebox
+                messagebox.showerror("Erro ao abrir mês", traceback.format_exc())
 
     # ------------------------------------------------------------------
     def _add_month(self) -> None:

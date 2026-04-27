@@ -169,12 +169,14 @@ class Dashboard(ctk.CTkScrollableFrame):
             color = (T.GREEN if val >= 0 else T.RED) if key in ("saldo", "dinheiro_livre") else default_color
             lbl.configure(text=format_currency(val), text_color=color)
 
-        self._draw_pie()
-        self._draw_bar(s)
         self._draw_savings(s)
         self._draw_tips(s)
 
-        def _fetch_async():
+        def _background():
+            # Constrói as figuras Matplotlib fora do main thread (pura matemática, sem Tkinter)
+            pie_data = db.get_expenses_by_category(self.month_id)
+            pie_fig  = self._build_pie_figure(pie_data)
+            bar_fig  = self._build_bar_figure(s)
             try:
                 goals = db.get_goals()
             except Exception:
@@ -183,25 +185,22 @@ class Dashboard(ctk.CTkScrollableFrame):
                 cards = db.get_cards()
             except Exception:
                 cards = []
+            # Volta ao main thread só para embutir os widgets Tkinter
+            self.after(0, lambda: self._embed_pie(pie_fig))
+            self.after(0, lambda: self._embed_bar(bar_fig))
             self.after(0, lambda: self._draw_goals(goals))
             self.after(0, lambda: self._draw_credit_panel(cards, s))
 
-        threading.Thread(target=_fetch_async, daemon=True).start()
+        threading.Thread(target=_background, daemon=True).start()
 
     # ------------------------------------------------------------------
-    def _draw_pie(self) -> None:
+    def _build_pie_figure(self, data: list):
+        """Constrói a Figure do pie chart fora do main thread."""
         import matplotlib
-        import matplotlib.pyplot as plt
         matplotlib.use("TkAgg")
-        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
         from matplotlib.figure import Figure
 
-        for w in self._pie_host.winfo_children():
-            w.destroy()
-        data = db.get_expenses_by_category(self.month_id)
-
         pie_colors = [T.RED, T.GOLD, T.VIOLET, T.BLUE, "#22d3ee", T.GREEN, "#fb923c", "#e879f9"]
-
         fig = Figure(figsize=(5.2, 3.4), facecolor=T.CARD)
         ax  = fig.add_subplot(111)
         ax.set_facecolor(T.CARD)
@@ -231,21 +230,29 @@ class Dashboard(ctk.CTkScrollableFrame):
             ax.axis("off")
 
         fig.tight_layout(pad=0.8)
-        canvas = FigureCanvasTkAgg(fig, master=self._pie_host)
-        canvas.draw()
-        canvas.get_tk_widget().pack(fill="both", expand=True)
-        plt.close(fig)
+        return fig
+
+    def _embed_pie(self, fig) -> None:
+        """Embute a Figure do pie no Tkinter — roda no main thread."""
+        import matplotlib.pyplot as plt
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+        try:
+            for w in self._pie_host.winfo_children():
+                w.destroy()
+            canvas = FigureCanvasTkAgg(fig, master=self._pie_host)
+            canvas.draw()
+            canvas.get_tk_widget().pack(fill="both", expand=True)
+        except Exception:
+            pass
+        finally:
+            plt.close(fig)
 
     # ------------------------------------------------------------------
-    def _draw_bar(self, s: dict) -> None:
+    def _build_bar_figure(self, s: dict):
+        """Constrói a Figure do bar chart fora do main thread."""
         import matplotlib
-        import matplotlib.pyplot as plt
         matplotlib.use("TkAgg")
-        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
         from matplotlib.figure import Figure
-
-        for w in self._bar_host.winfo_children():
-            w.destroy()
 
         cats   = ["Entradas", "Saídas", "Investimentos"]
         values = [s["total_entradas"], s["total_saidas"], s["total_investimentos"]]
@@ -277,10 +284,22 @@ class Dashboard(ctk.CTkScrollableFrame):
             lbl.set_color(T.TEXT); lbl.set_fontsize(11); lbl.set_fontweight("bold")
 
         fig.tight_layout(pad=0.8)
-        canvas = FigureCanvasTkAgg(fig, master=self._bar_host)
-        canvas.draw()
-        canvas.get_tk_widget().pack(fill="both", expand=True)
-        plt.close(fig)
+        return fig
+
+    def _embed_bar(self, fig) -> None:
+        """Embute a Figure do bar chart no Tkinter — roda no main thread."""
+        import matplotlib.pyplot as plt
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+        try:
+            for w in self._bar_host.winfo_children():
+                w.destroy()
+            canvas = FigureCanvasTkAgg(fig, master=self._bar_host)
+            canvas.draw()
+            canvas.get_tk_widget().pack(fill="both", expand=True)
+        except Exception:
+            pass
+        finally:
+            plt.close(fig)
 
     # ------------------------------------------------------------------
     def _draw_goals(self, goals: list) -> None:

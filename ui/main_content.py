@@ -26,6 +26,7 @@ class MainContent(ctk.CTkFrame):
         self._active_tab = "dashboard"
         self._tab_btns: dict = {}
         self._frames:   dict = {}
+        self._stale_tabs: set = set()
 
         self._build()
 
@@ -39,10 +40,11 @@ class MainContent(ctk.CTkFrame):
         title_box = ctk.CTkFrame(header, fg_color="transparent")
         title_box.grid(row=0, column=0, sticky="w")
 
-        ctk.CTkLabel(
+        self._title_lbl = ctk.CTkLabel(
             title_box, text=self.month_name,
             font=F(26, "bold"), text_color=T.TEXT, anchor="w",
-        ).pack(anchor="w")
+        )
+        self._title_lbl.pack(anchor="w")
         today = date.today()
         date_str = f"Hoje, {today.day} de {MONTHS_PT[today.month - 1].lower()} de {today.year}"
         ctk.CTkLabel(
@@ -113,8 +115,13 @@ class MainContent(ctk.CTkFrame):
         for f in self._frames.values():
             f.grid_remove()
         self._frames[tab_id].grid()
-        if tab_id == "metas":
-            self._frames["metas"].refresh()
+
+        needs_refresh = tab_id == "metas" or tab_id in self._stale_tabs
+        if needs_refresh:
+            frame = self._frames[tab_id]
+            if hasattr(frame, "refresh"):
+                frame.refresh()
+            self._stale_tabs.discard(tab_id)
 
         for t, btn in self._tab_btns.items():
             if t == tab_id:
@@ -128,6 +135,20 @@ class MainContent(ctk.CTkFrame):
                     font=F(13), hover_color=T.CARD2,
                 )
         self._active_tab = tab_id
+
+    # ------------------------------------------------------------------
+    def switch_month(self, month_id: int, month_name: str) -> None:
+        self.month_id   = month_id
+        self.month_name = month_name
+        self._title_lbl.configure(text=month_name)
+        for frame in self._frames.values():
+            if hasattr(frame, "month_id"):
+                frame.month_id = month_id
+        # Refresh só a aba ativa; as demais atualizam quando o usuário navegar até elas
+        self._stale_tabs = {t for t in self._frames if t != self._active_tab}
+        active = self._frames.get(self._active_tab)
+        if active and hasattr(active, "refresh"):
+            active.refresh()
 
     # ------------------------------------------------------------------
     def _refresh_dashboard(self) -> None:
