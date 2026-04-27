@@ -50,8 +50,7 @@ class TransactionsTab(ctk.CTkFrame):
             self.grid_rowconfigure(1, weight=1)
             self._build_form(row=0)
             self._build_table(row=1)
-
-        self.refresh()
+        # Não chama refresh() aqui — a aba carrega ao ser exibida pela primeira vez
 
     # ------------------------------------------------------------------
     def _build_card_bar(self) -> None:

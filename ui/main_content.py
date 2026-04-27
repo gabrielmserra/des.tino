@@ -27,6 +27,7 @@ class MainContent(ctk.CTkFrame):
         self._tab_btns: dict = {}
         self._frames:   dict = {}
         self._stale_tabs: set = set()
+        self._uninitialized_tabs: set = set()
 
         self._build()
 
@@ -108,6 +109,9 @@ class MainContent(ctk.CTkFrame):
         goals_frame.grid(row=0, column=0, sticky="nsew")
         self._frames["metas"] = goals_frame
 
+        # Marca abas de transação como não inicializadas — carregam no primeiro clique
+        self._uninitialized_tabs = set(TRANSACTION_TYPES.keys())
+
         self._switch_tab("dashboard")
 
     # ------------------------------------------------------------------
@@ -116,12 +120,15 @@ class MainContent(ctk.CTkFrame):
             f.grid_remove()
         self._frames[tab_id].grid()
 
-        needs_refresh = tab_id == "metas" or tab_id in self._stale_tabs
+        needs_refresh = (tab_id == "metas"
+                         or tab_id in self._stale_tabs
+                         or tab_id in self._uninitialized_tabs)
         if needs_refresh:
             frame = self._frames[tab_id]
             if hasattr(frame, "refresh"):
                 frame.refresh()
             self._stale_tabs.discard(tab_id)
+            self._uninitialized_tabs.discard(tab_id)
 
         for t, btn in self._tab_btns.items():
             if t == tab_id:
