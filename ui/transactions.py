@@ -29,6 +29,9 @@ class TransactionsTab(ctk.CTkFrame):
         self._editing_id: Optional[int] = None
         self._card_id_map: dict = {}   # card name → card id
         self._card_info:   dict = {}   # card id   → {name, color}
+        self._row_widgets: dict = {}   # tx_id     → {frame, labels, separator, tx}
+        self._empty_lbl          = None
+        self._initialized        = False
 
         if tx_type in ("entrada_fixa", "entrada_variavel"):
             self._style = {"color": T.GREEN,  "dim": T.GREEN_DIM}
@@ -73,8 +76,8 @@ class TransactionsTab(ctk.CTkFrame):
         names = ["Nenhum"] + [c["name"] for c in cards]
         if hasattr(self, "_card_combo"):
             self._card_combo.configure(values=names)
-        # Re-render table so card badges appear after cards load
-        if hasattr(self, "_list"):
+        # Só atualiza a lista se já foi inicializada — evita double-refresh na primeira carga
+        if self._initialized:
             self.refresh()
 
     # ------------------------------------------------------------------
@@ -308,88 +311,142 @@ class TransactionsTab(ctk.CTkFrame):
 
     # ------------------------------------------------------------------
     def refresh(self) -> None:
-        for w in self._list.winfo_children():
-            w.destroy()
-
         txs   = db.get_transactions(self.month_id, self.tx_type)
         color = self._style["color"]
         dim   = self._style["dim"]
         total = 0.0
+        n     = len(txs)
 
-        n = len(txs)
+        # Remove widgets de transações que foram deletadas
+        new_id_set = {tx["id"] for tx in txs}
+        for tx_id in list(self._row_widgets.keys()):
+            if tx_id not in new_id_set:
+                self._row_widgets[tx_id]["frame"].destroy()
+                del self._row_widgets[tx_id]
+
         self._count_lbl.configure(text=f"{n} {'registro' if n == 1 else 'registros'}")
 
         if not txs:
-            ctk.CTkLabel(
-                self._list,
-                text="Nenhum lançamento. Adicione um acima ↑",
-                font=F(13), text_color=T.MUTED,
-            ).pack(pady=40)
-        else:
-            for i, tx in enumerate(txs):
-                row_bg = T.CARD if i % 2 == 0 else T.CARD2
-                row = ctk.CTkFrame(self._list, fg_color=row_bg, corner_radius=0)
-                row.pack(fill="x")
-                if i < len(txs) - 1:
-                    ctk.CTkFrame(row, height=1, fg_color=T.BORDER).pack(fill="x", side="bottom")
-                row.grid_columnconfigure(0, weight=3)
-                row.grid_columnconfigure(1, weight=2)
-                row.grid_columnconfigure(2, weight=1)
+            if self._empty_lbl is None:
+                self._empty_lbl = ctk.CTkLabel(
+                    self._list,
+                    text="Nenhum lançamento. Adicione um acima ↑",
+                    font=F(13), text_color=T.MUTED,
+                )
+                self._empty_lbl.pack(pady=40)
+            self._total_lbl.configure(text=format_currency(0.0))
+            self._initialized = True
+            return
 
-                # Description + optional card badge
-                desc_cell = ctk.CTkFrame(row, fg_color="transparent")
-                desc_cell.grid(row=0, column=0, padx=20, pady=(20, 20), sticky="ew")
+        # Remove o label de lista vazia se existir
+        if self._empty_lbl is not None:
+            self._empty_lbl.destroy()
+            self._empty_lbl = None
 
-                ctk.CTkLabel(
-                    desc_cell, text=tx["description"],
-                    font=F(17, "bold"), text_color=T.TEXT, anchor="w",
-                ).pack(anchor="w")
+        # Cria widgets só para transações novas (que ainda não têm linha)
+        for tx in txs:
+            if tx["id"] not in self._row_widgets:
+                self._row_widgets[tx["id"]] = self._make_row(tx, color, dim)
 
-                if self._is_var_expense and tx.get("card_id"):
-                    info = self._card_info.get(tx["card_id"])
-                    if info:
-                        ctk.CTkLabel(
-                            desc_cell,
-                            text=f"  {info['name']} ",
-                            font=F(10, "bold"),
-                            text_color=info["color"],
-                            fg_color=T.CARD2,
-                            corner_radius=4,
-                        ).pack(anchor="w", pady=(2, 0))
+        # Reordena: desvincula todos do pack e reinsere na ordem correta
+        for w in self._row_widgets.values():
+            w["frame"].pack_forget()
 
-                ctk.CTkLabel(
-                    row,
-                    text=f" {tx['category'] or 'Outros'} ",
-                    font=F(13, "bold"), text_color=color,
-                    fg_color=dim, corner_radius=6,
-                ).grid(row=0, column=1, padx=10, pady=20, sticky="w")
+        for i, tx in enumerate(txs):
+            w      = self._row_widgets[tx["id"]]
+            row_bg = T.CARD if i % 2 == 0 else T.CARD2
 
-                ctk.CTkLabel(
-                    row,
-                    text=format_currency(tx["amount"]),
-                    font=F(18, "bold"), text_color=color, anchor="w",
-                ).grid(row=0, column=2, padx=10, pady=20, sticky="w")
+            w["tx"] = tx  # mantém dados frescos para o botão de edição
+            w["frame"].configure(fg_color=row_bg)
+            w["desc_lbl"].configure(text=tx["description"])
+            w["cat_lbl"].configure(text=f" {tx['category'] or 'Outros'} ")
+            w["amount_lbl"].configure(text=format_currency(tx["amount"]))
 
-                actions = ctk.CTkFrame(row, fg_color="transparent")
-                actions.grid(row=0, column=3, padx=(0, 12), pady=8)
+            # Badge do cartão (só na aba saida_variavel)
+            if self._is_var_expense and w["badge_lbl"] is not None:
+                info = self._card_info.get(tx.get("card_id"))
+                if info:
+                    w["badge_lbl"].configure(text=f"  {info['name']} ", text_color=info["color"])
+                    w["badge_lbl"].pack(anchor="w", pady=(2, 0))
+                else:
+                    w["badge_lbl"].pack_forget()
 
-                ctk.CTkButton(
-                    actions, text="✏", width=28, height=28,
-                    command=lambda t=tx: self._start_edit(t),
-                    fg_color="transparent", text_color=T.MUTED,
-                    hover_color=T.CARD2, corner_radius=6, font=F(12),
-                ).pack(side="left", padx=(0, 2))
+            # Separador: aparece em todas as linhas exceto a última
+            if i < n - 1:
+                w["separator"].pack(fill="x", side="bottom")
+            else:
+                w["separator"].pack_forget()
 
-                ctk.CTkButton(
-                    actions, text="✕", width=28, height=28,
-                    command=lambda tid=tx["id"]: self._delete(tid),
-                    fg_color="transparent", text_color=T.MUTED,
-                    hover_color=T.RED, corner_radius=6, font=F(12),
-                ).pack(side="left")
-
-                total += float(tx["amount"])
+            w["frame"].pack(fill="x")
+            total += float(tx["amount"])
 
         self._total_lbl.configure(text=format_currency(total))
+        self._initialized = True
+
+    def _make_row(self, tx: dict, color: str, dim: str) -> dict:
+        """Cria os widgets de uma linha e retorna referências para atualizações futuras."""
+        row       = ctk.CTkFrame(self._list, fg_color=T.CARD, corner_radius=0)
+        separator = ctk.CTkFrame(row, height=1, fg_color=T.BORDER)
+
+        row.grid_columnconfigure(0, weight=3)
+        row.grid_columnconfigure(1, weight=2)
+        row.grid_columnconfigure(2, weight=1)
+
+        desc_cell = ctk.CTkFrame(row, fg_color="transparent")
+        desc_cell.grid(row=0, column=0, padx=20, pady=(20, 20), sticky="ew")
+
+        desc_lbl = ctk.CTkLabel(
+            desc_cell, text=tx["description"],
+            font=F(17, "bold"), text_color=T.TEXT, anchor="w",
+        )
+        desc_lbl.pack(anchor="w")
+
+        badge_lbl = None
+        if self._is_var_expense:
+            badge_lbl = ctk.CTkLabel(
+                desc_cell, text="",
+                font=F(10, "bold"), text_color=T.MUTED,
+                fg_color=T.CARD2, corner_radius=4,
+            )
+
+        cat_lbl = ctk.CTkLabel(
+            row, text=f" {tx['category'] or 'Outros'} ",
+            font=F(13, "bold"), text_color=color, fg_color=dim, corner_radius=6,
+        )
+        cat_lbl.grid(row=0, column=1, padx=10, pady=20, sticky="w")
+
+        amount_lbl = ctk.CTkLabel(
+            row, text=format_currency(tx["amount"]),
+            font=F(18, "bold"), text_color=color, anchor="w",
+        )
+        amount_lbl.grid(row=0, column=2, padx=10, pady=20, sticky="w")
+
+        actions = ctk.CTkFrame(row, fg_color="transparent")
+        actions.grid(row=0, column=3, padx=(0, 12), pady=8)
+
+        ctk.CTkButton(
+            actions, text="✏", width=28, height=28,
+            command=lambda tid=tx["id"]: self._start_edit(self._row_widgets[tid]["tx"]),
+            fg_color="transparent", text_color=T.MUTED,
+            hover_color=T.CARD2, corner_radius=6, font=F(12),
+        ).pack(side="left", padx=(0, 2))
+
+        ctk.CTkButton(
+            actions, text="✕", width=28, height=28,
+            command=lambda tid=tx["id"]: self._delete(tid),
+            fg_color="transparent", text_color=T.MUTED,
+            hover_color=T.RED, corner_radius=6, font=F(12),
+        ).pack(side="left")
+
+        return {
+            "frame":      row,
+            "separator":  separator,
+            "desc_lbl":   desc_lbl,
+            "cat_lbl":    cat_lbl,
+            "amount_lbl": amount_lbl,
+            "badge_lbl":  badge_lbl,
+            "tx":         tx,
+        }
 
     # ------------------------------------------------------------------
     def _delete(self, tid: int) -> None:
