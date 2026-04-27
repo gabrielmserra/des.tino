@@ -373,9 +373,9 @@ class TransactionsTab(ctk.CTkFrame):
 
             # Separador: aparece em todas as linhas exceto a última
             if i < n - 1:
-                w["separator"].pack(fill="x", side="bottom")
+                w["separator"].grid(row=1, column=0, columnspan=4, sticky="ew")
             else:
-                w["separator"].pack_forget()
+                w["separator"].grid_remove()
 
             w["frame"].pack(fill="x")
             total += float(tx["amount"])
