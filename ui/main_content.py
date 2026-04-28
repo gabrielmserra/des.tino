@@ -80,12 +80,12 @@ class MainContent(ctk.CTkFrame):
                 tab_bar,
                 text=label,
                 command=lambda t=tab_id: self._switch_tab(t),
-                height=34, corner_radius=7,
+                height=32, corner_radius=7,
                 fg_color="transparent", hover_color=T.CARD2,
-                text_color=T.MUTED, font=F(13),
+                text_color=T.MUTED, font=F(12),
                 border_width=0,
             )
-            btn.pack(side="left", padx=4, pady=4)
+            btn.pack(side="left", padx=2, pady=4)
             self._tab_btns[tab_id] = btn
 
         # ── Conteúdo das tabs ─────────────────────────────────────────
@@ -135,12 +135,12 @@ class MainContent(ctk.CTkFrame):
             if t == tab_id:
                 btn.configure(
                     fg_color=T.BLUE, text_color="#ffffff",
-                    font=F(13, "bold"), hover_color=T.BLUE,
+                    font=F(12, "bold"), hover_color=T.BLUE,
                 )
             else:
                 btn.configure(
                     fg_color="transparent", text_color=T.MUTED,
-                    font=F(13), hover_color=T.CARD2,
+                    font=F(12), hover_color=T.CARD2,
                 )
         self._active_tab = tab_id
 
