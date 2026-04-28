@@ -1,5 +1,6 @@
 """Aba de Metas: criar metas de poupança e acompanhar progresso."""
 import customtkinter as ctk
+from typing import Callable, Optional
 
 import database as db
 import ui.theme as T
@@ -8,8 +9,9 @@ from utils.helpers import format_currency
 
 
 class GoalsTab(ctk.CTkFrame):
-    def __init__(self, parent):
+    def __init__(self, parent, on_change: Optional[Callable] = None):
         super().__init__(parent, fg_color=T.BG, corner_radius=0)
+        self._on_change = on_change
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
         self._build_form()
@@ -102,6 +104,8 @@ class GoalsTab(ctk.CTkFrame):
         self._name_entry.delete(0, "end")
         self._target_entry.delete(0, "end")
         self.refresh()
+        if self._on_change:
+            self._on_change()
 
     # ------------------------------------------------------------------
     def refresh(self) -> None:
@@ -205,6 +209,8 @@ class GoalsTab(ctk.CTkFrame):
             try:
                 db.add_goal_contribution(goal_id, dlg.amount)
                 self.refresh()
+                if self._on_change:
+                    self._on_change()
             except Exception as e:
                 from tkinter import messagebox
                 messagebox.showerror("Erro", str(e))
@@ -216,6 +222,8 @@ class GoalsTab(ctk.CTkFrame):
         try:
             db.delete_goal(goal_id)
             self.refresh()
+            if self._on_change:
+                self._on_change()
         except Exception as e:
             messagebox.showerror("Erro", str(e))
 

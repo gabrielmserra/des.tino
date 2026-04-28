@@ -105,7 +105,7 @@ class MainContent(ctk.CTkFrame):
             frame.grid(row=0, column=0, sticky="nsew")
             self._frames[tx_type] = frame
 
-        goals_frame = GoalsTab(content)
+        goals_frame = GoalsTab(content, on_change=self._refresh_dashboard)
         goals_frame.grid(row=0, column=0, sticky="nsew")
         self._frames["metas"] = goals_frame
 
