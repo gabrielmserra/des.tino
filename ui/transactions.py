@@ -1,4 +1,5 @@
 """Aba de lançamentos: formulário + tabela com badges de categoria."""
+import tkinter as tk
 import customtkinter as ctk
 from typing import Callable, List, Optional
 
@@ -357,7 +358,11 @@ class TransactionsTab(ctk.CTkFrame):
             row_bg = T.CARD if i % 2 == 0 else T.CARD2
 
             w["tx"] = tx  # mantém dados frescos para o botão de edição
-            w["frame"].configure(fg_color=row_bg)
+            w["frame"].configure(bg=row_bg)
+            w["desc_cell"].configure(bg=row_bg)
+            w["actions"].configure(bg=row_bg)
+            w["desc_lbl"].configure(fg_color=row_bg)
+            w["amount_lbl"].configure(fg_color=row_bg)
             w["desc_lbl"].configure(text=tx["description"])
             w["cat_lbl"].configure(text=f" {tx['category'] or 'Outros'} ")
             w["amount_lbl"].configure(text=format_currency(tx["amount"]))
@@ -384,20 +389,25 @@ class TransactionsTab(ctk.CTkFrame):
         self._initialized = True
 
     def _make_row(self, tx: dict, color: str, dim: str) -> dict:
-        """Cria os widgets de uma linha e retorna referências para atualizações futuras."""
-        row       = ctk.CTkFrame(self._list, fg_color=T.CARD, corner_radius=0)
-        separator = ctk.CTkFrame(row, height=1, fg_color=T.BORDER)
+        """Cria os widgets de uma linha e retorna referências para atualizações futuras.
+
+        Usa tk.Frame em vez de CTkFrame para eliminar o Canvas interno por linha
+        que causa o flickering visual durante o scroll do CTkScrollableFrame.
+        """
+        row       = tk.Frame(self._list, bg=T.CARD, bd=0, highlightthickness=0)
+        separator = tk.Frame(row, height=1, bg=T.BORDER, bd=0, highlightthickness=0)
 
         row.grid_columnconfigure(0, weight=3)
         row.grid_columnconfigure(1, weight=2)
         row.grid_columnconfigure(2, weight=1)
 
-        desc_cell = ctk.CTkFrame(row, fg_color="transparent")
+        desc_cell = tk.Frame(row, bg=T.CARD, bd=0, highlightthickness=0)
         desc_cell.grid(row=0, column=0, padx=20, pady=(20, 20), sticky="ew")
 
+        # fg_color explícito (não "transparent") para não depender da detecção de pai tk.Frame
         desc_lbl = ctk.CTkLabel(
             desc_cell, text=tx["description"],
-            font=F(17, "bold"), text_color=T.TEXT, anchor="w",
+            font=F(17, "bold"), text_color=T.TEXT, anchor="w", fg_color=T.CARD,
         )
         desc_lbl.pack(anchor="w")
 
@@ -417,11 +427,11 @@ class TransactionsTab(ctk.CTkFrame):
 
         amount_lbl = ctk.CTkLabel(
             row, text=format_currency(tx["amount"]),
-            font=F(18, "bold"), text_color=color, anchor="w",
+            font=F(18, "bold"), text_color=color, anchor="w", fg_color=T.CARD,
         )
         amount_lbl.grid(row=0, column=2, padx=10, pady=20, sticky="w")
 
-        actions = ctk.CTkFrame(row, fg_color="transparent")
+        actions = tk.Frame(row, bg=T.CARD, bd=0, highlightthickness=0)
         actions.grid(row=0, column=3, padx=(0, 12), pady=8)
 
         ctk.CTkButton(
@@ -441,6 +451,8 @@ class TransactionsTab(ctk.CTkFrame):
         return {
             "frame":      row,
             "separator":  separator,
+            "desc_cell":  desc_cell,
+            "actions":    actions,
             "desc_lbl":   desc_lbl,
             "cat_lbl":    cat_lbl,
             "amount_lbl": amount_lbl,
