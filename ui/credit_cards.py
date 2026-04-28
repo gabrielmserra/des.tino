@@ -68,6 +68,29 @@ def _card_spending(card_id: int, month_id: int, closing_day: int) -> float:
     return total
 
 
+def _all_card_spendings(cards: list, month_id: int) -> dict:
+    """Calcula gastos de todos os cartões em uma única passagem — O(n+m) em vez de O(n×m)."""
+    if not cards:
+        return {}
+    cycle_starts = {c["id"]: _cycle_start(c.get("closing_day", 1)) for c in cards}
+    card_ids     = set(cycle_starts)
+    totals       = {cid: 0.0 for cid in card_ids}
+
+    for tx in db.get_transactions(month_id):
+        if tx["type"] != "saida_variavel" or tx.get("card_id") not in card_ids:
+            continue
+        cid   = tx["card_id"]
+        start = cycle_starts[cid]
+        raw   = str(tx.get("created_at") or "")[:10]
+        try:
+            if date.fromisoformat(raw) >= start:
+                totals[cid] += float(tx["amount"])
+        except ValueError:
+            totals[cid] += float(tx["amount"])
+
+    return totals
+
+
 class CardPresetsBar(ctk.CTkFrame):
     """Faixa colapsável com cartões preset, exibida no topo de Saídas Variáveis."""
 

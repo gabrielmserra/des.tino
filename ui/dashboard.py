@@ -376,7 +376,7 @@ class Dashboard(ctk.CTkScrollableFrame):
 
     # ------------------------------------------------------------------
     def _draw_credit_panel(self, cards: list, s: dict) -> None:
-        from ui.credit_cards import _card_spending, _days_until
+        from ui.credit_cards import _all_card_spendings, _days_until
 
         for w in self._credit_frame.winfo_children():
             w.destroy()
@@ -389,7 +389,8 @@ class Dashboard(ctk.CTkScrollableFrame):
             ).pack(anchor="w")
             return
 
-        free_cash = max(0.0, s.get("dinheiro_livre", 0))
+        free_cash     = max(0.0, s.get("dinheiro_livre", 0))
+        card_spendings = _all_card_spendings(cards, self.month_id)
 
         for i, card in enumerate(cards):
             if i > 0:
@@ -400,7 +401,7 @@ class Dashboard(ctk.CTkScrollableFrame):
             limit       = float(card.get("limit") or 0)
             due_day     = card.get("due_day", 10)
             closing_day = card.get("closing_day", 1)
-            spent       = _card_spending(card["id"], self.month_id, closing_day)
+            spent       = card_spendings.get(card["id"], 0.0)
             days_cls    = _days_until(closing_day)
             days_due    = _days_until(due_day)
             avail       = max(0.0, limit - spent) if limit > 0 else None
