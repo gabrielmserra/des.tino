@@ -46,12 +46,13 @@ class MainContent(ctk.CTkFrame):
             font=F(26, "bold"), text_color=T.TEXT, anchor="w",
         )
         self._title_lbl.pack(anchor="w")
-        today = date.today()
-        date_str = f"Hoje, {today.day} de {MONTHS_PT[today.month - 1].lower()} de {today.year}"
-        ctk.CTkLabel(
-            title_box, text=date_str,
+        self._date_lbl = ctk.CTkLabel(
+            title_box, text=self._today_str(),
             font=F(12), text_color=T.MUTED, anchor="w",
-        ).pack(anchor="w", pady=(2, 0))
+        )
+        self._date_lbl.pack(anchor="w", pady=(2, 0))
+        self._date_after_id: str | None = None
+        self._schedule_date_tick()
 
         ctk.CTkButton(
             header, text="↓  Exportar CSV",
@@ -178,3 +179,27 @@ class MainContent(ctk.CTkFrame):
             messagebox.showinfo("Exportado", f"Arquivo salvo em:\n{path}")
         except OSError as e:
             messagebox.showerror("Erro ao exportar", str(e))
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _today_str() -> str:
+        today = date.today()
+        return f"Hoje, {today.day} de {MONTHS_PT[today.month - 1].lower()} de {today.year}"
+
+    def _schedule_date_tick(self) -> None:
+        self._date_after_id = self.after(60_000, self._on_date_tick)
+
+    def _on_date_tick(self) -> None:
+        try:
+            self._date_lbl.configure(text=self._today_str())
+        except Exception:
+            return
+        self._schedule_date_tick()
+
+    def destroy(self) -> None:
+        if self._date_after_id is not None:
+            try:
+                self.after_cancel(self._date_after_id)
+            except Exception:
+                pass
+        super().destroy()

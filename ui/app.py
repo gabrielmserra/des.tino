@@ -103,9 +103,16 @@ class FinanceApp(ctk.CTkFrame):
                     if new_month:
                         db.copy_transactions_to_month(prev_id, new_month["id"])
                 self.after(0, lambda: self._after_add_month(name, months))
-            except Exception:
-                pass
+            except Exception as e:
+                self.after(0, lambda err=e: self._on_auto_month_error(name, err))
         threading.Thread(target=_do, daemon=True).start()
+
+    def _on_auto_month_error(self, name: str, error: Exception) -> None:
+        from tkinter import messagebox
+        messagebox.showerror(
+            "Erro ao criar período",
+            f"Não foi possível criar {name} automaticamente.\n\nVerifique sua conexão e tente novamente.\n\nDetalhe: {error}",
+        )
 
     # ------------------------------------------------------------------
     def _select_month(self, month_id: int, month_name: str) -> None:

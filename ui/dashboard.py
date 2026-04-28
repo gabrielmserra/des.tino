@@ -389,7 +389,7 @@ class Dashboard(ctk.CTkScrollableFrame):
             ).pack(anchor="w")
             return
 
-        free_cash     = max(0.0, s.get("dinheiro_livre", 0))
+        saldo          = s.get("saldo", 0)
         card_spendings = _all_card_spendings(cards, self.month_id)
 
         for i, card in enumerate(cards):
@@ -408,7 +408,7 @@ class Dashboard(ctk.CTkScrollableFrame):
             pct_used    = spent / limit if limit > 0 else 0.0
 
             safety_msg, safety_color = _credit_safety(
-                pct_used, days_due, spent, free_cash, avail)
+                pct_used, days_due, spent, saldo, avail)
 
             # Linha superior: ponto colorido + nome + indicador
             top = ctk.CTkFrame(self._credit_frame, fg_color="transparent")
@@ -470,18 +470,20 @@ class Dashboard(ctk.CTkScrollableFrame):
 
 # ──────────────────────────────────────────────────────────────────────
 def _credit_safety(pct_used: float, days_due: int, spent: float,
-                   free_cash: float, avail) -> tuple:
+                   saldo: float, avail) -> tuple:
     """Retorna (mensagem, cor) do indicador de segurança do cartão."""
     if pct_used >= 0.90:
         return ("Limite quase esgotado — evite novos gastos", T.RED)
-    if days_due <= 3 and spent > 0 and free_cash < spent * 0.8:
-        return (f"Vence em {days_due}d e saldo livre pode não cobrir a fatura", T.RED)
+    if days_due <= 3 and spent > 0 and saldo < 0:
+        return (f"Vence em {days_due}d e o mês está no negativo", T.RED)
     if pct_used >= 0.70:
         return (f"{pct_used*100:.0f}% do limite usado — reduza os gastos", T.GOLD)
-    if days_due <= 7 and spent > 0 and free_cash < spent:
-        return (f"Vence em {days_due}d — saldo livre menor que a fatura", T.GOLD)
+    if days_due <= 5 and spent > 0:
+        return (f"Vence em {days_due}d — {format_currency(spent)} a pagar", T.GOLD)
     if days_due <= 5:
         return (f"Vencimento em {days_due} dias — prepare o pagamento", T.GOLD)
+    if days_due <= 7 and spent > 0:
+        return (f"Fatura de {format_currency(spent)} vence em {days_due}d", T.GOLD)
     if spent == 0:
         return ("Nenhum gasto neste ciclo", T.GREEN)
     if avail is not None:
