@@ -174,7 +174,6 @@ class GoalsTab(ctk.CTkFrame):
         bar_bg = ctk.CTkFrame(card, height=10, fg_color=T.CARD2, corner_radius=5)
         bar_bg.grid(row=2, column=0, sticky="ew", padx=20, pady=(0, 14))
         bar_bg.grid_propagate(False)
-        bar_bg.update_idletasks()
         ctk.CTkFrame(bar_bg, height=10, fg_color=color, corner_radius=5).place(
             x=0, y=0, relheight=1, relwidth=pct)
 

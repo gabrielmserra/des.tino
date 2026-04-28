@@ -341,7 +341,6 @@ class Dashboard(ctk.CTkScrollableFrame):
             bar_bg = ctk.CTkFrame(row, height=6, fg_color=T.CARD2, corner_radius=3)
             bar_bg.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0))
             bar_bg.grid_propagate(False)
-            bar_bg.update_idletasks()
             ctk.CTkFrame(bar_bg, height=6, fg_color=color, corner_radius=3).place(
                 x=0, y=0, relheight=1, relwidth=pct)
 
