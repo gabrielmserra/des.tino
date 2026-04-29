@@ -23,16 +23,17 @@ class Dashboard(ctk.CTkScrollableFrame):
 
         # KPI definitions (evaluated at build time = after apply_theme)
         kpi = [
-            ("total_entradas",      "ENTRADAS",      T.GREEN),
-            ("total_saidas",        "SAÍDAS",        T.RED),
-            ("total_investimentos", "INVESTIMENTOS", T.VIOLET),
-            ("saldo",               "SALDO",         T.BLUE),
+            ("total_entradas",      "ENTRADAS",             T.GREEN),
+            ("total_saidas",        "SAÍDAS",               T.RED),
+            ("total_investimentos", "INVESTIMENTOS MÊS",    T.VIOLET),
+            ("investimentos_total", "INVESTIMENTOS TOTAIS", T.VIOLET),
+            ("saldo",               "SALDO",                T.BLUE),
         ]
 
         # ── KPI cards ─────────────────────────────────────────────────
         kpi_row = ctk.CTkFrame(self, fg_color="transparent")
         kpi_row.grid(row=0, column=0, sticky="ew", padx=28, pady=(24, 0))
-        for col in range(4):
+        for col in range(5):
             kpi_row.grid_columnconfigure(col, weight=1)
 
         for col, (key, label, color) in enumerate(kpi):
@@ -164,18 +165,24 @@ class Dashboard(ctk.CTkScrollableFrame):
         s = db.get_month_summary(self.month_id)
 
         for key, (lbl, default_color) in self._card_lbls.items():
+            if key == "investimentos_total":
+                lbl.configure(text="...", text_color=default_color)
+                continue
             val   = s.get(key, 0.0)
-            color = (T.GREEN if val >= 0 else T.RED) if key in ("saldo", "dinheiro_livre") else default_color
+            color = (T.GREEN if val >= 0 else T.RED) if key == "saldo" else default_color
             lbl.configure(text=format_currency(val), text_color=color)
 
         self._draw_savings(s)
         self._draw_tips(s)
 
         def _background():
-            # Constrói as figuras Matplotlib fora do main thread (pura matemática, sem Tkinter)
-            pie_data = db.get_expenses_by_category(self.month_id)
-            pie_fig  = self._build_pie_figure(pie_data)
-            bar_fig  = self._build_bar_figure(s)
+            pie_data  = db.get_expenses_by_category(self.month_id)
+            pie_fig   = self._build_pie_figure(pie_data)
+            bar_fig   = self._build_bar_figure(s)
+            try:
+                total_inv = db.get_total_investments()
+            except Exception:
+                total_inv = 0.0
             try:
                 goals = db.get_goals()
             except Exception:
@@ -184,13 +191,19 @@ class Dashboard(ctk.CTkScrollableFrame):
                 cards = db.get_cards()
             except Exception:
                 cards = []
-            # Volta ao main thread só para embutir os widgets Tkinter
             self.after(0, lambda: self._embed_pie(pie_fig))
             self.after(0, lambda: self._embed_bar(bar_fig))
             self.after(0, lambda: self._draw_goals(goals))
             self.after(0, lambda: self._draw_credit_panel(cards, s))
+            self.after(0, lambda t=total_inv: self._update_total_inv(t))
 
         threading.Thread(target=_background, daemon=True).start()
+
+    def _update_total_inv(self, total: float) -> None:
+        entry = self._card_lbls.get("investimentos_total")
+        if entry:
+            lbl, color = entry
+            lbl.configure(text=format_currency(total), text_color=color)
 
     # ------------------------------------------------------------------
     def _build_pie_figure(self, data: list):

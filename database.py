@@ -135,6 +135,18 @@ def delete_transaction(transaction_id: int, month_id: int) -> None:
     _invalidate(month_id)
 
 
+def get_total_investments() -> float:
+    """Soma todos os investimentos do usuário em todos os meses."""
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    resp = client.table("transactions") \
+        .select("amount") \
+        .eq("user_id", user_id) \
+        .eq("type", "investimento") \
+        .execute()
+    return sum(float(r["amount"] or 0) for r in (resp.data or []))
+
+
 def get_month_summary(month_id: int) -> Dict[str, float]:
     rows = get_transactions(month_id)
 
