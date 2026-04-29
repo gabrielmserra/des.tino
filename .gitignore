@@ -17,6 +17,7 @@ dist/
 tools/
 
 # Configurações locais / dados sensíveis
+config.py
 *.session
 .env
 
