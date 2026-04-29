@@ -74,7 +74,6 @@ class FinanceApp(ctk.CTkFrame):
     def _apply_months(self, months: list) -> None:
         self._sidebar.update_months(months)
 
-        # Re-select after theme rebuild if we have a pending id
         if hasattr(self, "_pending_theme_id") and self._pending_theme_id is not None:
             for m in months:
                 if m["id"] == self._pending_theme_id:
@@ -83,37 +82,8 @@ class FinanceApp(ctk.CTkFrame):
             self._pending_theme_id = None
             return
 
-        now  = datetime.now()
-        name = f"{MONTHS_PT[now.month - 1]} {now.year}"
-        for m in months:
-            if m["name"] == name:
-                self._select_month(m["id"], m["name"])
-                return
-
-        # Mês atual não existe — criar automaticamente
-        self._auto_create_month(months, name, now.year, now.month)
-
-    def _auto_create_month(self, existing_months: list, name: str, year: int, month_num: int) -> None:
-        def _do():
-            try:
-                db.create_month(name, year, month_num)
-                months = db.get_months()
-                if existing_months:
-                    prev_id   = existing_months[0]["id"]
-                    new_month = next((m for m in months if m["name"] == name), None)
-                    if new_month:
-                        db.copy_transactions_to_month(prev_id, new_month["id"])
-                self.after(0, lambda: self._after_add_month(name, months))
-            except Exception as e:
-                self.after(0, lambda err=e: self._on_auto_month_error(name, err))
-        threading.Thread(target=_do, daemon=True).start()
-
-    def _on_auto_month_error(self, name: str, error: Exception) -> None:
-        from tkinter import messagebox
-        messagebox.showerror(
-            "Erro ao criar período",
-            f"Não foi possível criar {name} automaticamente.\n\nVerifique sua conexão e tente novamente.\n\nDetalhe: {error}",
-        )
+        if months:
+            self._select_month(months[0]["id"], months[0]["name"])
 
     # ------------------------------------------------------------------
     def _select_month(self, month_id: int, month_name: str) -> None:
