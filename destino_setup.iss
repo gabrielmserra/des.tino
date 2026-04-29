@@ -7,7 +7,7 @@
 ;   3. O instalador será gerado em installer\destino_setup.exe
 
 #define AppName    "des.tino"
-#define AppVersion "2.1"
+#define AppVersion "2.2"
 #define AppExe     "destino.exe"
 #define AppPublisher "Gabriel Serra"
 #define AppURL     "https://github.com/gabrisera/des.tino"
