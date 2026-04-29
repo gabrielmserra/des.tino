@@ -56,6 +56,17 @@ def get_month_by_name(name: str) -> Optional[dict]:
     return resp.data[0] if resp.data else None
 
 
+def rename_month(month_id: int, new_name: str, new_year: int, new_month: int) -> None:
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    existing = client.table("months").select("id").eq("name", new_name).eq("user_id", user_id).execute()
+    if existing.data and existing.data[0]["id"] != month_id:
+        raise ValueError(f'"{new_name}" já existe.')
+    client.table("months").update({
+        "name": new_name, "year": new_year, "month": new_month,
+    }).eq("id", month_id).execute()
+
+
 def delete_month(month_id: int) -> None:
     get_client().table("months").delete().eq("id", month_id).execute()
 

@@ -13,6 +13,7 @@ class Sidebar(ctk.CTkFrame):
         on_select:       Callable,
         on_add:          Callable,
         on_delete:       Callable,
+        on_rename:       Callable,
         on_theme:        Callable,
         on_logout:       Callable,
         user_email:      str = "",
@@ -25,6 +26,7 @@ class Sidebar(ctk.CTkFrame):
         self.on_select  = on_select
         self.on_add     = on_add
         self.on_delete  = on_delete
+        self.on_rename  = on_rename
         self.on_theme   = on_theme
         self.on_logout  = on_logout
         self.user_email = user_email
@@ -167,12 +169,20 @@ class Sidebar(ctk.CTkFrame):
                 dot.grid(row=0, column=1, padx=(2, 4))
 
             ctk.CTkButton(
+                row_frame, text="✎",
+                width=26, height=26,
+                command=lambda mid=m["id"]: self.on_rename(mid),
+                fg_color="transparent", text_color=T.SUBTLE,
+                hover_color=T.CARD2, corner_radius=6, font=F(11),
+            ).grid(row=0, column=2, padx=(2, 0))
+
+            ctk.CTkButton(
                 row_frame, text="✕",
                 width=26, height=26,
                 command=lambda mid=m["id"]: self.on_delete(mid),
                 fg_color="transparent", text_color=T.SUBTLE,
                 hover_color=T.RED, corner_radius=6, font=F(11),
-            ).grid(row=0, column=2, padx=(2, 0))
+            ).grid(row=0, column=3, padx=(2, 0))
 
             self._buttons[m["id"]] = btn
 
