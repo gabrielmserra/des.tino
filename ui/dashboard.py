@@ -27,13 +27,12 @@ class Dashboard(ctk.CTkScrollableFrame):
             ("total_saidas",        "SAÍDAS",        T.RED),
             ("total_investimentos", "INVESTIMENTOS", T.VIOLET),
             ("saldo",               "SALDO",         T.BLUE),
-            ("dinheiro_livre",      "SOBRA LIVRE",   T.GOLD),
         ]
 
         # ── KPI cards ─────────────────────────────────────────────────
         kpi_row = ctk.CTkFrame(self, fg_color="transparent")
         kpi_row.grid(row=0, column=0, sticky="ew", padx=28, pady=(24, 0))
-        for col in range(5):
+        for col in range(4):
             kpi_row.grid_columnconfigure(col, weight=1)
 
         for col, (key, label, color) in enumerate(kpi):
@@ -499,7 +498,6 @@ def _build_tips(s: dict) -> list:
     saidas     = s.get("total_saidas", 0)
     investidos = s.get("total_investimentos", 0)
     saldo      = s.get("saldo", 0)
-    livre      = s.get("dinheiro_livre", 0)
     inv_pct    = investidos / entradas
     gasto_pct  = saidas / entradas
     tips = []
@@ -536,9 +534,9 @@ def _build_tips(s: dict) -> list:
             f"Você investe {inv_pct*100:.1f}% da renda. Tente aumentar para 20% — "
             "a regra 50/30/20 recomenda 50% necessidades, 30% desejos e 20% poupança.", T.BLUE, blue_dim))
 
-    if livre > 0 and inv_pct < 0.15:
-        tips.append(("i", "Sobra mensal disponível",
-            f"Você tem {format_currency(livre)} de dinheiro livre. "
+    if saldo > 0 and inv_pct < 0.15:
+        tips.append(("i", "Saldo disponível",
+            f"Você tem {format_currency(saldo)} de saldo no mês. "
             "Considere direcionar parte disso para sua reserva de emergência "
             "(ideal: 6 meses de despesas guardados).", T.GOLD, gold_dim))
 

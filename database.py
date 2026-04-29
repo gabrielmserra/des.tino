@@ -142,8 +142,7 @@ def get_month_summary(month_id: int) -> Dict[str, float]:
     total_entradas      = summary["entrada_fixa"] + summary["entrada_variavel"]
     total_saidas        = summary["saida_fixa"]   + summary["saida_variavel"]
     total_investimentos = summary["investimento"]
-    saldo               = total_entradas - total_saidas - total_investimentos
-    dinheiro_livre      = total_entradas - summary["saida_fixa"] - total_investimentos
+    saldo = total_entradas - total_saidas - total_investimentos
 
     return {
         **summary,
@@ -151,7 +150,6 @@ def get_month_summary(month_id: int) -> Dict[str, float]:
         "total_saidas":        total_saidas,
         "total_investimentos": total_investimentos,
         "saldo":               saldo,
-        "dinheiro_livre":      dinheiro_livre,
     }
 
 
