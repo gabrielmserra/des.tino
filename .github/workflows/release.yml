@@ -54,36 +54,8 @@ jobs:
               dist\destino.exe
           Remove-Item cert.pfx
 
-      - name: Instalar Inno Setup
-        shell: pwsh
-        run: choco install innosetup --no-progress -y
-
-      - name: Buildar instalador
-        shell: pwsh
-        run: |
-          $ver = '${{ github.ref_name }}'.TrimStart('v')
-          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' /DAppVersion=$ver destino_setup.iss
-
-      - name: Assinar instalador
-        env:
-          CERT_B64: ${{ secrets.CODE_SIGNING_CERT }}
-          CERT_PASS: ${{ secrets.CODE_SIGNING_PASSWORD }}
-        shell: pwsh
-        run: |
-          if (-not $env:CERT_B64) { Write-Host "Sem certificado configurado — pulando assinatura."; exit 0 }
-          $ver = '${{ github.ref_name }}'.TrimStart('v')
-          [IO.File]::WriteAllBytes('cert.pfx', [Convert]::FromBase64String($env:CERT_B64))
-          $st = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
-            Where-Object { $_.FullName -match 'x64' } |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -First 1 -ExpandProperty FullName
-          & $st sign /f cert.pfx /p $env:CERT_PASS `
-              /tr http://timestamp.sectigo.com /td sha256 /fd sha256 `
-              "installer\destino_setup_v${ver}.exe"
-          Remove-Item cert.pfx
-
       - name: Publicar Release no GitHub
         uses: softprops/action-gh-release@v2
         with:
-          files: installer/destino_setup_v*.exe
+          files: dist/destino.exe
           generate_release_notes: true
