@@ -30,7 +30,6 @@ TRANSACTION_TYPES = {
     "entrada_variavel": "Entradas Variáveis",
     "saida_fixa":       "Saídas Fixas",
     "saida_variavel":   "Saídas Variáveis",
-    "investimento":     "Investimentos",
 }
 
 EXPENSE_TYPES = {"saida_fixa", "saida_variavel"}

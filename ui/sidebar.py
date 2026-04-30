@@ -16,23 +16,26 @@ class Sidebar(ctk.CTkFrame):
         on_rename:       Callable,
         on_theme:        Callable,
         on_logout:       Callable,
+        on_investments:  Callable = None,
         user_email:      str = "",
     ):
         super().__init__(parent, width=270, corner_radius=0, fg_color=T.SIDEBAR)
         self.grid_propagate(False)
-        self.grid_rowconfigure(2, weight=1)
+        self.grid_rowconfigure(3, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
-        self.on_select  = on_select
-        self.on_add     = on_add
-        self.on_delete  = on_delete
-        self.on_rename  = on_rename
-        self.on_theme   = on_theme
-        self.on_logout  = on_logout
-        self.user_email = user_email
+        self.on_select      = on_select
+        self.on_add         = on_add
+        self.on_delete      = on_delete
+        self.on_rename      = on_rename
+        self.on_theme       = on_theme
+        self.on_logout      = on_logout
+        self.on_investments = on_investments or (lambda: None)
+        self.user_email     = user_email
 
-        self._active_id: int | None = None
-        self._buttons:   dict       = {}
+        self._active_id: int | None         = None
+        self._buttons:   dict               = {}
+        self._inv_btn:   ctk.CTkButton|None = None
 
         self._build()
 
@@ -56,16 +59,26 @@ class Sidebar(ctk.CTkFrame):
         # Separador
         ctk.CTkFrame(self, height=1, fg_color=T.BORDER).grid(row=1, column=0, sticky="ew")
 
+        # ── Navegação: Investimentos ───────────────────────────────────
+        self._inv_btn = ctk.CTkButton(
+            self, text="📈  Investimentos",
+            command=self.on_investments,
+            height=34, corner_radius=0, anchor="w",
+            fg_color="transparent", hover_color=T.CARD2,
+            text_color=T.MUTED, font=F(12),
+        )
+        self._inv_btn.grid(row=2, column=0, sticky="ew", padx=12, pady=(8, 4))
+
         # ── Lista de períodos ──────────────────────────────────────────
         scroll_wrapper = ctk.CTkFrame(self, fg_color="transparent")
-        scroll_wrapper.grid(row=2, column=0, sticky="nsew")
+        scroll_wrapper.grid(row=3, column=0, sticky="nsew")
         scroll_wrapper.grid_rowconfigure(1, weight=1)
         scroll_wrapper.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(
             scroll_wrapper, text="PERÍODOS",
             font=F(10, "bold"), text_color=T.SUBTLE, anchor="w",
-        ).grid(row=0, column=0, sticky="w", padx=16, pady=(14, 6))
+        ).grid(row=0, column=0, sticky="w", padx=16, pady=(10, 6))
 
         self.months_scroll = ctk.CTkScrollableFrame(
             scroll_wrapper, fg_color="transparent",
@@ -76,11 +89,11 @@ class Sidebar(ctk.CTkFrame):
         self.months_scroll.grid_columnconfigure(0, weight=1)
 
         # Separador
-        ctk.CTkFrame(self, height=1, fg_color=T.BORDER).grid(row=3, column=0, sticky="ew")
+        ctk.CTkFrame(self, height=1, fg_color=T.BORDER).grid(row=4, column=0, sticky="ew")
 
         # ── Footer ────────────────────────────────────────────────────
         footer = ctk.CTkFrame(self, fg_color="transparent")
-        footer.grid(row=4, column=0, sticky="ew", padx=10, pady=10)
+        footer.grid(row=5, column=0, sticky="ew", padx=10, pady=10)
         footer.grid_columnconfigure(0, weight=1)
 
         ctk.CTkButton(
@@ -101,11 +114,11 @@ class Sidebar(ctk.CTkFrame):
         ).grid(row=1, column=0, sticky="ew")
 
         # Separador
-        ctk.CTkFrame(self, height=1, fg_color=T.BORDER).grid(row=5, column=0, sticky="ew")
+        ctk.CTkFrame(self, height=1, fg_color=T.BORDER).grid(row=6, column=0, sticky="ew")
 
         # ── Usuário logado ────────────────────────────────────────────
         user_bar = ctk.CTkFrame(self, fg_color="transparent")
-        user_bar.grid(row=6, column=0, sticky="ew", padx=12, pady=(10, 14))
+        user_bar.grid(row=7, column=0, sticky="ew", padx=12, pady=(10, 14))
         user_bar.grid_columnconfigure(1, weight=1)
 
         initial = self.user_email[0].upper() if self.user_email else "?"
@@ -194,3 +207,15 @@ class Sidebar(ctk.CTkFrame):
         if month_id in self._buttons:
             self._buttons[month_id].configure(
                 fg_color=T.BLUE_DIM, text_color=T.BLUE, border_width=1)
+
+    def set_investments_active(self, active: bool) -> None:
+        if self._inv_btn:
+            if active:
+                self._inv_btn.configure(
+                    fg_color=T.VIOLET_DIM, text_color=T.VIOLET,
+                    border_width=1, border_color=T.BORDER_L,
+                )
+            else:
+                self._inv_btn.configure(
+                    fg_color="transparent", text_color=T.MUTED, border_width=0,
+                )

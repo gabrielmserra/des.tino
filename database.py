@@ -12,6 +12,7 @@ _tx_cache: Dict[int, List[dict]] = {}
 
 def _invalidate(month_id: int) -> None:
     _tx_cache.pop(month_id, None)
+    _inv_net_cache.pop(month_id, None)
 
 
 def is_cached(month_id: int) -> bool:
@@ -136,15 +137,21 @@ def delete_transaction(transaction_id: int, month_id: int) -> None:
 
 
 def get_total_investments() -> float:
-    """Soma todos os investimentos do usuário em todos os meses."""
+    """Soma líquida de todas as movimentações de investimento do usuário (aportes − saques)."""
     client  = get_client()
     user_id = client.auth.get_user().user.id
-    resp = client.table("transactions") \
-        .select("amount") \
+    resp = client.table("investment_movements") \
+        .select("movement_type,amount") \
         .eq("user_id", user_id) \
-        .eq("type", "investimento") \
         .execute()
-    return sum(float(r["amount"] or 0) for r in (resp.data or []))
+    total = 0.0
+    for r in (resp.data or []):
+        amt = float(r["amount"] or 0)
+        if r["movement_type"] == "saque":
+            total -= amt
+        else:
+            total += amt
+    return total
 
 
 def get_month_summary(month_id: int) -> Dict[str, float]:
@@ -155,7 +162,6 @@ def get_month_summary(month_id: int) -> Dict[str, float]:
         "entrada_variavel": 0.0,
         "saida_fixa":       0.0,
         "saida_variavel":   0.0,
-        "investimento":     0.0,
     }
     for row in rows:
         t = row["type"]
@@ -164,7 +170,7 @@ def get_month_summary(month_id: int) -> Dict[str, float]:
 
     total_entradas      = summary["entrada_fixa"] + summary["entrada_variavel"]
     total_saidas        = summary["saida_fixa"]   + summary["saida_variavel"]
-    total_investimentos = summary["investimento"]
+    total_investimentos = get_month_investment_net(month_id)
     saldo = total_entradas - total_saidas - total_investimentos
 
     return {
@@ -177,7 +183,7 @@ def get_month_summary(month_id: int) -> Dict[str, float]:
 
 
 def copy_transactions_to_month(from_month_id: int, to_month_id: int) -> int:
-    """Copia investimentos e gastos pós-fechamento de cartão para o novo mês."""
+    """Copia gastos pós-fechamento de cartão do mês anterior para o novo mês."""
     from datetime import date as _date
     client  = get_client()
     user_id = client.auth.get_user().user.id
@@ -189,9 +195,7 @@ def copy_transactions_to_month(from_month_id: int, to_month_id: int) -> int:
     rows    = get_transactions(from_month_id)
     to_copy = []
     for r in rows:
-        if r["type"] == "investimento":
-            to_copy.append(r)
-        elif r["type"] == "saida_variavel" and r.get("card_id"):
+        if r["type"] == "saida_variavel" and r.get("card_id"):
             # Só copia se foi adicionado APÓS o fechamento (pertence ao próximo ciclo)
             card_id  = r["card_id"]
             closing  = card_closing.get(card_id, 1)
@@ -225,18 +229,6 @@ def get_expenses_by_category(month_id: int) -> List[dict]:
     totals: Dict[str, float] = {}
     for row in rows:
         if row["type"] in ("saida_fixa", "saida_variavel"):
-            cat = row["category"] or "Outros"
-            totals[cat] = totals.get(cat, 0.0) + float(row["amount"] or 0)
-    result = [{"category": c, "total": t} for c, t in totals.items()]
-    result.sort(key=lambda x: x["total"], reverse=True)
-    return result
-
-
-def get_investments_by_category(month_id: int) -> List[dict]:
-    rows   = get_transactions(month_id)
-    totals: Dict[str, float] = {}
-    for row in rows:
-        if row["type"] == "investimento":
             cat = row["category"] or "Outros"
             totals[cat] = totals.get(cat, 0.0) + float(row["amount"] or 0)
     result = [{"category": c, "total": t} for c, t in totals.items()]
@@ -281,6 +273,7 @@ def delete_goal(goal_id: int) -> None:
 # ---------------------------------------------------------------------------
 
 _card_tx_cache: Dict[str, list] = {}  # key: "{card_id}_{month_id}"
+_inv_net_cache: Dict[int, float] = {}  # key: month_id → net investment do mês
 
 
 def get_cards() -> List[dict]:
@@ -345,6 +338,122 @@ def clear_cache() -> None:
     """Limpa todo o cache (chamado no logout)."""
     _tx_cache.clear()
     _card_tx_cache.clear()
+    _inv_net_cache.clear()
+
+
+# ---------------------------------------------------------------------------
+# Investimentos
+# ---------------------------------------------------------------------------
+
+def get_month_investment_net(month_id: int) -> float:
+    """Retorna o valor líquido de investimentos do mês (aportes − saques). Usa cache."""
+    if month_id not in _inv_net_cache:
+        resp = get_client().table("investment_movements") \
+            .select("movement_type,amount") \
+            .eq("month_id", month_id) \
+            .execute()
+        total = 0.0
+        for r in (resp.data or []):
+            amt = float(r["amount"] or 0)
+            if r["movement_type"] == "saque":
+                total -= amt
+            else:
+                total += amt
+        _inv_net_cache[month_id] = total
+    return _inv_net_cache[month_id]
+
+
+def get_investments(include_archived: bool = False) -> List[dict]:
+    """Retorna todos os investimentos do usuário. Por padrão exclui arquivados."""
+    query = get_client().table("investments") \
+        .select("*") \
+        .order("created_at", desc=False)
+    if not include_archived:
+        query = query.is_("archived_at", "null")
+    return query.execute().data or []
+
+
+def create_investment(
+    name: str,
+    category: str,
+    month_id: int,
+    amount: float,
+    note: str = "",
+) -> dict:
+    """Cria a entidade de investimento e registra o aporte inicial."""
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+
+    inv_resp = client.table("investments").insert({
+        "user_id":  user_id,
+        "name":     name,
+        "category": category,
+    }).execute()
+    if not inv_resp.data:
+        raise RuntimeError("Falha ao criar investimento.")
+    inv = inv_resp.data[0]
+
+    client.table("investment_movements").insert({
+        "investment_id": inv["id"],
+        "user_id":       user_id,
+        "month_id":      month_id,
+        "movement_type": "aporte_inicial",
+        "amount":        amount,
+        "note":          note or None,
+    }).execute()
+    _inv_net_cache.pop(month_id, None)
+    return inv
+
+
+def get_investment_movements(investment_id: int) -> List[dict]:
+    """Retorna todas as movimentações de um investimento, mais recente primeiro."""
+    resp = get_client().table("investment_movements") \
+        .select("*") \
+        .eq("investment_id", investment_id) \
+        .order("created_at", desc=True) \
+        .execute()
+    return resp.data or []
+
+
+def add_movement(
+    investment_id: int,
+    month_id: int,
+    movement_type: str,
+    amount: float,
+    note: str = "",
+) -> None:
+    """Adiciona um aporte ou saque a um investimento existente."""
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    client.table("investment_movements").insert({
+        "investment_id": investment_id,
+        "user_id":       user_id,
+        "month_id":      month_id,
+        "movement_type": movement_type,
+        "amount":        amount,
+        "note":          note or None,
+    }).execute()
+    _inv_net_cache.pop(month_id, None)
+
+
+def archive_investment(investment_id: int) -> None:
+    """Arquiva o investimento (some da lista mas mantém saldo nos totais)."""
+    from datetime import datetime, timezone
+    get_client().table("investments").update({
+        "archived_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", investment_id).execute()
+
+
+def get_all_investment_movements() -> List[dict]:
+    """Retorna todas as movimentações do usuário (para cálculo de saldos em lote)."""
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    resp = client.table("investment_movements") \
+        .select("*") \
+        .eq("user_id", user_id) \
+        .order("created_at", desc=True) \
+        .execute()
+    return resp.data or []
 
 
 def export_month_csv(month_id: int) -> str:

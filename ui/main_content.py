@@ -2,6 +2,7 @@
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 from datetime import date
+from typing import Optional, Callable
 
 import database as db
 import ui.theme as T
@@ -15,10 +16,12 @@ _TABS = [("dashboard", "Dashboard")] + list(TRANSACTION_TYPES.items()) + [("meta
 
 
 class MainContent(ctk.CTkFrame):
-    def __init__(self, parent, month_id: int, month_name: str):
+    def __init__(self, parent, month_id: int, month_name: str,
+                 on_investments: Optional[Callable] = None):
         super().__init__(parent, corner_radius=0, fg_color=T.BG)
-        self.month_id   = month_id
-        self.month_name = month_name
+        self.month_id        = month_id
+        self.month_name      = month_name
+        self._on_investments = on_investments
 
         self.grid_rowconfigure(2, weight=1)
         self.grid_columnconfigure(0, weight=1)
@@ -94,7 +97,7 @@ class MainContent(ctk.CTkFrame):
         content.grid_rowconfigure(0, weight=1)
         content.grid_columnconfigure(0, weight=1)
 
-        dash = Dashboard(content, self.month_id)
+        dash = Dashboard(content, self.month_id, on_investments=self._on_investments)
         dash.grid(row=0, column=0, sticky="nsew")
         self._frames["dashboard"] = dash
 

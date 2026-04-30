@@ -6,14 +6,13 @@ from typing import Callable, List, Optional
 import database as db
 import ui.theme as T
 from ui.theme import F
-from utils.helpers import CATEGORIES, INVESTMENT_CATEGORIES, EXPENSE_TYPES, format_currency
+from utils.helpers import CATEGORIES, EXPENSE_TYPES, format_currency
 
 _PLACEHOLDER = {
     "entrada_fixa":     "Ex: Salário, Aluguel recebido…",
     "entrada_variavel": "Ex: Freela, Venda, Bônus…",
     "saida_fixa":       "Ex: Aluguel, Financiamento, Internet…",
     "saida_variavel":   "Ex: Mercado, Restaurante, Uber…",
-    "investimento":     "Ex: Compra de PETR4, Tesouro Selic…",
 }
 
 
@@ -24,7 +23,6 @@ class TransactionsTab(ctk.CTkFrame):
         self.tx_type   = tx_type
         self.on_change = on_change
         self.is_expense      = tx_type in EXPENSE_TYPES
-        self.is_investment   = tx_type == "investimento"
         self._is_var_expense = tx_type == "saida_variavel"
 
         self._editing_id: Optional[int] = None
@@ -35,13 +33,11 @@ class TransactionsTab(ctk.CTkFrame):
         self._initialized        = False
 
         if tx_type in ("entrada_fixa", "entrada_variavel"):
-            self._style = {"color": T.GREEN,  "dim": T.GREEN_DIM}
+            self._style = {"color": T.GREEN, "dim": T.GREEN_DIM}
         elif tx_type in ("saida_fixa", "saida_variavel"):
-            self._style = {"color": T.RED,    "dim": T.RED_DIM}
-        elif tx_type == "investimento":
-            self._style = {"color": T.VIOLET, "dim": T.VIOLET_DIM}
+            self._style = {"color": T.RED,   "dim": T.RED_DIM}
         else:
-            self._style = {"color": T.BLUE,   "dim": T.BLUE_DIM}
+            self._style = {"color": T.BLUE,  "dim": T.BLUE_DIM}
 
         self.grid_columnconfigure(0, weight=1)
 
@@ -122,11 +118,9 @@ class TransactionsTab(ctk.CTkFrame):
         self._amount.grid(row=2, column=1, padx=6, pady=(4, 0), sticky="ew")
         self._amount.bind("<Return>", lambda _: self._submit())
 
-        self._cat_var = ctk.StringVar(value="Ações" if self.is_investment else "Outros")
+        self._cat_var = ctk.StringVar(value="Outros")
         if self.is_expense:
             _values = CATEGORIES
-        elif self.is_investment:
-            _values = INVESTMENT_CATEGORIES
         else:
             _values = ["Receita"]
 
@@ -135,7 +129,7 @@ class TransactionsTab(ctk.CTkFrame):
             fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
             button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
             dropdown_text_color=T.TEXT, corner_radius=8,
-            state="normal" if (self.is_expense or self.is_investment) else "disabled",
+            state="normal" if self.is_expense else "disabled",
         )
         self._cat_combo.grid(row=2, column=2, padx=6, pady=(4, 0), sticky="ew")
 

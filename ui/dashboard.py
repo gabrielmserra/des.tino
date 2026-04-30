@@ -1,5 +1,6 @@
 """Dashboard: KPI cards + gráficos + barra de taxa de poupança."""
 import customtkinter as ctk
+from typing import Optional, Callable
 
 import database as db
 import ui.theme as T
@@ -8,11 +9,13 @@ from utils.helpers import format_currency
 
 
 class Dashboard(ctk.CTkScrollableFrame):
-    def __init__(self, parent, month_id: int):
+    def __init__(self, parent, month_id: int,
+                 on_investments: Optional[Callable] = None):
         super().__init__(parent, fg_color=T.BG,
                          scrollbar_button_color=T.BORDER,
                          scrollbar_button_hover_color=T.MUTED)
-        self.month_id = month_id
+        self.month_id        = month_id
+        self._on_investments = on_investments
         self._card_lbls: dict = {}
         self._build()
         self.refresh()
@@ -36,10 +39,13 @@ class Dashboard(ctk.CTkScrollableFrame):
         for col in range(5):
             kpi_row.grid_columnconfigure(col, weight=1)
 
+        _inv_keys = {"total_investimentos", "investimentos_total"}
         for col, (key, label, color) in enumerate(kpi):
             card = self._make_kpi(kpi_row, label, color)
             card.grid(row=0, column=col, padx=(0 if col == 0 else 7, 0), sticky="nsew")
             self._card_lbls[key] = (card.val_lbl, color)
+            if key in _inv_keys and self._on_investments:
+                self._bind_click(card, self._on_investments)
 
         # ── Guru Financeiro ───────────────────────────────────────────
         tips_card = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14,
@@ -158,6 +164,22 @@ class Dashboard(ctk.CTkScrollableFrame):
                                     font=F(18, "bold"), text_color=color)
         card.val_lbl.pack(pady=(0, 16))
         return card
+
+    @staticmethod
+    def _bind_click(widget, command: Callable) -> None:
+        """Bind click + hand cursor recursively to widget and all descendants."""
+        def _apply(w):
+            try:
+                w.configure(cursor="hand2")
+            except Exception:
+                pass
+            try:
+                w.bind("<Button-1>", lambda e: command())
+            except Exception:
+                pass
+            for child in w.winfo_children():
+                _apply(child)
+        _apply(widget)
 
     # ------------------------------------------------------------------
     def refresh(self) -> None:

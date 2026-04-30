@@ -10,6 +10,7 @@ import ui.theme as T
 from ui.theme import F
 from ui.sidebar      import Sidebar
 from ui.main_content import MainContent
+from ui.investments  import InvestmentsTab
 from utils.helpers   import MONTHS_PT, APP_NAME, APP_VERSION, apply_app_icon
 
 
@@ -19,9 +20,10 @@ class FinanceApp(ctk.CTkFrame):
         self.user_email  = user_email
         self._on_logout  = on_logout
 
-        self._current_id:   int | None = None
-        self._main_content: MainContent | None = None
-        self._placeholder:  ctk.CTkFrame | None = None
+        self._current_id:          int | None          = None
+        self._main_content:        MainContent | None  = None
+        self._placeholder:         ctk.CTkFrame | None = None
+        self._investments_content: InvestmentsTab|None = None
 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -33,13 +35,14 @@ class FinanceApp(ctk.CTkFrame):
     def _build(self) -> None:
         self._sidebar = Sidebar(
             self,
-            on_select  = self._select_month,
-            on_add     = self._add_month,
-            on_delete  = self._delete_month,
-            on_rename  = self._rename_month,
-            on_theme   = self._on_theme_change,
-            on_logout  = self._logout,
-            user_email = self.user_email,
+            on_select      = self._select_month,
+            on_add         = self._add_month,
+            on_delete      = self._delete_month,
+            on_rename      = self._rename_month,
+            on_theme       = self._on_theme_change,
+            on_logout      = self._logout,
+            on_investments = self._show_investments,
+            user_email     = self.user_email,
         )
         self._sidebar.grid(row=0, column=0, sticky="nsew")
 
@@ -89,6 +92,9 @@ class FinanceApp(ctk.CTkFrame):
     def _select_month(self, month_id: int, month_name: str) -> None:
         self._current_id = month_id
         self._sidebar.set_active_month(month_id)
+        self._sidebar.set_investments_active(False)
+        if self._investments_content:
+            self._investments_content.grid_remove()
 
         if db.is_cached(month_id):
             self._render_month(month_id, month_name)
@@ -96,6 +102,7 @@ class FinanceApp(ctk.CTkFrame):
             def fetch():
                 try:
                     db.get_transactions(month_id)
+                    db.get_month_investment_net(month_id)
                 except Exception:
                     pass
                 self.after(0, lambda: self._render_month(month_id, month_name))
@@ -111,7 +118,7 @@ class FinanceApp(ctk.CTkFrame):
             self._placeholder = None
 
         if self._main_content:
-            # Reutiliza o MainContent existente — evita destruir e recriar todos os tabs
+            self._main_content.grid()  # restaura se estava oculto pelo InvestmentsTab
             try:
                 self._main_content.switch_month(month_id, month_name)
             except Exception:
@@ -120,12 +127,34 @@ class FinanceApp(ctk.CTkFrame):
                 messagebox.showerror("Erro ao trocar mês", traceback.format_exc())
         else:
             try:
-                self._main_content = MainContent(self, month_id, month_name)
+                self._main_content = MainContent(
+                    self, month_id, month_name,
+                    on_investments=self._show_investments,
+                )
                 self._main_content.grid(row=0, column=1, sticky="nsew")
             except Exception:
                 import traceback
                 from tkinter import messagebox
                 messagebox.showerror("Erro ao abrir mês", traceback.format_exc())
+
+    # ------------------------------------------------------------------
+    def _show_investments(self) -> None:
+        self._sidebar.set_investments_active(True)
+        if self._main_content:
+            self._main_content.grid_remove()
+        if self._placeholder:
+            self._placeholder.grid_remove()
+        if self._investments_content is None:
+            self._investments_content = InvestmentsTab(
+                self, on_change=self._on_investments_change,
+            )
+        else:
+            self._investments_content.refresh()
+        self._investments_content.grid(row=0, column=1, sticky="nsew")
+
+    def _on_investments_change(self) -> None:
+        if self._main_content:
+            self._main_content._refresh_dashboard()
 
     # ------------------------------------------------------------------
     def _add_month(self) -> None:
@@ -143,7 +172,7 @@ class FinanceApp(ctk.CTkFrame):
             try:
                 db.create_month(name, year, month_num)
                 months = db.get_months()
-                # Copia investimentos e faturas do mês anterior
+                # Copia faturas pós-fechamento do mês anterior
                 if existing_months:
                     prev_id  = existing_months[0]["id"]  # já ordenado: mais recente primeiro
                     new_month = next((m for m in months if m["name"] == name), None)
@@ -227,6 +256,12 @@ class FinanceApp(ctk.CTkFrame):
             except Exception:
                 pass
             self._main_content = None
+        if self._investments_content:
+            try:
+                self._investments_content.destroy()
+            except Exception:
+                pass
+            self._investments_content = None
         if self._placeholder:
             try:
                 self._placeholder.destroy()
