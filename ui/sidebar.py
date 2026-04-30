@@ -208,6 +208,12 @@ class Sidebar(ctk.CTkFrame):
             self._buttons[month_id].configure(
                 fg_color=T.BLUE_DIM, text_color=T.BLUE, border_width=1)
 
+    def clear_active_month(self) -> None:
+        if self._active_id and self._active_id in self._buttons:
+            self._buttons[self._active_id].configure(
+                fg_color="transparent", text_color=T.TEXT, border_width=0)
+        self._active_id = None
+
     def set_investments_active(self, active: bool) -> None:
         if self._inv_btn:
             if active:

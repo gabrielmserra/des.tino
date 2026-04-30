@@ -140,6 +140,7 @@ class FinanceApp(ctk.CTkFrame):
     # ------------------------------------------------------------------
     def _show_investments(self) -> None:
         self._sidebar.set_investments_active(True)
+        self._sidebar.clear_active_month()
         if self._main_content:
             self._main_content.grid_remove()
         if self._placeholder:

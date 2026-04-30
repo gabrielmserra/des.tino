@@ -16,8 +16,10 @@ class InvestmentsTab(ctk.CTkScrollableFrame):
             scrollbar_button_color=T.BORDER,
             scrollbar_button_hover_color=T.MUTED,
         )
-        self._on_change = on_change
-        self._months: list = []
+        self._on_change      = on_change
+        self._months: list   = []
+        self._all_investments: list = []
+        self._all_movements: list   = []
         self._build()
         self.refresh()
 
@@ -108,9 +110,21 @@ class InvestmentsTab(ctk.CTkScrollableFrame):
         self._form_error.grid(row=5, column=0, columnspan=4,
                               padx=20, pady=(0, 12), sticky="w")
 
-        # ── Contador + lista ───────────────────────────────────────────
+        # ── Filtro + contador ─────────────────────────────────────────
         count_row = ctk.CTkFrame(self, fg_color="transparent")
         count_row.grid(row=2, column=0, sticky="ew", padx=28, pady=(20, 0))
+
+        self._filter_var = ctk.StringVar(value="Todos os períodos")
+        self._filter_combo = ctk.CTkComboBox(
+            count_row, values=["Todos os períodos"],
+            variable=self._filter_var, width=200,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
+            dropdown_text_color=T.TEXT,
+            command=lambda _: self._render_list(),
+        )
+        self._filter_combo.pack(side="right")
+
         self._count_lbl = ctk.CTkLabel(
             count_row, text="", font=F(11), text_color=T.MUTED, anchor="w")
         self._count_lbl.pack(side="left")
@@ -132,37 +146,60 @@ class InvestmentsTab(ctk.CTkScrollableFrame):
         threading.Thread(target=fetch, daemon=True).start()
 
     def _apply(self, investments: list, months: list, all_movements: list) -> None:
-        self._months = months
-        month_names  = [m["name"] for m in months]
+        self._months          = months
+        self._all_investments = investments
+        self._all_movements   = all_movements
+
+        month_names = [m["name"] for m in months]
         self._month_combo.configure(values=month_names or ["—"])
         if month_names and not self._month_var.get():
             self._month_var.set(month_names[0])
 
+        self._filter_combo.configure(values=["Todos os períodos"] + month_names)
+        self._render_list()
+
+    def _render_list(self) -> None:
+        from collections import defaultdict
+
+        selected = self._filter_var.get()
+        investments = self._all_investments
+
+        if selected != "Todos os períodos":
+            month = next((m for m in self._months if m["name"] == selected), None)
+            if month:
+                ids_in_month = {mv["investment_id"] for mv in self._all_movements
+                                if mv["month_id"] == month["id"]}
+                investments = [i for i in investments if i["id"] in ids_in_month]
+
         for w in self._list_frame.winfo_children():
             w.destroy()
 
-        n = len(investments)
-        self._count_lbl.configure(
-            text=f"{n} investimento{'s' if n != 1 else ''}" if n
-            else "Nenhum investimento cadastrado.")
+        n     = len(investments)
+        total = len(self._all_investments)
+        if selected == "Todos os períodos":
+            self._count_lbl.configure(
+                text=f"{n} investimento{'s' if n != 1 else ''}" if n
+                else "Nenhum investimento cadastrado.")
+        else:
+            self._count_lbl.configure(
+                text=f"{n} de {total} investimento{'s' if total != 1 else ''} em {selected}")
 
         if not investments:
-            ctk.CTkLabel(
-                self._list_frame,
-                text="Use o formulário acima para criar seu primeiro investimento.",
-                font=F(12), text_color=T.MUTED, anchor="w",
-            ).grid(row=0, column=0, sticky="w", pady=8)
+            msg = (f"Nenhum investimento em {selected}." if selected != "Todos os períodos"
+                   else "Use o formulário acima para criar seu primeiro investimento.")
+            ctk.CTkLabel(self._list_frame, text=msg,
+                         font=F(12), text_color=T.MUTED, anchor="w").grid(
+                row=0, column=0, sticky="w", pady=8)
             return
 
-        from collections import defaultdict
         mov_map: dict = defaultdict(list)
-        for m in all_movements:
+        for m in self._all_movements:
             mov_map[m["investment_id"]].append(m)
 
         for idx, inv in enumerate(investments):
             movs    = mov_map[inv["id"]]
             balance = _calc_balance(movs)
-            card    = self._make_investment_card(inv, balance, movs, months)
+            card    = self._make_investment_card(inv, balance, movs, self._months)
             card.grid(row=idx, column=0, sticky="ew", pady=(0, 12))
 
     # ------------------------------------------------------------------
