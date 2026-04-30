@@ -232,7 +232,7 @@ class TransactionsTab(ctk.CTkFrame):
     def _submit(self) -> None:
         desc       = self._desc.get().strip()
         amount_raw = self._amount.get().strip().replace(",", ".")
-        category   = self._cat_var.get() if (self.is_expense or self.is_investment) else "Receita"
+        category   = self._cat_var.get() if self.is_expense else "Receita"
 
         if not desc:
             self._show_error("Preencha a descrição.")
