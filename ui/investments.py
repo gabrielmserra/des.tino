@@ -44,7 +44,7 @@ class InvestmentsTab(ctk.CTkScrollableFrame):
 
         ctk.CTkLabel(form, text="Novo Investimento",
                      font=F(13, "bold"), text_color=T.TEXT, anchor="w").grid(
-            row=0, column=0, columnspan=4, sticky="w", padx=20, pady=(16, 10))
+            row=0, column=0, columnspan=4, sticky="w", padx=20, pady=(16, 6))
 
         self._name_var   = ctk.StringVar()
         self._cat_var    = ctk.StringVar(value=INVESTMENT_CATEGORIES[0])
@@ -52,24 +52,30 @@ class InvestmentsTab(ctk.CTkScrollableFrame):
         self._month_var  = ctk.StringVar()
         self._note_var   = ctk.StringVar()
 
+        for col, text in enumerate(["Nome", "Categoria", "Valor inicial (R$)", "Período"]):
+            ctk.CTkLabel(form, text=text, font=F(11), text_color=T.MUTED, anchor="w").grid(
+                row=1, column=col,
+                padx=(20 if col == 0 else 6, 20 if col == 3 else 6),
+                pady=(0, 2), sticky="w")
+
         ctk.CTkEntry(
-            form, placeholder_text="Nome do investimento",
+            form, placeholder_text="Ex: Tesouro Selic 2029",
             textvariable=self._name_var,
             fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
-        ).grid(row=1, column=0, padx=(20, 6), pady=(0, 6), sticky="ew")
+        ).grid(row=2, column=0, padx=(20, 6), pady=(0, 6), sticky="ew")
 
         ctk.CTkComboBox(
             form, values=INVESTMENT_CATEGORIES, variable=self._cat_var,
             fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
             button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
             dropdown_text_color=T.TEXT,
-        ).grid(row=1, column=1, padx=6, pady=(0, 6), sticky="ew")
+        ).grid(row=2, column=1, padx=6, pady=(0, 6), sticky="ew")
 
         ctk.CTkEntry(
-            form, placeholder_text="Valor inicial (R$)",
+            form, placeholder_text="0,00",
             textvariable=self._amount_var,
             fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
-        ).grid(row=1, column=2, padx=6, pady=(0, 6), sticky="ew")
+        ).grid(row=2, column=2, padx=6, pady=(0, 6), sticky="ew")
 
         self._month_combo = ctk.CTkComboBox(
             form, values=["—"], variable=self._month_var,
@@ -77,13 +83,17 @@ class InvestmentsTab(ctk.CTkScrollableFrame):
             button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
             dropdown_text_color=T.TEXT,
         )
-        self._month_combo.grid(row=1, column=3, padx=(6, 20), pady=(0, 6), sticky="ew")
+        self._month_combo.grid(row=2, column=3, padx=(6, 20), pady=(0, 6), sticky="ew")
+
+        ctk.CTkLabel(form, text="Nota (opcional)", font=F(11),
+                     text_color=T.MUTED, anchor="w").grid(
+            row=3, column=0, columnspan=3, padx=(20, 6), pady=(4, 2), sticky="w")
 
         ctk.CTkEntry(
-            form, placeholder_text="Nota (opcional)",
+            form, placeholder_text="Ex: aporte mensal automático",
             textvariable=self._note_var,
             fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
-        ).grid(row=2, column=0, columnspan=3, padx=(20, 6), pady=(0, 6), sticky="ew")
+        ).grid(row=4, column=0, columnspan=3, padx=(20, 6), pady=(0, 6), sticky="ew")
 
         ctk.CTkButton(
             form, text="+ Criar Investimento",
@@ -91,11 +101,11 @@ class InvestmentsTab(ctk.CTkScrollableFrame):
             height=36, corner_radius=8,
             fg_color=T.VIOLET, hover_color=T.VIOLET,
             text_color="#ffffff", font=F(13, "bold"),
-        ).grid(row=2, column=3, padx=(6, 20), pady=(0, 6), sticky="ew")
+        ).grid(row=4, column=3, padx=(6, 20), pady=(0, 6), sticky="ew")
 
         self._form_error = ctk.CTkLabel(
             form, text="", font=F(12), text_color=T.RED)
-        self._form_error.grid(row=3, column=0, columnspan=4,
+        self._form_error.grid(row=5, column=0, columnspan=4,
                               padx=20, pady=(0, 12), sticky="w")
 
         # ── Contador + lista ───────────────────────────────────────────
