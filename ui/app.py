@@ -123,8 +123,8 @@ class FinanceApp(ctk.CTkFrame):
                 self._main_content.switch_month(month_id, month_name)
             except Exception:
                 import traceback
-                from tkinter import messagebox
-                messagebox.showerror("Erro ao trocar mês", traceback.format_exc())
+                from ui.dialogs import show_error
+                show_error(self.winfo_toplevel(), "Erro ao trocar mês", traceback.format_exc()[:400])
         else:
             try:
                 self._main_content = MainContent(
@@ -134,8 +134,8 @@ class FinanceApp(ctk.CTkFrame):
                 self._main_content.grid(row=0, column=1, sticky="nsew")
             except Exception:
                 import traceback
-                from tkinter import messagebox
-                messagebox.showerror("Erro ao abrir mês", traceback.format_exc())
+                from ui.dialogs import show_error
+                show_error(self.winfo_toplevel(), "Erro ao abrir mês", traceback.format_exc()[:400])
 
     # ------------------------------------------------------------------
     def _show_investments(self) -> None:
@@ -159,7 +159,6 @@ class FinanceApp(ctk.CTkFrame):
 
     # ------------------------------------------------------------------
     def _add_month(self) -> None:
-        from tkinter import messagebox
         try:
             existing_months = db.get_months()
             existing_names  = {m["name"] for m in existing_months}
@@ -181,7 +180,8 @@ class FinanceApp(ctk.CTkFrame):
                         db.copy_transactions_to_month(prev_id, new_month["id"])
                 self._after_add_month(name, months)
             except Exception as e:
-                messagebox.showerror("Erro ao criar período", str(e))
+                from ui.dialogs import show_error
+                show_error(self.winfo_toplevel(), "Erro ao criar período", str(e))
 
     def _after_add_month(self, name: str, months: list) -> None:
         self._sidebar.update_months(months)
@@ -192,7 +192,6 @@ class FinanceApp(ctk.CTkFrame):
 
     # ------------------------------------------------------------------
     def _rename_month(self, month_id: int) -> None:
-        from tkinter import messagebox
         try:
             months = db.get_months()
         except Exception:
@@ -212,7 +211,8 @@ class FinanceApp(ctk.CTkFrame):
                 if self._current_id == month_id and self._main_content:
                     self._main_content.switch_month(month_id, new_name)
             except Exception as e:
-                messagebox.showerror("Erro ao renomear", str(e))
+                from ui.dialogs import show_error
+                show_error(self.winfo_toplevel(), "Erro ao renomear", str(e))
 
     # ------------------------------------------------------------------
     def _delete_month(self, month_id: int) -> None:

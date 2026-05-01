@@ -212,20 +212,29 @@ class GoalsTab(ctk.CTkFrame):
                 if self._on_change:
                     self._on_change()
             except Exception as e:
-                from tkinter import messagebox
-                messagebox.showerror("Erro", str(e))
+                from ui.dialogs import show_error
+                show_error(self.winfo_toplevel(), "Erro ao aportar", str(e))
 
     def _delete_goal(self, goal_id: int) -> None:
-        from tkinter import messagebox
-        if not messagebox.askyesno("Excluir meta?", "Esta ação é irreversível. Confirmar?"):
-            return
-        try:
-            db.delete_goal(goal_id)
-            self.refresh()
-            if self._on_change:
-                self._on_change()
-        except Exception as e:
-            messagebox.showerror("Erro", str(e))
+        from ui.dialogs import ConfirmDialog, show_error
+
+        def do_delete():
+            try:
+                db.delete_goal(goal_id)
+                self.refresh()
+                if self._on_change:
+                    self._on_change()
+            except Exception as e:
+                show_error(self.winfo_toplevel(), "Erro ao excluir", str(e))
+
+        ConfirmDialog(
+            self.winfo_toplevel(),
+            title="Excluir meta?",
+            message="Esta ação é irreversível. Confirmar?",
+            confirm_text="Excluir",
+            on_confirm=do_delete,
+            danger=True,
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────

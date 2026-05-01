@@ -1,6 +1,6 @@
 """Área principal: header + tabs customizadas + conteúdo."""
 import customtkinter as ctk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog
 from datetime import date
 from typing import Optional, Callable
 
@@ -179,9 +179,11 @@ class MainContent(ctk.CTkFrame):
         try:
             with open(path, "w", encoding="utf-8-sig") as f:
                 f.write(content)
-            messagebox.showinfo("Exportado", f"Arquivo salvo em:\n{path}")
+            from ui.dialogs import show_info
+            show_info(self.winfo_toplevel(), "Exportado", f"Arquivo salvo em:\n{path}")
         except OSError as e:
-            messagebox.showerror("Erro ao exportar", str(e))
+            from ui.dialogs import show_error
+            show_error(self.winfo_toplevel(), "Erro ao exportar", str(e))
 
     # ------------------------------------------------------------------
     @staticmethod
