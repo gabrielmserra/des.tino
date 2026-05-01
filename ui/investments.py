@@ -275,6 +275,14 @@ class InvestmentsTab(ctk.CTkScrollableFrame):
             text_color=T.SUBTLE, border_width=1, border_color=T.BORDER_L,
             font=F(12), height=30, corner_radius=7,
             command=lambda i=inv["id"], n=inv["name"]: self._on_archive(i, n),
+        ).pack(side="left", padx=(0, 6))
+
+        ctk.CTkButton(
+            actions, text="🗑 Excluir", width=90,
+            fg_color="transparent", hover_color=T.RED,
+            text_color=T.RED, border_width=1, border_color=T.RED,
+            font=F(12), height=30, corner_radius=7,
+            command=lambda i=inv["id"], n=inv["name"]: self._on_delete(i, n),
         ).pack(side="left")
 
         # ── Histórico colapsável ───────────────────────────────────────
@@ -402,6 +410,8 @@ class InvestmentsTab(ctk.CTkScrollableFrame):
     def _on_archive(self, inv_id: int, inv_name: str) -> None:
         def do_archive():
             db.archive_investment(inv_id)
+            if self._on_change:
+                self._on_change()
             self.refresh()
 
         _ConfirmDialog(
@@ -411,6 +421,23 @@ class InvestmentsTab(ctk.CTkScrollableFrame):
                     "O saldo histórico continua sendo\ncontabilizado nos totais.",
             confirm_text="Arquivar",
             on_confirm=do_archive,
+        )
+
+    def _on_delete(self, inv_id: int, inv_name: str) -> None:
+        def do_delete():
+            db.delete_investment(inv_id)
+            if self._on_change:
+                self._on_change()
+            self.refresh()
+
+        _ConfirmDialog(
+            self.winfo_toplevel(),
+            title="Excluir permanentemente?",
+            message=f'"{inv_name}" e todas as suas\n'
+                    "movimentações serão apagadas.\n"
+                    "Os valores somem dos totais do dashboard.",
+            confirm_text="Excluir",
+            on_confirm=do_delete,
         )
 
 
@@ -443,7 +470,7 @@ class _MovementDialog(ctk.CTkToplevel):
         self._on_success     = on_success
         apply_app_icon(self)
         self._build(inv_name, movement_type)
-        _center_dialog(self, parent, 400, 260)
+        _center_dialog(self, parent, 400, 320)
         self.lift()
         self.focus()
 
@@ -458,7 +485,7 @@ class _MovementDialog(ctk.CTkToplevel):
 
         fields = ctk.CTkFrame(self, fg_color="transparent")
         fields.grid(row=1, column=0, padx=28, sticky="ew")
-        fields.grid_columnconfigure((0, 1), weight=1)
+        fields.grid_columnconfigure(0, weight=1)
 
         month_names = [m["name"] for m in self._months]
         self._month_var = ctk.StringVar(value=month_names[0] if month_names else "")
@@ -470,26 +497,28 @@ class _MovementDialog(ctk.CTkToplevel):
             fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
             button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
             dropdown_text_color=T.TEXT,
-        ).grid(row=1, column=0, padx=(0, 6), sticky="ew")
+        ).grid(row=1, column=0, sticky="ew")
 
         self._amount_var = ctk.StringVar()
         ctk.CTkLabel(fields, text="Valor (R$)", font=F(11),
                      text_color=T.MUTED, anchor="w").grid(
-            row=0, column=1, sticky="w", pady=(0, 2))
-        ctk.CTkEntry(
+            row=2, column=0, sticky="w", pady=(10, 2))
+        amount_entry = ctk.CTkEntry(
             fields, placeholder_text="0,00",
             textvariable=self._amount_var,
             fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
-        ).grid(row=1, column=1, padx=(6, 0), sticky="ew")
+        )
+        amount_entry.grid(row=3, column=0, sticky="ew")
+        amount_entry.focus()
 
         self._note_var = ctk.StringVar()
         ctk.CTkLabel(fields, text="Nota (opcional)", font=F(11),
                      text_color=T.MUTED, anchor="w").grid(
-            row=2, column=0, columnspan=2, sticky="w", pady=(10, 2))
+            row=4, column=0, sticky="w", pady=(10, 2))
         ctk.CTkEntry(
             fields, textvariable=self._note_var,
             fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
-        ).grid(row=3, column=0, columnspan=2, sticky="ew")
+        ).grid(row=5, column=0, sticky="ew")
 
         self._error_lbl = ctk.CTkLabel(
             self, text="", font=F(11), text_color=T.RED)

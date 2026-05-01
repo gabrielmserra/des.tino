@@ -444,6 +444,14 @@ def archive_investment(investment_id: int) -> None:
     }).eq("id", investment_id).execute()
 
 
+def delete_investment(investment_id: int) -> None:
+    """Exclui permanentemente o investimento e todas as suas movimentações."""
+    client = get_client()
+    client.table("investment_movements").delete().eq("investment_id", investment_id).execute()
+    client.table("investments").delete().eq("id", investment_id).execute()
+    _inv_net_cache.clear()
+
+
 def get_all_investment_movements() -> List[dict]:
     """Retorna todas as movimentações do usuário (para cálculo de saldos em lote)."""
     client  = get_client()
