@@ -61,11 +61,11 @@ class Sidebar(ctk.CTkFrame):
 
         # ── Navegação: Investimentos ───────────────────────────────────
         self._inv_btn = ctk.CTkButton(
-            self, text="📈  Investimentos",
+            self, text="  📈  Investimentos",
             command=self.on_investments,
-            height=34, corner_radius=0, anchor="w",
+            height=36, corner_radius=8, anchor="w",
             fg_color="transparent", hover_color=T.CARD2,
-            text_color=T.MUTED, font=F(12),
+            text_color=T.TEXT, font=F(12),
         )
         self._inv_btn.grid(row=2, column=0, sticky="ew", padx=12, pady=(8, 4))
 
@@ -223,5 +223,5 @@ class Sidebar(ctk.CTkFrame):
                 )
             else:
                 self._inv_btn.configure(
-                    fg_color="transparent", text_color=T.MUTED, border_width=0,
+                    fg_color="transparent", text_color=T.TEXT, border_width=0,
                 )

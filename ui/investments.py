@@ -230,8 +230,15 @@ class InvestmentsTab(ctk.CTkScrollableFrame):
                      font=F(18, "bold"), text_color=bal_color).grid(
             row=0, column=1, sticky="e")
 
+        initial_mov = next((m for m in movements if m["movement_type"] == "aporte_inicial"), None)
+        period_name = ""
+        if initial_mov:
+            m = next((m for m in months if m["id"] == initial_mov["month_id"]), None)
+            if m:
+                period_name = f"  ·  {m['name']}"
+
         created = str(inv.get("created_at") or "")[:10]
-        ctk.CTkLabel(top, text=f"Criado em {created}",
+        ctk.CTkLabel(top, text=f"Criado em {created}{period_name}",
                      font=F(11), text_color=T.MUTED, anchor="w").grid(
             row=1, column=0, sticky="w")
         n_mov = len(movements)
@@ -470,7 +477,7 @@ class _MovementDialog(ctk.CTkToplevel):
         self._on_success     = on_success
         apply_app_icon(self)
         self._build(inv_name, movement_type)
-        _center_dialog(self, parent, 400, 320)
+        _center_dialog(self, parent, 400, 380)
         self.lift()
         self.focus()
 
