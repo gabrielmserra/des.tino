@@ -26,11 +26,12 @@ class TransactionsTab(ctk.CTkFrame):
         self._is_var_expense = tx_type == "saida_variavel"
 
         self._editing_id: Optional[int] = None
-        self._card_id_map: dict = {}   # card name → card id
-        self._card_info:   dict = {}   # card id   → {name, color}
-        self._row_widgets: dict = {}   # tx_id     → {frame, labels, separator, tx}
-        self._empty_lbl          = None
-        self._initialized        = False
+        self._card_id_map:     dict = {}   # card name → card id
+        self._card_info:       dict = {}   # card id   → {name, color}
+        self._row_widgets:     dict = {}   # tx_id     → {frame, labels, separator, tx}
+        self._empty_lbl            = None
+        self._initialized          = False
+        self._expectation_active   = False
 
         if tx_type in ("entrada_fixa", "entrada_variavel"):
             self._style = {"color": T.GREEN, "dim": T.GREEN_DIM}
@@ -87,8 +88,18 @@ class TransactionsTab(ctk.CTkFrame):
         self._form_title = ctk.CTkLabel(
             form, text="Novo Lançamento",
             font=F(13, "bold"), text_color=T.TEXT, anchor="w")
-        self._form_title.grid(row=0, column=0, columnspan=4,
+        self._form_title.grid(row=0, column=0, columnspan=3,
                               padx=18, pady=(8, 5), sticky="w")
+
+        self._expect_btn = ctk.CTkButton(
+            form, text="📋 Previsto",
+            command=self._toggle_expectation,
+            height=28, corner_radius=7,
+            fg_color=T.CARD2, hover_color=T.BORDER_L,
+            border_width=1, border_color=T.BORDER_L,
+            text_color=T.MUTED, font=F(11),
+        )
+        self._expect_btn.grid(row=0, column=3, padx=(6, 18), pady=(8, 5), sticky="e")
 
         # Labels row
         ctk.CTkLabel(form, text="DESCRIÇÃO", font=F(11, "bold"),
@@ -178,6 +189,24 @@ class TransactionsTab(ctk.CTkFrame):
                               padx=18, pady=(6, 12), sticky="w")
 
     # ------------------------------------------------------------------
+    def _set_expectation(self, active: bool) -> None:
+        if active == self._expectation_active:
+            return
+        self._expectation_active = active
+        if active:
+            self._expect_btn.configure(
+                fg_color=T.GOLD_DIM, text_color=T.GOLD, border_color=T.GOLD)
+            self._form_title.configure(text="Lançamento Previsto")
+        else:
+            self._expect_btn.configure(
+                fg_color=T.CARD2, text_color=T.MUTED, border_color=T.BORDER_L)
+            self._form_title.configure(
+                text="✏  Editando lançamento" if self._editing_id else "Novo Lançamento")
+
+    def _toggle_expectation(self) -> None:
+        self._set_expectation(not self._expectation_active)
+
+    # ------------------------------------------------------------------
     def _build_table(self, row: int = 1) -> None:
         wrapper = ctk.CTkFrame(self, fg_color="transparent")
         wrapper.grid(row=row, column=0, sticky="nsew", padx=28, pady=(14, 24))
@@ -227,6 +256,9 @@ class TransactionsTab(ctk.CTkFrame):
             footer, text="R$ 0,00",
             font=F(14, "bold"), text_color=self._style["color"])
         self._total_lbl.pack(side="right", padx=16, pady=10)
+        self._proj_total_lbl = ctk.CTkLabel(
+            footer, text="", font=F(11), text_color=T.GOLD)
+        # Packed/unpacked in refresh() when expectations exist
 
     # ------------------------------------------------------------------
     def _submit(self) -> None:
@@ -255,11 +287,13 @@ class TransactionsTab(ctk.CTkFrame):
 
         if self._editing_id is not None:
             db.update_transaction(
-                self._editing_id, self.month_id, desc, amount, category, card_id=card_id)
+                self._editing_id, self.month_id, desc, amount, category,
+                card_id=card_id, is_expectation=self._expectation_active)
             self._cancel_edit()
         else:
             db.add_transaction(
-                self.month_id, self.tx_type, desc, amount, category, card_id=card_id)
+                self.month_id, self.tx_type, desc, amount, category,
+                card_id=card_id, is_expectation=self._expectation_active)
             self._desc.delete(0, "end")
             self._amount.delete(0, "end")
             self._desc.focus()
@@ -277,6 +311,7 @@ class TransactionsTab(ctk.CTkFrame):
     # ------------------------------------------------------------------
     def _start_edit(self, tx: dict) -> None:
         self._editing_id = tx["id"]
+        self._set_expectation(bool(tx.get("is_expectation")))
         self._desc.delete(0, "end")
         self._desc.insert(0, tx["description"])
         self._amount.delete(0, "end")
@@ -294,6 +329,7 @@ class TransactionsTab(ctk.CTkFrame):
 
     def _cancel_edit(self) -> None:
         self._editing_id = None
+        self._set_expectation(False)
         self._desc.delete(0, "end")
         self._amount.delete(0, "end")
         if self.is_expense:
@@ -309,7 +345,6 @@ class TransactionsTab(ctk.CTkFrame):
         txs   = db.get_transactions(self.month_id, self.tx_type)
         color = self._style["color"]
         dim   = self._style["dim"]
-        total = 0.0
         n     = len(txs)
 
         # Remove widgets de transações que foram deletadas
@@ -319,7 +354,21 @@ class TransactionsTab(ctk.CTkFrame):
                 self._row_widgets[tx_id]["frame"].destroy()
                 del self._row_widgets[tx_id]
 
-        self._count_lbl.configure(text=f"{n} {'registro' if n == 1 else 'registros'}")
+        # Remove rows onde is_expectation mudou — precisam ser recriadas
+        for tx in txs:
+            if tx["id"] in self._row_widgets:
+                w = self._row_widgets[tx["id"]]
+                if bool(tx.get("is_expectation")) != w.get("is_expectation", False):
+                    w["frame"].destroy()
+                    del self._row_widgets[tx["id"]]
+
+        real_n = sum(1 for tx in txs if not tx.get("is_expectation"))
+        exp_n  = n - real_n
+        if exp_n > 0:
+            self._count_lbl.configure(
+                text=f"{real_n} {'registro' if real_n == 1 else 'registros'}  +  {exp_n} previsto(s)")
+        else:
+            self._count_lbl.configure(text=f"{n} {'registro' if n == 1 else 'registros'}")
 
         if not txs:
             if self._empty_lbl is None:
@@ -330,6 +379,7 @@ class TransactionsTab(ctk.CTkFrame):
                 )
                 self._empty_lbl.pack(pady=40)
             self._total_lbl.configure(text=format_currency(0.0))
+            self._proj_total_lbl.pack_forget()
             self._initialized = True
             return
 
@@ -347,19 +397,23 @@ class TransactionsTab(ctk.CTkFrame):
         for w in self._row_widgets.values():
             w["frame"].pack_forget()
 
+        real_total = 0.0
+        proj_total = 0.0
         for i, tx in enumerate(txs):
             w      = self._row_widgets[tx["id"]]
+            is_exp = bool(tx.get("is_expectation"))
             row_bg = T.CARD if i % 2 == 0 else T.CARD2
 
-            w["tx"] = tx  # mantém dados frescos para o botão de edição
+            text_col = T.SUBTLE if is_exp else T.TEXT
+            amt_col  = T.SUBTLE if is_exp else color
+
+            w["tx"] = tx
             w["frame"].configure(bg=row_bg)
             w["desc_cell"].configure(bg=row_bg)
             w["actions"].configure(bg=row_bg)
-            w["desc_lbl"].configure(fg_color=row_bg)
-            w["amount_lbl"].configure(fg_color=row_bg)
-            w["desc_lbl"].configure(text=tx["description"])
-            w["cat_lbl"].configure(text=f" {tx['category'] or 'Outros'} ")
-            w["amount_lbl"].configure(text=format_currency(tx["amount"]))
+            w["desc_lbl"].configure(fg_color=row_bg, text=tx["description"], text_color=text_col)
+            w["amount_lbl"].configure(fg_color=row_bg, text=format_currency(tx["amount"]), text_color=amt_col)
+            w["cat_lbl"].configure(text=f" {tx['category'] or 'Outros'} ", text_color=amt_col)
 
             # Badge do cartão (só na aba saida_variavel)
             if self._is_var_expense and w["badge_lbl"] is not None:
@@ -377,9 +431,17 @@ class TransactionsTab(ctk.CTkFrame):
                 w["separator"].grid_remove()
 
             w["frame"].pack(fill="x")
-            total += float(tx["amount"])
+            if is_exp:
+                proj_total += float(tx["amount"])
+            else:
+                real_total += float(tx["amount"])
 
-        self._total_lbl.configure(text=format_currency(total))
+        self._total_lbl.configure(text=format_currency(real_total))
+        if proj_total > 0:
+            self._proj_total_lbl.configure(text=f"  +  {format_currency(proj_total)} previsto")
+            self._proj_total_lbl.pack(side="right", padx=(0, 8), pady=10)
+        else:
+            self._proj_total_lbl.pack_forget()
         self._initialized = True
 
     def _make_row(self, tx: dict, color: str, dim: str) -> dict:
@@ -388,6 +450,10 @@ class TransactionsTab(ctk.CTkFrame):
         Usa tk.Frame em vez de CTkFrame para eliminar o Canvas interno por linha
         que causa o flickering visual durante o scroll do CTkScrollableFrame.
         """
+        is_exp    = bool(tx.get("is_expectation"))
+        text_col  = T.SUBTLE if is_exp else T.TEXT
+        amt_col   = T.SUBTLE if is_exp else color
+
         row       = tk.Frame(self._list, bg=T.CARD, bd=0, highlightthickness=0)
         separator = tk.Frame(row, height=1, bg=T.BORDER, bd=0, highlightthickness=0)
 
@@ -401,9 +467,19 @@ class TransactionsTab(ctk.CTkFrame):
         # fg_color explícito (não "transparent") para não depender da detecção de pai tk.Frame
         desc_lbl = ctk.CTkLabel(
             desc_cell, text=tx["description"],
-            font=F(17, "bold"), text_color=T.TEXT, anchor="w", fg_color=T.CARD,
+            font=F(17, "bold"), text_color=text_col, anchor="w", fg_color=T.CARD,
         )
         desc_lbl.pack(anchor="w")
+
+        # Badge "Previsto" — só para transações previstas
+        exp_badge = None
+        if is_exp:
+            exp_badge = ctk.CTkLabel(
+                desc_cell, text=" Previsto ",
+                font=F(10, "bold"), text_color=T.GOLD,
+                fg_color=T.GOLD_DIM, corner_radius=4,
+            )
+            exp_badge.pack(anchor="w", pady=(2, 0))
 
         badge_lbl = None
         if self._is_var_expense:
@@ -415,18 +491,26 @@ class TransactionsTab(ctk.CTkFrame):
 
         cat_lbl = ctk.CTkLabel(
             row, text=f" {tx['category'] or 'Outros'} ",
-            font=F(13, "bold"), text_color=color, fg_color=dim, corner_radius=6,
+            font=F(13, "bold"), text_color=amt_col, fg_color=dim, corner_radius=6,
         )
         cat_lbl.grid(row=0, column=1, padx=10, pady=20, sticky="w")
 
         amount_lbl = ctk.CTkLabel(
             row, text=format_currency(tx["amount"]),
-            font=F(18, "bold"), text_color=color, anchor="w", fg_color=T.CARD,
+            font=F(18, "bold"), text_color=amt_col, anchor="w", fg_color=T.CARD,
         )
         amount_lbl.grid(row=0, column=2, padx=10, pady=20, sticky="w")
 
         actions = tk.Frame(row, bg=T.CARD, bd=0, highlightthickness=0)
         actions.grid(row=0, column=3, padx=(0, 12), pady=8)
+
+        if is_exp:
+            ctk.CTkButton(
+                actions, text="✓", width=28, height=28,
+                command=lambda tid=tx["id"]: self._open_confirm_dialog(self._row_widgets[tid]["tx"]),
+                fg_color=T.GOLD_DIM, text_color=T.GOLD,
+                hover_color=T.GOLD, corner_radius=6, font=F(13, "bold"),
+            ).pack(side="left", padx=(0, 2))
 
         ctk.CTkButton(
             actions, text="✏", width=28, height=28,
@@ -443,15 +527,17 @@ class TransactionsTab(ctk.CTkFrame):
         ).pack(side="left")
 
         return {
-            "frame":      row,
-            "separator":  separator,
-            "desc_cell":  desc_cell,
-            "actions":    actions,
-            "desc_lbl":   desc_lbl,
-            "cat_lbl":    cat_lbl,
-            "amount_lbl": amount_lbl,
-            "badge_lbl":  badge_lbl,
-            "tx":         tx,
+            "frame":          row,
+            "separator":      separator,
+            "desc_cell":      desc_cell,
+            "actions":        actions,
+            "desc_lbl":       desc_lbl,
+            "cat_lbl":        cat_lbl,
+            "amount_lbl":     amount_lbl,
+            "badge_lbl":      badge_lbl,
+            "exp_badge":      exp_badge,
+            "tx":             tx,
+            "is_expectation": is_exp,
         }
 
     # ------------------------------------------------------------------
@@ -461,3 +547,111 @@ class TransactionsTab(ctk.CTkFrame):
         db.delete_transaction(tid, self.month_id)
         self.refresh()
         self.on_change()
+
+    def _open_confirm_dialog(self, tx: dict) -> None:
+        dlg = _ConfirmExpectationDialog(
+            self.winfo_toplevel(), tx["description"], float(tx["amount"]))
+        self.winfo_toplevel().wait_window(dlg)
+        if dlg.confirmed:
+            db.confirm_expectation(tx["id"], self.month_id, dlg.description, dlg.amount)
+            self.refresh()
+            self.on_change()
+
+
+# ──────────────────────────────────────────────────────────────────────
+class _ConfirmExpectationDialog(ctk.CTkToplevel):
+    def __init__(self, parent, description: str, amount: float):
+        super().__init__(parent)
+        self.title("Confirmar lançamento")
+        self.resizable(False, False)
+        self.grab_set()
+        self.configure(fg_color=T.CARD)
+        self.confirmed   = False
+        self.description = description
+        self.amount      = amount
+        self._build(description, amount)
+        self._center(parent)
+        self.lift()
+        self.focus()
+        self.after(100, self._set_icon)
+
+    def _set_icon(self) -> None:
+        try:
+            import sys, os
+            if getattr(sys, "frozen", False):
+                path = os.path.join(sys._MEIPASS, "assets", "app.ico")
+            else:
+                path = os.path.join(os.path.dirname(__file__), "..", "assets", "app.ico")
+            self.iconbitmap(os.path.abspath(path))
+        except Exception:
+            pass
+
+    def _center(self, parent) -> None:
+        self.update_idletasks()
+        px = parent.winfo_x() + (parent.winfo_width()  - 380) // 2
+        py = parent.winfo_y() + (parent.winfo_height() - 280) // 2
+        self.geometry(f"380x280+{px}+{py}")
+
+    def _build(self, description: str, amount: float) -> None:
+        self.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(self, text="Confirmar lançamento previsto",
+                     font=F(14, "bold"), text_color=T.TEXT, anchor="w").grid(
+            row=0, column=0, pady=(24, 8), padx=24, sticky="w")
+
+        ctk.CTkLabel(self, text="DESCRIÇÃO", font=F(11, "bold"),
+                     text_color=T.MUTED, anchor="w").grid(
+            row=1, column=0, padx=24, sticky="w")
+        self._desc_entry = ctk.CTkEntry(
+            self, width=332,
+            fg_color=T.CARD2, border_color=T.BORDER_L,
+            text_color=T.TEXT, corner_radius=8,
+        )
+        self._desc_entry.insert(0, description)
+        self._desc_entry.grid(row=2, column=0, padx=24, pady=(4, 0))
+        self._desc_entry.bind("<Return>", lambda _: self._amount_entry.focus())
+
+        ctk.CTkLabel(self, text="VALOR (R$)", font=F(11, "bold"),
+                     text_color=T.MUTED, anchor="w").grid(
+            row=3, column=0, padx=24, pady=(10, 0), sticky="w")
+        self._amount_entry = ctk.CTkEntry(
+            self, width=332, placeholder_text="0,00",
+            fg_color=T.CARD2, border_color=T.BORDER_L,
+            text_color=T.TEXT, corner_radius=8,
+        )
+        amt_str = f"{amount:.2f}".replace(".", ",")
+        self._amount_entry.insert(0, amt_str)
+        self._amount_entry.grid(row=4, column=0, padx=24, pady=(4, 0))
+        self._amount_entry.bind("<Return>", lambda _: self._confirm())
+
+        self._err = ctk.CTkLabel(self, text="", font=F(11), text_color=T.RED)
+        self._err.grid(row=5, column=0, pady=(6, 0))
+
+        btns = ctk.CTkFrame(self, fg_color="transparent")
+        btns.grid(row=6, column=0, pady=12)
+
+        ctk.CTkButton(btns, text="Cancelar", width=100,
+                      fg_color=T.CARD2, hover_color=T.BORDER_L,
+                      border_width=1, border_color=T.BORDER_L,
+                      text_color=T.MUTED, command=self.destroy).pack(side="left", padx=6)
+        ctk.CTkButton(btns, text="✓ Confirmar", width=120,
+                      fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
+                      text_color="#ffffff", command=self._confirm).pack(side="left", padx=6)
+
+    def _confirm(self) -> None:
+        desc = self._desc_entry.get().strip()
+        raw  = self._amount_entry.get().strip().replace(",", ".")
+        if not desc:
+            self._err.configure(text="Preencha a descrição.")
+            return
+        try:
+            val = float(raw)
+            if val <= 0:
+                raise ValueError
+        except ValueError:
+            self._err.configure(text="Digite um valor positivo.")
+            return
+        self.description = desc
+        self.amount      = val
+        self.confirmed   = True
+        self.destroy()

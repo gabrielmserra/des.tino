@@ -97,16 +97,18 @@ def add_transaction(
     amount: float,
     category: str = "Outros",
     card_id: Optional[int] = None,
+    is_expectation: bool = False,
 ) -> None:
     client  = get_client()
     user_id = client.auth.get_user().user.id
     row = {
-        "month_id":    month_id,
-        "user_id":     user_id,
-        "type":        tx_type,
-        "description": description,
-        "amount":      amount,
-        "category":    category,
+        "month_id":       month_id,
+        "user_id":        user_id,
+        "type":           tx_type,
+        "description":    description,
+        "amount":         amount,
+        "category":       category,
+        "is_expectation": is_expectation,
     }
     if card_id is not None:
         row["card_id"] = card_id
@@ -121,18 +123,33 @@ def update_transaction(
     amount: float,
     category: str,
     card_id: Optional[int] = None,
+    is_expectation: Optional[bool] = None,
 ) -> None:
-    get_client().table("transactions").update({
+    update = {
         "description": description,
         "amount":      amount,
         "category":    category,
         "card_id":     card_id,
-    }).eq("id", transaction_id).execute()
+    }
+    if is_expectation is not None:
+        update["is_expectation"] = is_expectation
+    get_client().table("transactions").update(update).eq("id", transaction_id).execute()
     _invalidate(month_id)
 
 
 def delete_transaction(transaction_id: int, month_id: int) -> None:
     get_client().table("transactions").delete().eq("id", transaction_id).execute()
+    _invalidate(month_id)
+
+
+def confirm_expectation(transaction_id: int, month_id: int,
+                        description: str, amount: float) -> None:
+    """Confirma uma transação prevista: atualiza valor/descrição e marca como real."""
+    get_client().table("transactions").update({
+        "is_expectation": False,
+        "description":    description,
+        "amount":         amount,
+    }).eq("id", transaction_id).execute()
     _invalidate(month_id)
 
 
@@ -157,28 +174,44 @@ def get_total_investments() -> float:
 def get_month_summary(month_id: int) -> Dict[str, float]:
     rows = get_transactions(month_id)
 
-    summary: Dict[str, float] = {
-        "entrada_fixa":     0.0,
-        "entrada_variavel": 0.0,
-        "saida_fixa":       0.0,
-        "saida_variavel":   0.0,
+    real: Dict[str, float] = {
+        "entrada_fixa": 0.0, "entrada_variavel": 0.0,
+        "saida_fixa":   0.0, "saida_variavel":   0.0,
     }
+    proj_extra: Dict[str, float] = {
+        "entrada_fixa": 0.0, "entrada_variavel": 0.0,
+        "saida_fixa":   0.0, "saida_variavel":   0.0,
+    }
+    n_expectations = 0
     for row in rows:
-        t = row["type"]
-        if t in summary:
-            summary[t] += float(row["amount"] or 0)
+        t   = row["type"]
+        amt = float(row["amount"] or 0)
+        if t not in real:
+            continue
+        if row.get("is_expectation"):
+            proj_extra[t] += amt
+            n_expectations += 1
+        else:
+            real[t] += amt
 
-    total_entradas      = summary["entrada_fixa"] + summary["entrada_variavel"]
-    total_saidas        = summary["saida_fixa"]   + summary["saida_variavel"]
+    total_entradas      = real["entrada_fixa"] + real["entrada_variavel"]
+    total_saidas        = real["saida_fixa"]   + real["saida_variavel"]
     total_investimentos = get_month_investment_net(month_id)
     saldo = total_entradas - total_saidas - total_investimentos
 
+    proj_entradas   = total_entradas + proj_extra["entrada_fixa"] + proj_extra["entrada_variavel"]
+    proj_saidas     = total_saidas   + proj_extra["saida_fixa"]   + proj_extra["saida_variavel"]
+    saldo_projetado = proj_entradas - proj_saidas - total_investimentos
+
     return {
-        **summary,
+        **real,
         "total_entradas":      total_entradas,
         "total_saidas":        total_saidas,
         "total_investimentos": total_investimentos,
         "saldo":               saldo,
+        "saldo_projetado":     saldo_projetado,
+        "n_expectations":      float(n_expectations),
+        "has_expectations":    n_expectations > 0,
     }
 
 
@@ -195,7 +228,7 @@ def copy_transactions_to_month(from_month_id: int, to_month_id: int) -> int:
     rows    = get_transactions(from_month_id)
     to_copy = []
     for r in rows:
-        if r["type"] == "saida_variavel" and r.get("card_id"):
+        if r["type"] == "saida_variavel" and r.get("card_id") and not r.get("is_expectation"):
             # Só copia se foi adicionado APÓS o fechamento (pertence ao próximo ciclo)
             card_id  = r["card_id"]
             closing  = card_closing.get(card_id, 1)
@@ -228,7 +261,7 @@ def get_expenses_by_category(month_id: int) -> List[dict]:
     rows   = get_transactions(month_id)
     totals: Dict[str, float] = {}
     for row in rows:
-        if row["type"] in ("saida_fixa", "saida_variavel"):
+        if row["type"] in ("saida_fixa", "saida_variavel") and not row.get("is_expectation"):
             cat = row["category"] or "Outros"
             totals[cat] = totals.get(cat, 0.0) + float(row["amount"] or 0)
     result = [{"category": c, "total": t} for c, t in totals.items()]
@@ -473,12 +506,13 @@ def export_month_csv(month_id: int) -> str:
         "investimento":     "Investimento",
     }
     rows  = get_transactions(month_id)
-    lines = ["Tipo,Descrição,Categoria,Valor,Data"]
+    lines = ["Tipo,Descrição,Categoria,Valor,Data,Previsto"]
     for r in rows:
         tipo  = _LABELS.get(r["type"], r["type"])
         desc  = str(r["description"]).replace(",", ";")
         cat   = str(r["category"] or "Outros").replace(",", ";")
         valor = f"{float(r['amount']):.2f}".replace(".", ",")
         data  = str(r["created_at"] or "")[:10]
-        lines.append(f"{tipo},{desc},{cat},{valor},{data}")
+        prev  = "Sim" if r.get("is_expectation") else "Não"
+        lines.append(f"{tipo},{desc},{cat},{valor},{data},{prev}")
     return "\n".join(lines)

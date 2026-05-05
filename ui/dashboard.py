@@ -33,9 +33,13 @@ class Dashboard(ctk.CTkScrollableFrame):
             ("saldo",               "SALDO",                T.BLUE),
         ]
 
-        # ── KPI cards ─────────────────────────────────────────────────
-        kpi_row = ctk.CTkFrame(self, fg_color="transparent")
-        kpi_row.grid(row=0, column=0, sticky="ew", padx=28, pady=(24, 0))
+        # ── KPI section (cards + barra de saldo projetado) ────────────
+        kpi_section = ctk.CTkFrame(self, fg_color="transparent")
+        kpi_section.grid(row=0, column=0, sticky="ew", padx=28, pady=(24, 0))
+        kpi_section.grid_columnconfigure(0, weight=1)
+
+        kpi_row = ctk.CTkFrame(kpi_section, fg_color="transparent")
+        kpi_row.grid(row=0, column=0, sticky="ew")
         for col in range(5):
             kpi_row.grid_columnconfigure(col, weight=1)
 
@@ -47,10 +51,18 @@ class Dashboard(ctk.CTkScrollableFrame):
             if key in _inv_keys and self._on_investments:
                 self._bind_click(card, self._on_investments)
 
+        self._proj_bar = ctk.CTkFrame(kpi_section, fg_color=T.CARD, corner_radius=10,
+                                      border_width=1, border_color=T.BORDER)
+        self._proj_lbl = ctk.CTkLabel(
+            self._proj_bar, text="",
+            font=F(12), text_color=T.GOLD, anchor="w",
+        )
+        self._proj_lbl.pack(side="left", padx=16, pady=10)
+
         # ── Guru Financeiro ───────────────────────────────────────────
         tips_card = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14,
                                  border_width=1, border_color=T.BORDER)
-        tips_card.grid(row=2, column=0, sticky="ew", padx=28, pady=(16, 0))
+        tips_card.grid(row=1, column=0, sticky="ew", padx=28, pady=(16, 0))
         tips_card.grid_columnconfigure(0, weight=1)
 
         header_row = ctk.CTkFrame(tips_card, fg_color="transparent")
@@ -118,7 +130,7 @@ class Dashboard(ctk.CTkScrollableFrame):
         # ── Situação dos Cartões ──────────────────────────────────────
         credit_outer = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14,
                                     border_width=1, border_color=T.BORDER)
-        credit_outer.grid(row=1, column=0, sticky="ew", padx=28, pady=(16, 0))
+        credit_outer.grid(row=2, column=0, sticky="ew", padx=28, pady=(16, 0))
         credit_outer.grid_columnconfigure(0, weight=1)
 
         credit_hdr = ctk.CTkFrame(credit_outer, fg_color="transparent")
@@ -196,6 +208,20 @@ class Dashboard(ctk.CTkScrollableFrame):
 
         self._draw_savings(s)
         self._draw_tips(s)
+
+        # Barra de saldo projetado (Modo Expectativa)
+        if s.get("has_expectations"):
+            n    = int(s.get("n_expectations", 0))
+            proj = s.get("saldo_projetado", 0.0)
+            proj_color = T.GREEN if proj >= 0 else T.RED
+            label_n = f"{n} lançamento{'s' if n != 1 else ''} previsto{'s' if n != 1 else ''}"
+            self._proj_lbl.configure(
+                text=f"📋  Saldo projetado com {label_n}: {format_currency(proj)}",
+                text_color=proj_color,
+            )
+            self._proj_bar.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        else:
+            self._proj_bar.grid_remove()
 
         def _background():
             pie_data  = db.get_expenses_by_category(self.month_id)
