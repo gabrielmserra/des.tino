@@ -5,7 +5,7 @@ from typing import Optional, Callable
 import database as db
 import ui.theme as T
 from ui.theme import F
-from utils.helpers import format_currency
+from utils.helpers import format_currency, apply_app_icon
 
 
 class Dashboard(ctk.CTkScrollableFrame):
@@ -74,8 +74,19 @@ class Dashboard(ctk.CTkScrollableFrame):
                      font=F(11), text_color=T.MUTED, anchor="w").pack(side="left", padx=(8, 0))
 
         self._tips_frame = ctk.CTkFrame(tips_card, fg_color="transparent")
-        self._tips_frame.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 14))
+        self._tips_frame.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 8))
         self._tips_frame.grid_columnconfigure((0, 1, 2), weight=1)
+
+        guru_row = ctk.CTkFrame(tips_card, fg_color="transparent")
+        guru_row.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 14))
+        ctk.CTkButton(
+            guru_row, text="💬 Perguntar ao Guru",
+            command=self._open_guru_chat,
+            height=30, corner_radius=15,
+            fg_color=T.GREEN_DIM, hover_color=T.GREEN,
+            text_color=T.GREEN, border_width=1, border_color=T.GREEN,
+            font=F(11, "bold"),
+        ).pack(side="left")
 
         # ── Charts ────────────────────────────────────────────────────
         charts = ctk.CTkFrame(self, fg_color="transparent")
@@ -197,6 +208,7 @@ class Dashboard(ctk.CTkScrollableFrame):
     def refresh(self) -> None:
         import threading
         s = db.get_month_summary(self.month_id)
+        self._last_summary = s
 
         for key, (lbl, default_color) in self._card_lbls.items():
             if key == "investimentos_total":
@@ -405,6 +417,10 @@ class Dashboard(ctk.CTkScrollableFrame):
                 x=0, y=0, relheight=1, relwidth=pct)
 
     # ------------------------------------------------------------------
+    def _open_guru_chat(self) -> None:
+        _GuruChatDialog(self.winfo_toplevel(), getattr(self, "_last_summary", {}))
+
+    # ------------------------------------------------------------------
     def _draw_tips(self, s: dict) -> None:
         for w in self._tips_frame.winfo_children():
             w.destroy()
@@ -602,3 +618,134 @@ def _build_tips(s: dict) -> list:
             "(ideal: 6 meses de despesas guardados).", T.GOLD, gold_dim))
 
     return tips[:3]
+
+
+# ──────────────────────────────────────────────────────────────────────
+def _center_dlg(dialog: ctk.CTkToplevel, parent, w: int, h: int) -> None:
+    dialog.update_idletasks()
+    px = parent.winfo_x() + (parent.winfo_width()  - w) // 2
+    py = parent.winfo_y() + (parent.winfo_height() - h) // 2
+    dialog.geometry(f"{w}x{h}+{px}+{py}")
+
+
+class _GuruChatDialog(ctk.CTkToplevel):
+    _QUICK = [
+        "Como diversificar minha carteira?",
+        "Estou poupando o suficiente?",
+        "Explique Tesouro Direto IPCA+",
+    ]
+
+    def __init__(self, parent, summary: dict):
+        super().__init__(parent)
+        self.title("Guru Financeiro")
+        self.resizable(True, True)
+        self.minsize(580, 400)
+        self.grab_set()
+        self.configure(fg_color=T.CARD)
+        self._summary  = summary
+        self._sending  = False
+        apply_app_icon(self)
+        self._build()
+        _center_dlg(self, parent, 700, 540)
+        self.lift()
+        self.focus()
+
+    def _build(self) -> None:
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+
+        # ── Cabeçalho ─────────────────────────────────────────────────
+        hdr = ctk.CTkFrame(self, fg_color="transparent")
+        hdr.grid(row=0, column=0, sticky="ew", padx=24, pady=(20, 0))
+        ctk.CTkLabel(hdr, text="🧠 Guru Financeiro",
+                     font=F(14, "bold"), text_color=T.GREEN).pack(side="left")
+        ctk.CTkLabel(hdr, text="  powered by Claude",
+                     font=F(11), text_color=T.MUTED).pack(side="left")
+
+        # ── Área de resposta ───────────────────────────────────────────
+        self._textbox = ctk.CTkTextbox(
+            self, fg_color=T.CARD2, border_color=T.BORDER, border_width=1,
+            text_color=T.TEXT, font=F(12), corner_radius=10, wrap="word",
+        )
+        self._textbox.grid(row=1, column=0, sticky="nsew", padx=24, pady=(12, 0))
+        self._textbox.configure(state="disabled")
+        self._append("Olá! Faça uma pergunta sobre suas finanças ou escolha uma sugestão abaixo.\n\n")
+
+        # ── Sugestões rápidas ──────────────────────────────────────────
+        quick = ctk.CTkFrame(self, fg_color="transparent")
+        quick.grid(row=2, column=0, sticky="ew", padx=24, pady=(10, 0))
+        for q in self._QUICK:
+            ctk.CTkButton(
+                quick, text=q, height=26,
+                fg_color=T.CARD2, hover_color=T.BORDER_L,
+                border_width=1, border_color=T.BORDER_L,
+                text_color=T.MUTED, font=F(10), corner_radius=13,
+                command=lambda _q=q: self._send(_q),
+            ).pack(side="left", padx=(0, 6))
+
+        # ── Input ──────────────────────────────────────────────────────
+        inp = ctk.CTkFrame(self, fg_color="transparent")
+        inp.grid(row=3, column=0, sticky="ew", padx=24, pady=(10, 20))
+        inp.grid_columnconfigure(0, weight=1)
+
+        self._entry = ctk.CTkEntry(
+            inp, placeholder_text="Digite sua pergunta…",
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            corner_radius=8, height=38,
+        )
+        self._entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        self._entry.bind("<Return>", lambda _: self._send())
+        self._entry.focus()
+
+        self._send_btn = ctk.CTkButton(
+            inp, text="Enviar", width=90, height=38,
+            fg_color=T.GREEN, hover_color=T.BLUE_HOVER,
+            text_color="#ffffff", font=F(13, "bold"), corner_radius=8,
+            command=self._send,
+        )
+        self._send_btn.grid(row=0, column=1)
+
+    # ------------------------------------------------------------------
+    def _append(self, text: str) -> None:
+        self._textbox.configure(state="normal")
+        self._textbox.insert("end", text)
+        self._textbox.configure(state="disabled")
+        self._textbox.see("end")
+
+    def _send(self, question: str = "") -> None:
+        if self._sending:
+            return
+        if not question:
+            question = self._entry.get().strip()
+        if not question:
+            return
+
+        self._entry.delete(0, "end")
+        self._sending = True
+        self._send_btn.configure(state="disabled")
+        self._append(f"Você: {question}\n\nGuru: ")
+
+        import threading
+        from utils.ai_guru import call_guru
+
+        threading.Thread(
+            target=call_guru,
+            args=(
+                question,
+                self._summary,
+                lambda t: self.after(0, lambda _t=t: self._append(_t)),
+                lambda: self.after(0, self._on_done),
+                lambda e: self.after(0, lambda _e=e: self._on_error(_e)),
+            ),
+            daemon=True,
+        ).start()
+
+    def _on_done(self) -> None:
+        self._append("\n\n")
+        self._sending = False
+        self._send_btn.configure(state="normal")
+
+    def _on_error(self, msg: str) -> None:
+        self._append(f"\n⚠ {msg}\n\n")
+        self._sending = False
+        self._send_btn.configure(state="normal")
