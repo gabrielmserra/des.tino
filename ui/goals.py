@@ -193,6 +193,15 @@ class GoalsTab(ctk.CTkFrame):
         ).pack(side="left", padx=(0, 8))
 
         ctk.CTkButton(
+            actions, text="✎ Editar",
+            command=lambda g=goal: self._edit_goal(g),
+            height=32, corner_radius=8,
+            fg_color="transparent", hover_color=T.CARD2,
+            border_width=1, border_color=T.BORDER_L,
+            text_color=T.MUTED,
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
             actions, text="Excluir",
             command=lambda gid=goal["id"]: self._delete_goal(gid),
             height=32, corner_radius=8,
@@ -214,6 +223,19 @@ class GoalsTab(ctk.CTkFrame):
             except Exception as e:
                 from ui.dialogs import show_error
                 show_error(self.winfo_toplevel(), "Erro ao aportar", str(e))
+
+    def _edit_goal(self, goal: dict) -> None:
+        dlg = _EditGoalDialog(self.winfo_toplevel(), goal)
+        self.winfo_toplevel().wait_window(dlg)
+        if dlg.result:
+            try:
+                db.update_goal(goal["id"], dlg.result["name"], dlg.result["target_amount"])
+                self.refresh()
+                if self._on_change:
+                    self._on_change()
+            except Exception as e:
+                from ui.dialogs import show_error
+                show_error(self.winfo_toplevel(), "Erro ao editar", str(e))
 
     def _delete_goal(self, goal_id: int) -> None:
         from ui.dialogs import ConfirmDialog, show_error
@@ -311,4 +333,95 @@ class _ContributionDialog(ctk.CTkToplevel):
             self._err.configure(text="Digite um valor positivo.")
             return
         self.amount = val
+        self.destroy()
+
+
+# ──────────────────────────────────────────────────────────────────────
+class _EditGoalDialog(ctk.CTkToplevel):
+    def __init__(self, parent, goal: dict):
+        super().__init__(parent)
+        self.title("Editar Meta")
+        self.resizable(False, False)
+        self.grab_set()
+        self.configure(fg_color=T.CARD)
+        self.result: Optional[dict] = None
+        self._build(goal)
+        self._center(parent)
+        self.lift()
+        self.focus()
+        self.after(100, self._set_icon)
+
+    def _set_icon(self) -> None:
+        try:
+            import sys, os
+            if getattr(sys, "frozen", False):
+                path = os.path.join(sys._MEIPASS, "assets", "app.ico")
+            else:
+                path = os.path.join(os.path.dirname(__file__), "..", "assets", "app.ico")
+            self.iconbitmap(os.path.abspath(path))
+        except Exception:
+            pass
+
+    def _center(self, parent) -> None:
+        self.update_idletasks()
+        px = parent.winfo_x() + (parent.winfo_width()  - 380) // 2
+        py = parent.winfo_y() + (parent.winfo_height() - 270) // 2
+        self.geometry(f"380x270+{px}+{py}")
+
+    def _build(self, goal: dict) -> None:
+        self.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(self, text="Editar Meta",
+                     font=F(14, "bold"), text_color=T.TEXT).grid(
+            row=0, column=0, pady=(22, 4))
+
+        ctk.CTkLabel(self, text="NOME DA META", font=F(11, "bold"),
+                     text_color=T.MUTED).grid(row=1, column=0, padx=28, sticky="w")
+        self._name_entry = ctk.CTkEntry(
+            self, width=320,
+            fg_color=T.CARD2, border_color=T.BORDER_L,
+            text_color=T.TEXT, corner_radius=8,
+        )
+        self._name_entry.grid(row=2, column=0, pady=(2, 0), padx=28)
+        self._name_entry.insert(0, goal.get("name", ""))
+        self._name_entry.bind("<Return>", lambda _: self._target_entry.focus())
+
+        ctk.CTkLabel(self, text="VALOR ALVO (R$)", font=F(11, "bold"),
+                     text_color=T.MUTED).grid(row=3, column=0, padx=28, pady=(10, 0), sticky="w")
+        self._target_entry = ctk.CTkEntry(
+            self, width=320, placeholder_text="0,00",
+            fg_color=T.CARD2, border_color=T.BORDER_L,
+            text_color=T.TEXT, corner_radius=8,
+        )
+        self._target_entry.grid(row=4, column=0, pady=(2, 0), padx=28)
+        self._target_entry.insert(0, str(float(goal.get("target_amount") or 0)).rstrip("0").rstrip("."))
+        self._target_entry.bind("<Return>", lambda _: self._confirm())
+
+        self._err = ctk.CTkLabel(self, text="", font=F(11), text_color=T.RED)
+        self._err.grid(row=5, column=0, pady=(6, 0))
+
+        btns = ctk.CTkFrame(self, fg_color="transparent")
+        btns.grid(row=6, column=0, pady=14)
+        ctk.CTkButton(btns, text="Cancelar", width=110,
+                      fg_color=T.CARD2, hover_color=T.BORDER_L,
+                      border_width=1, border_color=T.BORDER_L,
+                      text_color=T.MUTED, command=self.destroy).pack(side="left", padx=6)
+        ctk.CTkButton(btns, text="Salvar", width=110,
+                      fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
+                      text_color="#ffffff", command=self._confirm).pack(side="left", padx=6)
+
+    def _confirm(self) -> None:
+        name = self._name_entry.get().strip()
+        if not name:
+            self._err.configure(text="Preencha o nome da meta.")
+            return
+        raw = self._target_entry.get().strip().replace(",", ".")
+        try:
+            target = float(raw)
+            if target <= 0:
+                raise ValueError
+        except ValueError:
+            self._err.configure(text="Digite um valor alvo positivo.")
+            return
+        self.result = {"name": name, "target_amount": target}
         self.destroy()

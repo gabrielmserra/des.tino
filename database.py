@@ -297,6 +297,12 @@ def add_goal_contribution(goal_id: int, amount: float) -> None:
         ).eq("id", goal_id).execute()
 
 
+def update_goal(goal_id: int, name: str, target_amount: float) -> None:
+    get_client().table("goals").update({
+        "name": name, "target_amount": target_amount,
+    }).eq("id", goal_id).execute()
+
+
 def delete_goal(goal_id: int) -> None:
     get_client().table("goals").delete().eq("id", goal_id).execute()
 
@@ -467,6 +473,24 @@ def add_movement(
         "note":          note or None,
     }).execute()
     _inv_net_cache.pop(month_id, None)
+
+
+def update_investment(investment_id: int, name: str, category: str) -> None:
+    get_client().table("investments").update({
+        "name": name, "category": category,
+    }).eq("id", investment_id).execute()
+
+
+def update_movement(movement_id: int, amount: float, note: str) -> None:
+    get_client().table("investment_movements").update({
+        "amount": amount, "note": note or None,
+    }).eq("id", movement_id).execute()
+    _inv_net_cache.clear()
+
+
+def delete_movement(movement_id: int) -> None:
+    get_client().table("investment_movements").delete().eq("id", movement_id).execute()
+    _inv_net_cache.clear()
 
 
 def archive_investment(investment_id: int) -> None:
