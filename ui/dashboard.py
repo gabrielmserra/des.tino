@@ -553,100 +553,161 @@ def _credit_safety(pct_used: float, days_due: int, spent: float,
 
 
 def _build_tips(s: dict, goals: list = None, categories: list = None) -> list:
-    entradas = s.get("total_entradas", 0)
+    entradas     = s.get("total_entradas", 0)
     if entradas <= 0:
         return []
 
-    saidas     = s.get("total_saidas", 0)
-    investidos = s.get("total_investimentos", 0)
-    saldo      = s.get("saldo", 0)
-    inv_pct    = investidos / entradas
-    gasto_pct  = saidas / entradas
+    saidas       = s.get("total_saidas", 0)
+    saida_fixa   = s.get("saida_fixa", 0)
+    entrada_var  = s.get("entrada_variavel", 0)
+    investidos   = s.get("total_investimentos", 0)
+    saldo        = s.get("saldo", 0)
+    inv_pct      = investidos / entradas
+    gasto_pct    = saidas     / entradas
+    savings_pct  = max(0, saldo / entradas)
 
     gold_dim  = T.GOLD_DIM
     blue_dim  = T.BLUE_DIM
     green_dim = T.GREEN_DIM
     red_dim   = T.RED_DIM
 
-    # Pools separados por prioridade — alertas, neutros e positivos
     alerts   = []
     neutral  = []
     positive = []
 
-    # ── Alerta de déficit ─────────────────────────────────────────────
+    # ── 1. Déficit / gastos altos ─────────────────────────────────────
     if saldo < 0:
+        corte = format_currency(abs(saldo))
         alerts.append(("!", "Déficit este mês",
-            "Você está gastando mais do que ganha. Revise seus gastos variáveis "
-            "com urgência e corte o que não é essencial.", T.RED, red_dim))
+            f"Você está gastando {corte} a mais do que ganha. Revise os gastos "
+            "variáveis com urgência e corte o que não é essencial.", T.RED, red_dim))
     elif gasto_pct > 0.80:
         alerts.append(("!", "Gastos elevados",
-            f"Suas despesas consomem {gasto_pct*100:.0f}% da sua renda. "
-            "Tente manter abaixo de 70% para ter mais margem de segurança.", T.GOLD, gold_dim))
+            f"Suas despesas consomem {gasto_pct*100:.0f}% da renda "
+            f"({format_currency(saidas)}). Tente manter abaixo de 70% para ter "
+            "mais margem de manobra.", T.GOLD, gold_dim))
 
-    # ── Categoria dominante nos gastos ───────────────────────────────
+    # ── 2. Gastos fixos rígidos ───────────────────────────────────────
+    if saida_fixa > 0 and saida_fixa / entradas > 0.55 and saldo >= 0:
+        alerts.append(("!", "Compromissos fixos elevados",
+            f"Seus gastos fixos representam {saida_fixa/entradas*100:.0f}% da renda "
+            f"({format_currency(saida_fixa)}). Revise assinaturas, parcelas e "
+            "aluguéis — quanto menos fixo, mais flexibilidade.", T.GOLD, gold_dim))
+
+    # ── 3. Duas ou mais categorias pesadas ───────────────────────────
     if categories and saidas > 0:
-        top = categories[0]
-        cat_pct = top["total"] / entradas
-        if cat_pct > 0.30:
+        pesadas = [c for c in categories if c["total"] / entradas > 0.20]
+        if len(pesadas) >= 2:
+            nomes = " e ".join(c["category"] for c in pesadas[:2])
+            alerts.append(("!", "Múltiplas categorias pesadas",
+                f"{nomes} juntas consomem "
+                f"{sum(c['total'] for c in pesadas[:2]) / entradas * 100:.0f}% da renda. "
+                "Concentrar cortes nestas categorias gera mais impacto.", T.GOLD, gold_dim))
+        elif len(pesadas) == 1:
+            top = pesadas[0]
             alerts.append(("!", f"{top['category']} em destaque",
-                f"Gastos com {top['category'].lower()} representam {cat_pct*100:.0f}% "
-                f"da sua renda ({format_currency(top['total'])}). "
+                f"Gastos com {top['category'].lower()} representam "
+                f"{top['total']/entradas*100:.0f}% da renda "
+                f"({format_currency(top['total'])}). "
                 "Veja se há margem para redução.", T.GOLD, gold_dim))
 
-    # ── Investimentos ─────────────────────────────────────────────────
-    if investidos == 0:
-        neutral.append(("$", "Comece a investir",
-            "Você ainda não fez nenhum investimento este mês. Mesmo R$ 50 aplicados "
-            "regularmente fazem grande diferença ao longo dos anos.", T.BLUE, blue_dim))
-    elif inv_pct < 0.10:
-        neutral.append(("$", "Aumente seus investimentos",
-            f"Você está investindo {inv_pct*100:.1f}% da renda. "
-            "Tente chegar a 10% — é o mínimo recomendado.", T.BLUE, blue_dim))
-    elif inv_pct >= 0.20:
-        positive.append(("*", "Ótimo investidor!",
-            f"Parabéns! Você está investindo {inv_pct*100:.1f}% da sua renda. "
-            "Considere diversificar entre renda fixa (CDB, LCI/LCA) e variável (ações, FIIs).",
-            T.GREEN, green_dim))
-    else:
-        neutral.append(("$", "Você está no caminho certo",
-            f"Você investe {inv_pct*100:.1f}% da renda. Tente aumentar para 20% — "
-            "a regra 50/30/20 recomenda 50% necessidades, 30% desejos e 20% poupança.",
-            T.BLUE, blue_dim))
+    # ── 4. Renda majoritariamente variável ────────────────────────────
+    if entrada_var / entradas > 0.55:
+        neutral.append(("i", "Renda predominantemente variável",
+            f"{entrada_var/entradas*100:.0f}% das entradas vêm de fontes variáveis. "
+            "Para rendas irregulares, recomenda-se reserva de emergência de "
+            "9 a 12 meses de despesas — não apenas 6.", T.GOLD, gold_dim))
 
-    # ── Metas de poupança ─────────────────────────────────────────────
+    # ── 5. Investimentos — sugestão com valor concreto ───────────────
+    ideal_10 = entradas * 0.10
+    ideal_20 = entradas * 0.20
+    if investidos == 0:
+        if saldo > 0:
+            sugestao = min(saldo, ideal_10)
+            neutral.append(("$", "Comece a investir",
+                f"Você tem {format_currency(saldo)} de saldo livre. Investir "
+                f"{format_currency(sugestao)} agora (10% da renda) em Tesouro Selic "
+                "ou CDB com liquidez diária já é um ótimo começo.", T.BLUE, blue_dim))
+        else:
+            neutral.append(("$", "Comece a investir",
+                "Nenhum investimento este mês. Mesmo R$ 50 aplicados regularmente "
+                "fazem grande diferença ao longo dos anos.", T.BLUE, blue_dim))
+    elif inv_pct < 0.10:
+        falta = ideal_10 - investidos
+        neutral.append(("$", "Aumente seus investimentos",
+            f"Você está investindo {inv_pct*100:.1f}% da renda. Mais "
+            f"{format_currency(falta)} chegaria ao mínimo recomendado de 10%.",
+            T.BLUE, blue_dim))
+    elif inv_pct < 0.20:
+        falta = ideal_20 - investidos
+        neutral.append(("$", "Você está no caminho certo",
+            f"Investindo {inv_pct*100:.1f}% da renda. Aumentar mais "
+            f"{format_currency(falta)} atingiria os 20% da regra 50/30/20.",
+            T.BLUE, blue_dim))
+    else:
+        positive.append(("*", "Ótimo investidor!",
+            f"Parabéns! {inv_pct*100:.1f}% da renda investida "
+            f"({format_currency(investidos)}). Considere diversificar entre "
+            "renda fixa (CDB, LCI/LCA, Tesouro IPCA+) e variável (ações, FIIs).",
+            T.GREEN, green_dim))
+
+    # ── 6. Análise de metas ───────────────────────────────────────────
     if goals is not None:
         if len(goals) == 0:
             neutral.append(("i", "Defina uma meta de poupança",
                 "Criar uma meta (reserva de emergência, viagem, imóvel) transforma "
-                "o saldo em um objetivo concreto e ajuda a manter o foco.",
+                "o saldo em objetivo concreto e ajuda a manter o foco.",
                 T.BLUE, blue_dim))
         else:
-            for g in goals:
-                target = float(g.get("target_amount") or 1)
-                saved  = float(g.get("saved_amount")  or 0)
-                pct    = saved / target if target > 0 else 0
-                if pct >= 0.80 and pct < 1.0:
-                    falta = target - saved
-                    positive.append(("*", "Meta quase concluída!",
-                        f'"{g["name"]}" está em {pct*100:.0f}%! '
-                        f"Falta apenas {format_currency(falta)} para concluir.",
-                        T.GREEN, green_dim))
-                    break
+            active = [g for g in goals if float(g.get("target_amount") or 0) > 0]
+            done   = [g for g in active
+                      if float(g.get("saved_amount") or 0) >= float(g.get("target_amount") or 1)]
 
-    # ── Saldo disponível para reserva ─────────────────────────────────
+            if active and len(done) == len(active):
+                positive.append(("*", "Todas as metas concluídas!",
+                    f"Parabéns! Todas as suas {len(active)} metas foram atingidas. "
+                    "Hora de definir novos desafios — ou elevar os aportes.",
+                    T.GREEN, green_dim))
+            else:
+                paradas = [g for g in active
+                           if float(g.get("saved_amount") or 0) == 0]
+                if len(paradas) >= 2:
+                    neutral.append(("i", f"{len(paradas)} metas sem nenhum aporte",
+                        f'"{paradas[0]["name"]}" e "{paradas[1]["name"]}" ainda não '
+                        "têm progresso. Pequenos aportes regulares fazem a diferença.",
+                        T.GOLD, gold_dim))
+                else:
+                    for g in active:
+                        target = float(g.get("target_amount") or 1)
+                        saved  = float(g.get("saved_amount")  or 0)
+                        pct    = saved / target if target > 0 else 0
+                        if 0.80 <= pct < 1.0:
+                            positive.append(("*", "Meta quase concluída!",
+                                f'"{g["name"]}" está em {pct*100:.0f}%! '
+                                f"Falta apenas {format_currency(target - saved)}.",
+                                T.GREEN, green_dim))
+                            break
+
+    # ── 7. Saldo disponível para reserva ─────────────────────────────
     if saldo > 0 and inv_pct < 0.15:
         neutral.append(("i", "Saldo disponível",
-            f"Você tem {format_currency(saldo)} de saldo no mês. "
-            "Considere direcionar parte para sua reserva de emergência "
+            f"Você tem {format_currency(saldo)} de saldo livre. "
+            "Considere direcionar para a reserva de emergência "
             "(ideal: 6 meses de despesas em Tesouro Selic ou CDB liquidez diária).",
             T.GOLD, gold_dim))
 
-    # ── Mês equilibrado ───────────────────────────────────────────────
-    if saldo >= 0 and inv_pct >= 0.10 and gasto_pct <= 0.70 and not alerts:
+    # ── 8. Taxa de poupança excelente ─────────────────────────────────
+    if savings_pct >= 0.25 and inv_pct >= 0.15 and not alerts:
+        positive.append(("*", "Taxa de poupança excelente",
+            f"Você está guardando {savings_pct*100:.0f}% da renda e investindo "
+            f"{inv_pct*100:.0f}%. O poder dos juros compostos trabalha a seu favor "
+            "— mantenha a consistência.", T.GREEN, green_dim))
+
+    # ── 9. Mês equilibrado (fallback positivo) ────────────────────────
+    elif saldo >= 0 and inv_pct >= 0.10 and gasto_pct <= 0.70 and not alerts:
         positive.append(("*", "Mês equilibrado",
-            f"Entradas cobertas, {inv_pct*100:.0f}% investido e gastos sob controle. "
-            "Continue assim e revise suas metas periodicamente.",
+            f"Gastos em {gasto_pct*100:.0f}%, {inv_pct*100:.0f}% investido e "
+            f"saldo positivo de {format_currency(saldo)}. Continue assim.",
             T.GREEN, green_dim))
 
-    combined = (alerts + neutral + positive)[:3]
-    return combined
+    return (alerts + neutral + positive)[:3]
