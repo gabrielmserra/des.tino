@@ -277,6 +277,14 @@ class InvestmentsTab(ctk.CTkScrollableFrame):
         hist_btn.pack(side="left", padx=(0, 6))
 
         ctk.CTkButton(
+            actions, text="✎ Editar", width=80,
+            fg_color="transparent", hover_color=T.CARD2,
+            text_color=T.MUTED, border_width=1, border_color=T.BORDER_L,
+            font=F(12), height=30, corner_radius=7,
+            command=lambda i=inv: self._on_edit(i),
+        ).pack(side="left", padx=(0, 6))
+
+        ctk.CTkButton(
             actions, text="Arquivar", width=80,
             fg_color="transparent", hover_color=T.RED,
             text_color=T.SUBTLE, border_width=1, border_color=T.BORDER_L,
@@ -322,7 +330,7 @@ class InvestmentsTab(ctk.CTkScrollableFrame):
                 "aporte":         T.GREEN,
                 "saque":          T.RED,
             }
-            for c, h in enumerate(["Data", "Tipo", "Valor", "Nota"]):
+            for c, h in enumerate(["Data", "Tipo", "Valor", "Nota", ""]):
                 ctk.CTkLabel(frame, text=h, font=F(10, "bold"),
                              text_color=T.MUTED, anchor="w").grid(
                     row=0, column=c,
@@ -331,7 +339,7 @@ class InvestmentsTab(ctk.CTkScrollableFrame):
             if not movements:
                 ctk.CTkLabel(frame, text="Nenhuma movimentação registrada.",
                              font=F(11), text_color=T.MUTED).grid(
-                    row=1, column=0, columnspan=4, padx=16, pady=(0, 8), sticky="w")
+                    row=1, column=0, columnspan=5, padx=16, pady=(0, 8), sticky="w")
             else:
                 for i, mov in enumerate(movements):
                     mtype  = mov["movement_type"]
@@ -355,6 +363,21 @@ class InvestmentsTab(ctk.CTkScrollableFrame):
                     ctk.CTkLabel(frame, text=note, font=F(11),
                                  text_color=T.MUTED, anchor="w").grid(
                         row=i + 1, column=3, padx=8, pady=2, sticky="w")
+
+                    act_cell = ctk.CTkFrame(frame, fg_color="transparent")
+                    act_cell.grid(row=i + 1, column=4, padx=(4, 12), pady=2, sticky="e")
+                    ctk.CTkButton(
+                        act_cell, text="✏", width=26, height=22,
+                        fg_color="transparent", hover_color=T.CARD,
+                        text_color=T.MUTED, font=F(11), corner_radius=4,
+                        command=lambda m=mov: self._on_edit_movement(m),
+                    ).pack(side="left", padx=(0, 2))
+                    ctk.CTkButton(
+                        act_cell, text="✕", width=26, height=22,
+                        fg_color="transparent", hover_color=T.RED,
+                        text_color=T.MUTED, font=F(11), corner_radius=4,
+                        command=lambda m=mov: self._on_delete_movement(m),
+                    ).pack(side="left")
 
         frame.grid(row=3, column=0, sticky="ew", padx=12, pady=(0, 12))
         btn.configure(text="↑ Fechar")
@@ -414,6 +437,45 @@ class InvestmentsTab(ctk.CTkScrollableFrame):
         )
 
     # ------------------------------------------------------------------
+    def _on_edit(self, inv: dict) -> None:
+        def on_success():
+            if self._on_change:
+                self._on_change()
+            self.refresh()
+
+        _EditInvestmentDialog(
+            self.winfo_toplevel(),
+            inv=inv,
+            on_success=on_success,
+        )
+
+    def _on_edit_movement(self, mov: dict) -> None:
+        def on_success():
+            if self._on_change:
+                self._on_change()
+            self.refresh()
+
+        _EditMovementDialog(
+            self.winfo_toplevel(),
+            mov=mov,
+            on_success=on_success,
+        )
+
+    def _on_delete_movement(self, mov: dict) -> None:
+        def do_delete():
+            db.delete_movement(mov["id"])
+            if self._on_change:
+                self._on_change()
+            self.refresh()
+
+        _ConfirmDialog(
+            self.winfo_toplevel(),
+            title="Excluir movimentação?",
+            message="Esta movimentação será removida permanentemente.\nO saldo será recalculado.",
+            confirm_text="Excluir",
+            on_confirm=do_delete,
+        )
+
     def _on_archive(self, inv_id: int, inv_name: str) -> None:
         def do_archive():
             db.archive_investment(inv_id)
@@ -631,3 +693,171 @@ def _center_dialog(dialog: ctk.CTkToplevel, parent, w: int, h: int) -> None:
     px = parent.winfo_x() + (parent.winfo_width()  - w) // 2
     py = parent.winfo_y() + (parent.winfo_height() - h) // 2
     dialog.geometry(f"{w}x{h}+{px}+{py}")
+
+
+class _EditInvestmentDialog(ctk.CTkToplevel):
+    def __init__(self, parent, inv: dict, on_success: Callable):
+        super().__init__(parent)
+        self.title("Editar Investimento")
+        self.resizable(False, False)
+        self.grab_set()
+        self.configure(fg_color=T.CARD)
+        self._inv        = inv
+        self._on_success = on_success
+        apply_app_icon(self)
+        self._build()
+        _center_dialog(self, parent, 400, 270)
+        self.lift()
+        self.focus()
+
+    def _build(self) -> None:
+        self.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(self, text="Editar Investimento",
+                     font=F(14, "bold"), text_color=T.VIOLET).grid(
+            row=0, column=0, pady=(22, 12), padx=28)
+
+        fields = ctk.CTkFrame(self, fg_color="transparent")
+        fields.grid(row=1, column=0, padx=28, sticky="ew")
+        fields.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(fields, text="Nome", font=F(11),
+                     text_color=T.MUTED, anchor="w").grid(
+            row=0, column=0, sticky="w", pady=(0, 2))
+        self._name_var = ctk.StringVar(value=self._inv.get("name", ""))
+        ctk.CTkEntry(
+            fields, textvariable=self._name_var,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+        ).grid(row=1, column=0, sticky="ew")
+
+        ctk.CTkLabel(fields, text="Categoria", font=F(11),
+                     text_color=T.MUTED, anchor="w").grid(
+            row=2, column=0, sticky="w", pady=(10, 2))
+        self._cat_var = ctk.StringVar(value=self._inv.get("category", INVESTMENT_CATEGORIES[0]))
+        ctk.CTkComboBox(
+            fields, values=INVESTMENT_CATEGORIES, variable=self._cat_var,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
+            dropdown_text_color=T.TEXT,
+        ).grid(row=3, column=0, sticky="ew")
+
+        self._error_lbl = ctk.CTkLabel(
+            self, text="", font=F(11), text_color=T.RED)
+        self._error_lbl.grid(row=2, column=0, pady=(6, 0), padx=28, sticky="w")
+
+        btns = ctk.CTkFrame(self, fg_color="transparent")
+        btns.grid(row=3, column=0, pady=14)
+        ctk.CTkButton(
+            btns, text="Cancelar", width=110,
+            fg_color=T.CARD2, hover_color=T.BORDER_L,
+            border_width=1, border_color=T.BORDER_L,
+            text_color=T.MUTED, command=self.destroy,
+        ).pack(side="left", padx=6)
+        ctk.CTkButton(
+            btns, text="Salvar", width=110,
+            fg_color=T.VIOLET, hover_color=T.VIOLET,
+            text_color="#ffffff", font=F(13, "bold"),
+            command=self._confirm,
+        ).pack(side="left", padx=6)
+
+    def _confirm(self) -> None:
+        name = self._name_var.get().strip()
+        if not name:
+            self._error_lbl.configure(text="  Informe o nome.")
+            return
+        try:
+            db.update_investment(self._inv["id"], name, self._cat_var.get())
+        except Exception as e:
+            self._error_lbl.configure(text=f"  Erro: {e}")
+            return
+        self._on_success()
+        self.destroy()
+
+
+class _EditMovementDialog(ctk.CTkToplevel):
+    def __init__(self, parent, mov: dict, on_success: Callable):
+        super().__init__(parent)
+        self.title("Editar Movimentação")
+        self.resizable(False, False)
+        self.grab_set()
+        self.configure(fg_color=T.CARD)
+        self._mov        = mov
+        self._on_success = on_success
+        apply_app_icon(self)
+        self._build()
+        _center_dialog(self, parent, 380, 280)
+        self.lift()
+        self.focus()
+
+    def _build(self) -> None:
+        mtype  = self._mov.get("movement_type", "aporte")
+        color  = T.GREEN if mtype != "saque" else T.RED
+        _LABELS = {"aporte_inicial": "Aporte Inicial", "aporte": "Aporte", "saque": "Saque"}
+        label  = _LABELS.get(mtype, mtype)
+
+        self.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(self, text=f"Editar: {label}",
+                     font=F(14, "bold"), text_color=color).grid(
+            row=0, column=0, pady=(22, 12), padx=28)
+
+        fields = ctk.CTkFrame(self, fg_color="transparent")
+        fields.grid(row=1, column=0, padx=28, sticky="ew")
+        fields.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(fields, text="Valor (R$)", font=F(11),
+                     text_color=T.MUTED, anchor="w").grid(
+            row=0, column=0, sticky="w", pady=(0, 2))
+        raw_amt = str(float(self._mov.get("amount") or 0))
+        self._amount_var = ctk.StringVar(value=raw_amt.rstrip("0").rstrip("."))
+        amount_entry = ctk.CTkEntry(
+            fields, textvariable=self._amount_var,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+        )
+        amount_entry.grid(row=1, column=0, sticky="ew")
+        amount_entry.focus()
+
+        ctk.CTkLabel(fields, text="Nota (opcional)", font=F(11),
+                     text_color=T.MUTED, anchor="w").grid(
+            row=2, column=0, sticky="w", pady=(10, 2))
+        self._note_var = ctk.StringVar(value=self._mov.get("note") or "")
+        ctk.CTkEntry(
+            fields, textvariable=self._note_var,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+        ).grid(row=3, column=0, sticky="ew")
+
+        self._error_lbl = ctk.CTkLabel(
+            self, text="", font=F(11), text_color=T.RED)
+        self._error_lbl.grid(row=2, column=0, pady=(6, 0), padx=28, sticky="w")
+
+        btns = ctk.CTkFrame(self, fg_color="transparent")
+        btns.grid(row=3, column=0, pady=14)
+        ctk.CTkButton(
+            btns, text="Cancelar", width=110,
+            fg_color=T.CARD2, hover_color=T.BORDER_L,
+            border_width=1, border_color=T.BORDER_L,
+            text_color=T.MUTED, command=self.destroy,
+        ).pack(side="left", padx=6)
+        ctk.CTkButton(
+            btns, text="Salvar", width=110,
+            fg_color=color, hover_color=color,
+            text_color="#ffffff", font=F(13, "bold"),
+            command=self._confirm,
+        ).pack(side="left", padx=6)
+
+    def _confirm(self) -> None:
+        amt_s = (self._amount_var.get().strip()
+                 .replace(",", ".").replace("R$", "").strip())
+        try:
+            amount = float(amt_s)
+            if amount <= 0:
+                raise ValueError
+        except ValueError:
+            self._error_lbl.configure(text="  Valor inválido.")
+            return
+        try:
+            db.update_movement(self._mov["id"], amount, self._note_var.get().strip())
+        except Exception as e:
+            self._error_lbl.configure(text=f"  Erro: {e}")
+            return
+        self._on_success()
+        self.destroy()
