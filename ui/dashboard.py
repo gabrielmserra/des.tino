@@ -5,7 +5,7 @@ from typing import Optional, Callable
 import database as db
 import ui.theme as T
 from ui.theme import F
-from utils.helpers import format_currency, apply_app_icon
+from utils.helpers import format_currency
 
 
 class Dashboard(ctk.CTkScrollableFrame):
@@ -74,19 +74,8 @@ class Dashboard(ctk.CTkScrollableFrame):
                      font=F(11), text_color=T.MUTED, anchor="w").pack(side="left", padx=(8, 0))
 
         self._tips_frame = ctk.CTkFrame(tips_card, fg_color="transparent")
-        self._tips_frame.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 8))
+        self._tips_frame.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 14))
         self._tips_frame.grid_columnconfigure((0, 1, 2), weight=1)
-
-        guru_row = ctk.CTkFrame(tips_card, fg_color="transparent")
-        guru_row.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 14))
-        ctk.CTkButton(
-            guru_row, text="💬 Perguntar ao Guru",
-            command=self._open_guru_chat,
-            height=30, corner_radius=15,
-            fg_color=T.GREEN_DIM, hover_color=T.GREEN,
-            text_color=T.GREEN, border_width=1, border_color=T.GREEN,
-            font=F(11, "bold"),
-        ).pack(side="left")
 
         # ── Charts ────────────────────────────────────────────────────
         charts = ctk.CTkFrame(self, fg_color="transparent")
@@ -208,7 +197,6 @@ class Dashboard(ctk.CTkScrollableFrame):
     def refresh(self) -> None:
         import threading
         s = db.get_month_summary(self.month_id)
-        self._last_summary = s
 
         for key, (lbl, default_color) in self._card_lbls.items():
             if key == "investimentos_total":
@@ -256,6 +244,7 @@ class Dashboard(ctk.CTkScrollableFrame):
             self.after(0, lambda: self._draw_goals(goals))
             self.after(0, lambda: self._draw_credit_panel(cards, s))
             self.after(0, lambda t=total_inv: self._update_total_inv(t))
+            self.after(0, lambda g=goals, c=pie_data: self._draw_tips(s, g, c))
 
         threading.Thread(target=_background, daemon=True).start()
 
@@ -417,15 +406,11 @@ class Dashboard(ctk.CTkScrollableFrame):
                 x=0, y=0, relheight=1, relwidth=pct)
 
     # ------------------------------------------------------------------
-    def _open_guru_chat(self) -> None:
-        _GuruChatDialog(self.winfo_toplevel(), getattr(self, "_last_summary", {}))
-
-    # ------------------------------------------------------------------
-    def _draw_tips(self, s: dict) -> None:
+    def _draw_tips(self, s: dict, goals: list = None, categories: list = None) -> None:
         for w in self._tips_frame.winfo_children():
             w.destroy()
 
-        tips = _build_tips(s)
+        tips = _build_tips(s, goals, categories)
         if not tips:
             ctk.CTkLabel(self._tips_frame,
                          text="Adicione lançamentos para receber dicas personalizadas.",
@@ -567,7 +552,7 @@ def _credit_safety(pct_used: float, days_due: int, spent: float,
     return ("Situação tranquila", T.GREEN)
 
 
-def _build_tips(s: dict) -> list:
+def _build_tips(s: dict, goals: list = None, categories: list = None) -> list:
     entradas = s.get("total_entradas", 0)
     if entradas <= 0:
         return []
@@ -577,175 +562,91 @@ def _build_tips(s: dict) -> list:
     saldo      = s.get("saldo", 0)
     inv_pct    = investidos / entradas
     gasto_pct  = saidas / entradas
-    tips = []
 
-    # Evaluated at call time — reads current T.* values
-    gold_dim   = T.GOLD_DIM
-    blue_dim   = T.BLUE_DIM
-    green_dim  = T.GREEN_DIM
-    red_dim    = T.RED_DIM
+    gold_dim  = T.GOLD_DIM
+    blue_dim  = T.BLUE_DIM
+    green_dim = T.GREEN_DIM
+    red_dim   = T.RED_DIM
 
+    # Pools separados por prioridade — alertas, neutros e positivos
+    alerts   = []
+    neutral  = []
+    positive = []
+
+    # ── Alerta de déficit ─────────────────────────────────────────────
     if saldo < 0:
-        tips.append(("!", "Déficit este mês",
+        alerts.append(("!", "Déficit este mês",
             "Você está gastando mais do que ganha. Revise seus gastos variáveis "
             "com urgência e corte o que não é essencial.", T.RED, red_dim))
     elif gasto_pct > 0.80:
-        tips.append(("!", "Gastos elevados",
+        alerts.append(("!", "Gastos elevados",
             f"Suas despesas consomem {gasto_pct*100:.0f}% da sua renda. "
             "Tente manter abaixo de 70% para ter mais margem de segurança.", T.GOLD, gold_dim))
 
+    # ── Categoria dominante nos gastos ───────────────────────────────
+    if categories and saidas > 0:
+        top = categories[0]
+        cat_pct = top["total"] / entradas
+        if cat_pct > 0.30:
+            alerts.append(("!", f"{top['category']} em destaque",
+                f"Gastos com {top['category'].lower()} representam {cat_pct*100:.0f}% "
+                f"da sua renda ({format_currency(top['total'])}). "
+                "Veja se há margem para redução.", T.GOLD, gold_dim))
+
+    # ── Investimentos ─────────────────────────────────────────────────
     if investidos == 0:
-        tips.append(("$", "Comece a investir",
-            "Você ainda não fez nenhum investimento este mês. Mesmo R$50 aplicados "
+        neutral.append(("$", "Comece a investir",
+            "Você ainda não fez nenhum investimento este mês. Mesmo R$ 50 aplicados "
             "regularmente fazem grande diferença ao longo dos anos.", T.BLUE, blue_dim))
     elif inv_pct < 0.10:
-        tips.append(("$", "Aumente seus investimentos",
+        neutral.append(("$", "Aumente seus investimentos",
             f"Você está investindo {inv_pct*100:.1f}% da renda. "
-            "Tente chegar a 10% — é o mínimo recomendado por especialistas.", T.BLUE, blue_dim))
+            "Tente chegar a 10% — é o mínimo recomendado.", T.BLUE, blue_dim))
     elif inv_pct >= 0.20:
-        tips.append(("*", "Ótimo investidor!",
+        positive.append(("*", "Ótimo investidor!",
             f"Parabéns! Você está investindo {inv_pct*100:.1f}% da sua renda. "
-            "Continue assim e considere diversificar entre renda fixa e variável.", T.GREEN, green_dim))
+            "Considere diversificar entre renda fixa (CDB, LCI/LCA) e variável (ações, FIIs).",
+            T.GREEN, green_dim))
     else:
-        tips.append(("$", "Você está no caminho certo",
+        neutral.append(("$", "Você está no caminho certo",
             f"Você investe {inv_pct*100:.1f}% da renda. Tente aumentar para 20% — "
-            "a regra 50/30/20 recomenda 50% necessidades, 30% desejos e 20% poupança.", T.BLUE, blue_dim))
+            "a regra 50/30/20 recomenda 50% necessidades, 30% desejos e 20% poupança.",
+            T.BLUE, blue_dim))
 
+    # ── Metas de poupança ─────────────────────────────────────────────
+    if goals is not None:
+        if len(goals) == 0:
+            neutral.append(("i", "Defina uma meta de poupança",
+                "Criar uma meta (reserva de emergência, viagem, imóvel) transforma "
+                "o saldo em um objetivo concreto e ajuda a manter o foco.",
+                T.BLUE, blue_dim))
+        else:
+            for g in goals:
+                target = float(g.get("target_amount") or 1)
+                saved  = float(g.get("saved_amount")  or 0)
+                pct    = saved / target if target > 0 else 0
+                if pct >= 0.80 and pct < 1.0:
+                    falta = target - saved
+                    positive.append(("*", "Meta quase concluída!",
+                        f'"{g["name"]}" está em {pct*100:.0f}%! '
+                        f"Falta apenas {format_currency(falta)} para concluir.",
+                        T.GREEN, green_dim))
+                    break
+
+    # ── Saldo disponível para reserva ─────────────────────────────────
     if saldo > 0 and inv_pct < 0.15:
-        tips.append(("i", "Saldo disponível",
+        neutral.append(("i", "Saldo disponível",
             f"Você tem {format_currency(saldo)} de saldo no mês. "
-            "Considere direcionar parte disso para sua reserva de emergência "
-            "(ideal: 6 meses de despesas guardados).", T.GOLD, gold_dim))
+            "Considere direcionar parte para sua reserva de emergência "
+            "(ideal: 6 meses de despesas em Tesouro Selic ou CDB liquidez diária).",
+            T.GOLD, gold_dim))
 
-    return tips[:3]
+    # ── Mês equilibrado ───────────────────────────────────────────────
+    if saldo >= 0 and inv_pct >= 0.10 and gasto_pct <= 0.70 and not alerts:
+        positive.append(("*", "Mês equilibrado",
+            f"Entradas cobertas, {inv_pct*100:.0f}% investido e gastos sob controle. "
+            "Continue assim e revise suas metas periodicamente.",
+            T.GREEN, green_dim))
 
-
-# ──────────────────────────────────────────────────────────────────────
-def _center_dlg(dialog: ctk.CTkToplevel, parent, w: int, h: int) -> None:
-    dialog.update_idletasks()
-    px = parent.winfo_x() + (parent.winfo_width()  - w) // 2
-    py = parent.winfo_y() + (parent.winfo_height() - h) // 2
-    dialog.geometry(f"{w}x{h}+{px}+{py}")
-
-
-class _GuruChatDialog(ctk.CTkToplevel):
-    _QUICK = [
-        "Como diversificar minha carteira?",
-        "Estou poupando o suficiente?",
-        "Explique Tesouro Direto IPCA+",
-    ]
-
-    def __init__(self, parent, summary: dict):
-        super().__init__(parent)
-        self.title("Guru Financeiro")
-        self.resizable(True, True)
-        self.minsize(580, 400)
-        self.grab_set()
-        self.configure(fg_color=T.CARD)
-        self._summary  = summary
-        self._sending  = False
-        apply_app_icon(self)
-        self._build()
-        _center_dlg(self, parent, 700, 540)
-        self.lift()
-        self.focus()
-
-    def _build(self) -> None:
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)
-
-        # ── Cabeçalho ─────────────────────────────────────────────────
-        hdr = ctk.CTkFrame(self, fg_color="transparent")
-        hdr.grid(row=0, column=0, sticky="ew", padx=24, pady=(20, 0))
-        ctk.CTkLabel(hdr, text="🧠 Guru Financeiro",
-                     font=F(14, "bold"), text_color=T.GREEN).pack(side="left")
-        ctk.CTkLabel(hdr, text="  powered by Claude",
-                     font=F(11), text_color=T.MUTED).pack(side="left")
-
-        # ── Área de resposta ───────────────────────────────────────────
-        self._textbox = ctk.CTkTextbox(
-            self, fg_color=T.CARD2, border_color=T.BORDER, border_width=1,
-            text_color=T.TEXT, font=F(12), corner_radius=10, wrap="word",
-        )
-        self._textbox.grid(row=1, column=0, sticky="nsew", padx=24, pady=(12, 0))
-        self._textbox.configure(state="disabled")
-        self._append("Olá! Faça uma pergunta sobre suas finanças ou escolha uma sugestão abaixo.\n\n")
-
-        # ── Sugestões rápidas ──────────────────────────────────────────
-        quick = ctk.CTkFrame(self, fg_color="transparent")
-        quick.grid(row=2, column=0, sticky="ew", padx=24, pady=(10, 0))
-        for q in self._QUICK:
-            ctk.CTkButton(
-                quick, text=q, height=26,
-                fg_color=T.CARD2, hover_color=T.BORDER_L,
-                border_width=1, border_color=T.BORDER_L,
-                text_color=T.MUTED, font=F(10), corner_radius=13,
-                command=lambda _q=q: self._send(_q),
-            ).pack(side="left", padx=(0, 6))
-
-        # ── Input ──────────────────────────────────────────────────────
-        inp = ctk.CTkFrame(self, fg_color="transparent")
-        inp.grid(row=3, column=0, sticky="ew", padx=24, pady=(10, 20))
-        inp.grid_columnconfigure(0, weight=1)
-
-        self._entry = ctk.CTkEntry(
-            inp, placeholder_text="Digite sua pergunta…",
-            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
-            corner_radius=8, height=38,
-        )
-        self._entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
-        self._entry.bind("<Return>", lambda _: self._send())
-        self._entry.focus()
-
-        self._send_btn = ctk.CTkButton(
-            inp, text="Enviar", width=90, height=38,
-            fg_color=T.GREEN, hover_color=T.BLUE_HOVER,
-            text_color="#ffffff", font=F(13, "bold"), corner_radius=8,
-            command=self._send,
-        )
-        self._send_btn.grid(row=0, column=1)
-
-    # ------------------------------------------------------------------
-    def _append(self, text: str) -> None:
-        self._textbox.configure(state="normal")
-        self._textbox.insert("end", text)
-        self._textbox.configure(state="disabled")
-        self._textbox.see("end")
-
-    def _send(self, question: str = "") -> None:
-        if self._sending:
-            return
-        if not question:
-            question = self._entry.get().strip()
-        if not question:
-            return
-
-        self._entry.delete(0, "end")
-        self._sending = True
-        self._send_btn.configure(state="disabled")
-        self._append(f"Você: {question}\n\nGuru: ")
-
-        import threading
-        from utils.ai_guru import call_guru
-
-        threading.Thread(
-            target=call_guru,
-            args=(
-                question,
-                self._summary,
-                lambda t: self.after(0, lambda _t=t: self._append(_t)),
-                lambda: self.after(0, self._on_done),
-                lambda e: self.after(0, lambda _e=e: self._on_error(_e)),
-            ),
-            daemon=True,
-        ).start()
-
-    def _on_done(self) -> None:
-        self._append("\n\n")
-        self._sending = False
-        self._send_btn.configure(state="normal")
-
-    def _on_error(self, msg: str) -> None:
-        self._append(f"\n⚠ {msg}\n\n")
-        self._sending = False
-        self._send_btn.configure(state="normal")
+    combined = (alerts + neutral + positive)[:3]
+    return combined
