@@ -193,6 +193,14 @@ class GoalsTab(ctk.CTkFrame):
         ).pack(side="left", padx=(0, 8))
 
         ctk.CTkButton(
+            actions, text="− Sacar",
+            command=lambda gid=goal["id"], gname=goal["name"]: self._withdraw_goal(gid, gname),
+            height=32, corner_radius=8,
+            fg_color=T.RED_DIM, hover_color=T.RED,
+            text_color=T.RED, border_width=1, border_color=T.RED,
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
             actions, text="✎ Editar",
             command=lambda g=goal: self._edit_goal(g),
             height=32, corner_radius=8,
@@ -212,7 +220,7 @@ class GoalsTab(ctk.CTkFrame):
 
     # ------------------------------------------------------------------
     def _add_contribution(self, goal_id: int, goal_name: str) -> None:
-        dlg = _ContributionDialog(self.winfo_toplevel(), goal_name)
+        dlg = _ContributionDialog(self.winfo_toplevel(), goal_name, mode="aporte")
         self.winfo_toplevel().wait_window(dlg)
         if dlg.amount is not None:
             try:
@@ -223,6 +231,19 @@ class GoalsTab(ctk.CTkFrame):
             except Exception as e:
                 from ui.dialogs import show_error
                 show_error(self.winfo_toplevel(), "Erro ao aportar", str(e))
+
+    def _withdraw_goal(self, goal_id: int, goal_name: str) -> None:
+        dlg = _ContributionDialog(self.winfo_toplevel(), goal_name, mode="saque")
+        self.winfo_toplevel().wait_window(dlg)
+        if dlg.amount is not None:
+            try:
+                db.add_goal_contribution(goal_id, -dlg.amount)
+                self.refresh()
+                if self._on_change:
+                    self._on_change()
+            except Exception as e:
+                from ui.dialogs import show_error
+                show_error(self.winfo_toplevel(), "Erro ao sacar", str(e))
 
     def _edit_goal(self, goal: dict) -> None:
         dlg = _EditGoalDialog(self.winfo_toplevel(), goal)
@@ -261,9 +282,10 @@ class GoalsTab(ctk.CTkFrame):
 
 # ──────────────────────────────────────────────────────────────────────
 class _ContributionDialog(ctk.CTkToplevel):
-    def __init__(self, parent, goal_name: str):
+    def __init__(self, parent, goal_name: str, mode: str = "aporte"):
         super().__init__(parent)
-        self.title("Aportar")
+        self._mode = mode
+        self.title("Aportar" if mode == "aporte" else "Sacar")
         self.resizable(False, False)
         self.grab_set()
         self.configure(fg_color=T.CARD)
@@ -291,10 +313,15 @@ class _ContributionDialog(ctk.CTkToplevel):
         self.geometry(f"360x220+{px}+{py}")
 
     def _build(self, goal_name: str) -> None:
+        is_saque = self._mode == "saque"
+        action   = "Sacar de" if is_saque else "Aportar em"
+        color    = T.RED if is_saque else T.BLUE
+        hover    = T.RED_HOVER if is_saque else T.BLUE_HOVER
+
         self.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(self, text=f"Aportar em: {goal_name}",
-                     font=F(14, "bold"), text_color=T.TEXT).grid(
+        ctk.CTkLabel(self, text=f"{action}: {goal_name}",
+                     font=F(14, "bold"), text_color=color).grid(
             row=0, column=0, pady=(24, 4))
         ctk.CTkLabel(self, text="VALOR (R$)", font=F(11, "bold"),
                      text_color=T.MUTED).grid(row=1, column=0)
@@ -320,7 +347,7 @@ class _ContributionDialog(ctk.CTkToplevel):
                       text_color=T.MUTED, command=self.destroy).pack(side="left", padx=6)
 
         ctk.CTkButton(btns, text="Confirmar", width=110,
-                      fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
+                      fg_color=color, hover_color=hover,
                       text_color="#ffffff", command=self._confirm).pack(side="left", padx=6)
 
     def _confirm(self) -> None:
