@@ -13,6 +13,7 @@ _tx_cache: Dict[int, List[dict]] = {}
 def _invalidate(month_id: int) -> None:
     _tx_cache.pop(month_id, None)
     _inv_net_cache.pop(month_id, None)
+    _bill_cache.pop(month_id, None)
 
 
 def is_cached(month_id: int) -> bool:
@@ -188,14 +189,20 @@ def get_month_summary(month_id: int) -> Dict[str, float]:
         amt = float(row["amount"] or 0)
         if t not in real:
             continue
+        # Compras no cartão não afetam o saldo — só debitam quando a fatura é paga
+        if row.get("card_id") and t == "saida_variavel":
+            continue
         if row.get("is_expectation"):
             proj_extra[t] += amt
             n_expectations += 1
         else:
             real[t] += amt
 
+    # Pagamentos de fatura são saídas reais do mês em que foram registrados
+    bill_total = sum(float(p["amount"]) for p in get_card_payments(month_id))
+
     total_entradas      = real["entrada_fixa"] + real["entrada_variavel"]
-    total_saidas        = real["saida_fixa"]   + real["saida_variavel"]
+    total_saidas        = real["saida_fixa"]   + real["saida_variavel"] + bill_total
     total_investimentos = get_month_investment_net(month_id)
     saldo = total_entradas - total_saidas - total_investimentos
 
@@ -313,6 +320,7 @@ def delete_goal(goal_id: int) -> None:
 
 _card_tx_cache: Dict[str, list] = {}  # key: "{card_id}_{month_id}"
 _inv_net_cache: Dict[int, float] = {}  # key: month_id → net investment do mês
+_bill_cache:    Dict[int, list]  = {}  # key: month_id → credit_card_payments
 
 
 def get_cards() -> List[dict]:
@@ -373,11 +381,37 @@ def delete_card_transaction(tx_id: int, card_id: int, month_id: int) -> None:
     _card_tx_cache.pop(f"{card_id}_{month_id}", None)
 
 
+def get_card_payments(month_id: int) -> List[dict]:
+    """Retorna os pagamentos de fatura registrados no mês."""
+    if month_id not in _bill_cache:
+        resp = get_client().table("credit_card_payments") \
+            .select("*") \
+            .eq("month_id", month_id) \
+            .execute()
+        _bill_cache[month_id] = resp.data or []
+    return list(_bill_cache[month_id])
+
+
+def pay_card_bill(card_id: int, month_id: int, amount: float, note: str = "") -> None:
+    """Registra o pagamento de uma fatura de cartão."""
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    client.table("credit_card_payments").insert({
+        "card_id":  card_id,
+        "month_id": month_id,
+        "amount":   amount,
+        "note":     note or None,
+        "user_id":  user_id,
+    }).execute()
+    _bill_cache.pop(month_id, None)
+
+
 def clear_cache() -> None:
     """Limpa todo o cache (chamado no logout)."""
     _tx_cache.clear()
     _card_tx_cache.clear()
     _inv_net_cache.clear()
+    _bill_cache.clear()
 
 
 # ---------------------------------------------------------------------------

@@ -146,12 +146,19 @@ class CardPresetsBar(ctk.CTkFrame):
     # ------------------------------------------------------------------
     def refresh(self) -> None:
         def _fetch():
-            cards = db.get_cards()
-            self.after(0, lambda: self._render(cards))
+            cards    = db.get_cards()
+            payments = db.get_card_payments(self.month_id)
+            self.after(0, lambda: self._render(cards, payments))
         threading.Thread(target=_fetch, daemon=True).start()
 
-    def _render(self, cards: List[dict]) -> None:
+    def _render(self, cards: List[dict], payments: List[dict] = None) -> None:
         self._cards = cards
+        paid_by_card: dict = {}
+        for p in (payments or []):
+            cid = p.get("card_id")
+            if cid:
+                paid_by_card[cid] = paid_by_card.get(cid, 0.0) + float(p["amount"])
+
         for w in self._chips_frame.winfo_children():
             w.destroy()
 
@@ -163,11 +170,11 @@ class CardPresetsBar(ctk.CTkFrame):
             ).pack(pady=8, padx=8)
         else:
             for card in cards:
-                self._make_chip(card)
+                self._make_chip(card, paid_by_card.get(card["id"], 0.0))
 
         self.on_cards_changed(cards)
 
-    def _make_chip(self, card: dict) -> None:
+    def _make_chip(self, card: dict, paid: float = 0.0) -> None:
         from utils.helpers import format_currency
         color      = card.get("color", "#6C8EFF")
         closing    = card.get("closing_day", 1)
@@ -178,6 +185,7 @@ class CardPresetsBar(ctk.CTkFrame):
         spent      = _card_spending(card["id"], self.month_id, closing)
         avail      = max(0.0, limit - spent) if limit > 0 else None
         cycle_open = date.today().day < closing
+        unpaid     = max(0.0, spent - paid)
 
         chip = ctk.CTkFrame(self._chips_frame, fg_color=T.CARD, corner_radius=10,
                             border_width=1, border_color=T.BORDER_L)
@@ -227,6 +235,24 @@ class CardPresetsBar(ctk.CTkFrame):
         ctk.CTkLabel(body, text=format_currency(spent), font=F(15, "bold"),
                      text_color=color, anchor="w", width=180).pack(anchor="w")
 
+        # Status de pagamento
+        if spent > 0:
+            if paid >= spent:
+                ctk.CTkLabel(body, text=f"✓ Fatura paga ({format_currency(paid)})",
+                             font=F(11, "bold"), text_color=T.GREEN,
+                             anchor="w", width=180).pack(anchor="w", pady=(3, 0))
+            else:
+                extra = f"  •  Pago: {format_currency(paid)}" if paid > 0 else ""
+                ctk.CTkLabel(body, text=f"Em aberto: {format_currency(unpaid)}{extra}",
+                             font=F(11), text_color=T.GOLD,
+                             anchor="w", width=180).pack(anchor="w", pady=(3, 0))
+                ctk.CTkButton(
+                    body, text="Pagar Fatura", height=28, corner_radius=7,
+                    fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
+                    text_color="#ffffff", font=F(11, "bold"), width=180,
+                    command=lambda c=card, u=unpaid: self._pay_bill(c, u),
+                ).pack(anchor="w", pady=(4, 0))
+
         # Disponível
         if avail is not None:
             ctk.CTkLabel(body, text=f"Disponível: {format_currency(avail)}",
@@ -247,6 +273,14 @@ class CardPresetsBar(ctk.CTkFrame):
 
 
     # ------------------------------------------------------------------
+    def _pay_bill(self, card: dict, unpaid: float) -> None:
+        dlg = _PayBillDialog(self, card["name"], unpaid)
+        self.wait_window(dlg)
+        if dlg.result:
+            db.pay_card_bill(card["id"], self.month_id,
+                             dlg.result["amount"], dlg.result.get("note", ""))
+            self.refresh()
+
     def _add_card(self) -> None:
         dlg = _CardDialog(self)
         self.wait_window(dlg)
@@ -268,6 +302,76 @@ class CardPresetsBar(ctk.CTkFrame):
 
     def get_cards(self) -> List[dict]:
         return list(self._cards)
+
+
+# ---------------------------------------------------------------------------
+
+class _PayBillDialog(ctk.CTkToplevel):
+    def __init__(self, parent, card_name: str, unpaid: float):
+        super().__init__(parent)
+        self.result = None
+        self.title("Pagar Fatura")
+        self.resizable(False, False)
+        self.grab_set()
+        apply_app_icon(self)
+        self._unpaid    = unpaid
+        self._card_name = card_name
+        self._build()
+        self.after(100, self._center)
+
+    def _center(self) -> None:
+        self.update_idletasks()
+        w, h = self.winfo_width(), self.winfo_height()
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        self.geometry(f"+{(sw - w) // 2}+{(sh - h) // 2}")
+
+    def _build(self) -> None:
+        from utils.helpers import format_currency
+        p = {"padx": 24, "pady": (0, 12)}
+
+        ctk.CTkLabel(self, text=f"Pagar fatura — {self._card_name}",
+                     font=F(14, "bold"), text_color=T.TEXT, anchor="w").pack(
+            fill="x", padx=24, pady=(20, 2))
+        ctk.CTkLabel(self, text=f"Em aberto: {format_currency(self._unpaid)}",
+                     font=F(12), text_color=T.GOLD, anchor="w").pack(
+            fill="x", padx=24, pady=(0, 16))
+
+        ctk.CTkLabel(self, text="VALOR PAGO (R$)", font=F(11, "bold"),
+                     text_color=T.MUTED, anchor="w").pack(fill="x", padx=24, pady=(0, 4))
+        self._amount = ctk.CTkEntry(
+            self, fg_color=T.CARD2, border_color=T.BORDER_L,
+            text_color=T.TEXT, corner_radius=8,
+        )
+        self._amount.pack(fill="x", **p)
+        self._amount.insert(0, f"{self._unpaid:.2f}".replace(".", ","))
+
+        ctk.CTkLabel(self, text="OBSERVAÇÃO (opcional)", font=F(11, "bold"),
+                     text_color=T.MUTED, anchor="w").pack(fill="x", padx=24, pady=(0, 4))
+        self._note = ctk.CTkEntry(
+            self, placeholder_text="Ex: via Pix, débito automático…",
+            fg_color=T.CARD2, border_color=T.BORDER_L,
+            text_color=T.TEXT, corner_radius=8,
+        )
+        self._note.pack(fill="x", **p)
+
+        ctk.CTkButton(
+            self, text="Confirmar Pagamento",
+            height=36, corner_radius=8,
+            fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
+            text_color="#ffffff", font=F(13, "bold"),
+            command=self._save,
+        ).pack(fill="x", padx=24, pady=(8, 24))
+
+    def _save(self) -> None:
+        raw = self._amount.get().strip().replace(",", ".")
+        try:
+            amount = float(raw)
+            if amount <= 0:
+                return
+        except ValueError:
+            return
+        self.result = {"amount": amount, "note": self._note.get().strip()}
+        self.destroy()
 
 
 # ---------------------------------------------------------------------------

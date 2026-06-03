@@ -236,9 +236,10 @@ class Dashboard(ctk.CTkScrollableFrame):
             except Exception:
                 goals = []
             try:
-                cards = db.get_cards()
+                cards         = db.get_cards()
+                card_payments = db.get_card_payments(self.month_id)
             except Exception:
-                cards = []
+                cards, card_payments = [], []
             try:
                 all_months  = db.get_months()
                 cur_idx     = next((i for i, m in enumerate(all_months)
@@ -248,14 +249,28 @@ class Dashboard(ctk.CTkScrollableFrame):
                 investments = db.get_investments()
             except Exception:
                 history, investments = [], []
+            try:
+                from ui.credit_cards import _all_card_spendings
+                spendings    = _all_card_spendings(cards, self.month_id) if cards else {}
+                paid_by_card = {}
+                for p in card_payments:
+                    cid = p.get("card_id")
+                    if cid:
+                        paid_by_card[cid] = paid_by_card.get(cid, 0.0) + float(p["amount"])
+                total_unpaid_cards = sum(
+                    max(0.0, spendings.get(c["id"], 0.0) - paid_by_card.get(c["id"], 0.0))
+                    for c in cards
+                )
+            except Exception:
+                total_unpaid_cards = 0.0
             self.after(0, lambda: self._embed_pie(pie_fig))
             self.after(0, lambda: self._embed_bar(bar_fig))
             self.after(0, lambda: self._draw_goals(goals))
-            self.after(0, lambda: self._draw_credit_panel(cards, s))
+            self.after(0, lambda cp=card_payments: self._draw_credit_panel(cards, s, cp))
             self.after(0, lambda t=total_inv: self._update_total_inv(t))
             self.after(0, lambda g=goals, c=pie_data, h=history,
-                       iv=investments, ti=total_inv:
-                       self._draw_tips(s, g, c, h, iv, ti))
+                       iv=investments, ti=total_inv, uc=total_unpaid_cards:
+                       self._draw_tips(s, g, c, h, iv, ti, uc))
 
         threading.Thread(target=_background, daemon=True).start()
 
@@ -419,11 +434,11 @@ class Dashboard(ctk.CTkScrollableFrame):
     # ------------------------------------------------------------------
     def _draw_tips(self, s: dict, goals: list = None, categories: list = None,
                    history: list = None, investments: list = None,
-                   total_inv: float = 0.0) -> None:
+                   total_inv: float = 0.0, unpaid_cards: float = 0.0) -> None:
         for w in self._tips_frame.winfo_children():
             w.destroy()
 
-        tips = _build_tips(s, goals, categories, history, investments, total_inv)
+        tips = _build_tips(s, goals, categories, history, investments, total_inv, unpaid_cards)
         if not tips:
             ctk.CTkLabel(self._tips_frame,
                          text="Adicione lançamentos para receber dicas personalizadas.",
@@ -449,7 +464,8 @@ class Dashboard(ctk.CTkScrollableFrame):
                 row=1, column=0, sticky="ew", padx=12, pady=(0, 12))
 
     # ------------------------------------------------------------------
-    def _draw_credit_panel(self, cards: list, s: dict) -> None:
+    def _draw_credit_panel(self, cards: list, s: dict,
+                           card_payments: list = None) -> None:
         from ui.credit_cards import _all_card_spendings, _days_until
 
         for w in self._credit_frame.winfo_children():
@@ -465,6 +481,11 @@ class Dashboard(ctk.CTkScrollableFrame):
 
         saldo          = s.get("saldo", 0)
         card_spendings = _all_card_spendings(cards, self.month_id)
+        paid_by_card: dict = {}
+        for p in (card_payments or []):
+            cid = p.get("card_id")
+            if cid:
+                paid_by_card[cid] = paid_by_card.get(cid, 0.0) + float(p["amount"])
 
         for i, card in enumerate(cards):
             if i > 0:
@@ -476,13 +497,15 @@ class Dashboard(ctk.CTkScrollableFrame):
             due_day     = card.get("due_day", 10)
             closing_day = card.get("closing_day", 1)
             spent       = card_spendings.get(card["id"], 0.0)
+            paid        = paid_by_card.get(card["id"], 0.0)
+            unpaid      = max(0.0, spent - paid)
             days_cls    = _days_until(closing_day)
             days_due    = _days_until(due_day)
             avail       = max(0.0, limit - spent) if limit > 0 else None
             pct_used    = spent / limit if limit > 0 else 0.0
 
             safety_msg, safety_color = _credit_safety(
-                pct_used, days_due, spent, saldo, avail)
+                pct_used, days_due, unpaid, saldo, avail)
 
             # Linha superior: ponto colorido + nome + indicador
             top = ctk.CTkFrame(self._credit_frame, fg_color="transparent")
@@ -512,6 +535,27 @@ class Dashboard(ctk.CTkScrollableFrame):
                          font=F(11), text_color=T.MUTED, anchor="w").pack(
                 fill="x", pady=(3, 0))
 
+            # Status de pagamento da fatura
+            if spent > 0:
+                if paid >= spent:
+                    ctk.CTkLabel(self._credit_frame,
+                                 text=f"✓ Fatura paga ({format_currency(paid)})",
+                                 font=F(11, "bold"), text_color=T.GREEN, anchor="w").pack(
+                        fill="x", pady=(4, 0))
+                else:
+                    bill_row = ctk.CTkFrame(self._credit_frame, fg_color="transparent")
+                    bill_row.pack(fill="x", pady=(4, 0))
+                    extra = f"  •  Pago: {format_currency(paid)}" if paid > 0 else ""
+                    ctk.CTkLabel(bill_row,
+                                 text=f"Fatura em aberto: {format_currency(unpaid)}{extra}",
+                                 font=F(11), text_color=T.GOLD, anchor="w").pack(side="left")
+                    ctk.CTkButton(
+                        bill_row, text="Pagar Fatura", height=24, width=110, corner_radius=6,
+                        fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
+                        text_color="#ffffff", font=F(11, "bold"),
+                        command=lambda c=card, u=unpaid: self._pay_bill(c, u),
+                    ).pack(side="right")
+
             # Barra de progresso (só se tiver limite)
             if limit > 0:
                 bar_bg = ctk.CTkFrame(self._credit_frame, height=4,
@@ -523,6 +567,15 @@ class Dashboard(ctk.CTkScrollableFrame):
                     ctk.CTkFrame(bar_bg, height=4, fg_color=fill_col,
                                  corner_radius=2).place(
                         x=0, y=0, relheight=1, relwidth=min(pct_used, 1.0))
+
+    def _pay_bill(self, card: dict, unpaid: float) -> None:
+        from ui.credit_cards import _PayBillDialog
+        dlg = _PayBillDialog(self.winfo_toplevel(), card["name"], unpaid)
+        self.winfo_toplevel().wait_window(dlg)
+        if dlg.result:
+            db.pay_card_bill(card["id"], self.month_id,
+                             dlg.result["amount"], dlg.result.get("note", ""))
+            self.refresh()
 
     # ------------------------------------------------------------------
     def _draw_savings(self, s: dict) -> None:
@@ -582,11 +635,12 @@ def _fv(pmt: float, annual_rate: float, years: int) -> float:
 
 def _build_tips(
     s: dict,
-    goals:       list  = None,
-    categories:  list  = None,
-    history:     list  = None,   # summaries de meses anteriores (mais recente primeiro)
-    investments: list  = None,   # objetos de investimento com "category"
-    total_inv:   float = 0.0,
+    goals:         list  = None,
+    categories:    list  = None,
+    history:       list  = None,   # summaries de meses anteriores (mais recente primeiro)
+    investments:   list  = None,   # objetos de investimento com "category"
+    total_inv:     float = 0.0,
+    unpaid_cards:  float = 0.0,    # total de faturas em aberto nos cartões
 ) -> list:
     entradas    = s.get("total_entradas", 0)
     if entradas <= 0:
@@ -609,6 +663,14 @@ def _build_tips(
     alerts   = []
     neutral  = []
     positive = []
+
+    # 0. Fatura(s) de cartão em aberto — sempre no topo
+    if unpaid_cards > 0:
+        alerts.insert(0, ("💳", "Fatura de cartão em aberto",
+            f"Você tem {format_currency(unpaid_cards)} em faturas não pagas. "
+            "Acesse a aba de Cartões ou o painel abaixo para pagar antes do vencimento "
+            "e evitar juros.",
+            T.RED, red_dim))
 
     # ── Média de aportes (meses com investimento > 0) ─────────────────
     hist_inv = [h.get("total_investimentos", 0) for h in (history or [])]
