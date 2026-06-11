@@ -59,6 +59,15 @@ class Dashboard(ctk.CTkScrollableFrame):
         )
         self._proj_lbl.pack(side="left", padx=16, pady=10)
 
+        # Alerta de categorias estouradas no plano do mês (escondido por padrão)
+        self._plan_alert = ctk.CTkFrame(kpi_section, fg_color=T.RED_DIM, corner_radius=10,
+                                        border_width=1, border_color=T.RED)
+        self._plan_alert_lbl = ctk.CTkLabel(
+            self._plan_alert, text="",
+            font=F(12, "bold"), text_color=T.RED, anchor="w",
+        )
+        self._plan_alert_lbl.pack(side="left", padx=16, pady=10)
+
         # ── Guru Financeiro ───────────────────────────────────────────
         tips_card = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14,
                                  border_width=1, border_color=T.BORDER)
@@ -263,6 +272,14 @@ class Dashboard(ctk.CTkScrollableFrame):
                 )
             except Exception:
                 total_unpaid_cards = 0.0
+            try:
+                plan          = db.get_plan(self.month_id)
+                plan_items    = db.get_plan_items(plan["id"]) if plan else []
+                plan_realized = db.get_plan_realized(self.month_id) if plan else {}
+            except Exception:
+                plan, plan_items, plan_realized = None, [], {}
+            self.after(0, lambda p=plan, it=plan_items, pr=plan_realized:
+                       self._update_plan_alert(p, it, pr))
             self.after(0, lambda: self._embed_pie(pie_fig))
             self.after(0, lambda: self._embed_bar(bar_fig))
             self.after(0, lambda: self._draw_goals(goals))
@@ -273,6 +290,28 @@ class Dashboard(ctk.CTkScrollableFrame):
                        self._draw_tips(s, g, c, h, iv, ti, uc))
 
         threading.Thread(target=_background, daemon=True).start()
+
+    def _update_plan_alert(self, plan, items: list, spent: dict) -> None:
+        """Mostra alerta quando categorias do plano ativo estouram o planejado."""
+        try:
+            if not plan or plan.get("status") != "ativo" or not items:
+                self._plan_alert.grid_remove()
+                return
+            spent = spent or {}
+            # Investimentos fora do alerta: ultrapassar o aporte planejado é positivo
+            burst = [i["category"] for i in items
+                     if i["category"] != "Investimentos"
+                     and float(i["planned_amount"] or 0) > 0
+                     and spent.get(i["category"], 0.0) >= float(i["planned_amount"])]
+            if burst:
+                names = ", ".join(burst[:3]) + ("…" if len(burst) > 3 else "")
+                self._plan_alert_lbl.configure(
+                    text=f"⚠  Plano do mês estourado em: {names} — veja a aba Planejamento")
+                self._plan_alert.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+            else:
+                self._plan_alert.grid_remove()
+        except Exception:
+            self._plan_alert.grid_remove()
 
     def _update_total_inv(self, total: float) -> None:
         entry = self._card_lbls.get("investimentos_total")

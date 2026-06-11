@@ -10,9 +10,11 @@ from ui.theme import F
 from ui.dashboard    import Dashboard
 from ui.transactions import TransactionsTab
 from ui.goals        import GoalsTab
+from ui.planning     import PlanningTab
 from utils.helpers   import TRANSACTION_TYPES, MONTHS_PT
 
-_TABS = [("dashboard", "Dashboard")] + list(TRANSACTION_TYPES.items()) + [("metas", "Metas")]
+_TABS = ([("dashboard", "Dashboard"), ("planejamento", "Planejamento")]
+         + list(TRANSACTION_TYPES.items()) + [("metas", "Metas")])
 
 
 class MainContent(ctk.CTkFrame):
@@ -113,8 +115,13 @@ class MainContent(ctk.CTkFrame):
         goals_frame.grid(row=0, column=0, sticky="nsew")
         self._frames["metas"] = goals_frame
 
+        planning_frame = PlanningTab(content, self.month_id,
+                                     on_change=self._refresh_dashboard)
+        planning_frame.grid(row=0, column=0, sticky="nsew")
+        self._frames["planejamento"] = planning_frame
+
         # Marca abas de transação como não inicializadas — carregam no primeiro clique
-        self._uninitialized_tabs = set(TRANSACTION_TYPES.keys())
+        self._uninitialized_tabs = set(TRANSACTION_TYPES.keys()) | {"planejamento"}
 
         self._switch_tab("dashboard")
 
@@ -164,6 +171,8 @@ class MainContent(ctk.CTkFrame):
     # ------------------------------------------------------------------
     def _refresh_dashboard(self) -> None:
         self._frames["dashboard"].refresh()
+        # Gastos mudaram → o plano vs. realizado precisa recarregar na próxima visita
+        self._stale_tabs.add("planejamento")
 
     def _export_csv(self) -> None:
         filename = self.month_name.replace(" ", "_") + ".csv"

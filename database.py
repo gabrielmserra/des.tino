@@ -412,6 +412,8 @@ def clear_cache() -> None:
     _card_tx_cache.clear()
     _inv_net_cache.clear()
     _bill_cache.clear()
+    _plan_cache.clear()
+    _plan_items_cache.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -553,6 +555,158 @@ def get_all_investment_movements() -> List[dict]:
         .order("created_at", desc=True) \
         .execute()
     return resp.data or []
+
+
+# ---------------------------------------------------------------------------
+# Planejamento Mensal
+# ---------------------------------------------------------------------------
+
+_plan_cache:       Dict[int, Optional[dict]] = {}  # month_id → plano (ou None)
+_plan_items_cache: Dict[int, List[dict]]     = {}  # plan_id  → itens
+
+
+def get_plan(month_id: int) -> Optional[dict]:
+    """Retorna o plano do mês, ou None se ainda não existir."""
+    if month_id not in _plan_cache:
+        resp = get_client().table("monthly_plans") \
+            .select("*") \
+            .eq("month_id", month_id) \
+            .execute()
+        _plan_cache[month_id] = resp.data[0] if resp.data else None
+    return _plan_cache[month_id]
+
+
+def get_plan_items(plan_id: int) -> List[dict]:
+    """Retorna os itens (alocações por categoria) de um plano."""
+    if plan_id not in _plan_items_cache:
+        resp = get_client().table("monthly_plan_items") \
+            .select("*") \
+            .eq("plan_id", plan_id) \
+            .order("planned_amount", desc=True) \
+            .execute()
+        _plan_items_cache[plan_id] = resp.data or []
+    return list(_plan_items_cache[plan_id])
+
+
+def save_plan(month_id: int, income: float, items: List[dict]) -> dict:
+    """Cria ou atualiza o plano do mês e substitui seus itens.
+
+    Nunca duplica: se o plano já existe (constraint unique month_id),
+    edita o existente. Ao criar um plano novo, fecha automaticamente
+    planos `ativo` de meses anteriores.
+
+    items: [{"category", "planned_amount", "suggested_amount", "is_eventual"}]
+    """
+    from datetime import datetime, timezone
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    _plan_cache.pop(month_id, None)
+    plan   = get_plan(month_id)
+    is_new = plan is None
+
+    if is_new:
+        try:
+            resp = client.table("monthly_plans").insert({
+                "month_id": month_id, "user_id": user_id, "income": income,
+            }).execute()
+            plan = resp.data[0]
+        except Exception:
+            # Plano criado em paralelo (unique month_id) → edita o existente
+            _plan_cache.pop(month_id, None)
+            plan = get_plan(month_id)
+            if plan is None:
+                raise
+            is_new = False
+
+    if not is_new:
+        client.table("monthly_plans").update({
+            "income": income, "updated_at": now_iso,
+        }).eq("id", plan["id"]).execute()
+        client.table("monthly_plan_items").delete().eq("plan_id", plan["id"]).execute()
+    else:
+        _close_previous_plans(month_id)
+
+    rows = [{
+        "plan_id":          plan["id"],
+        "user_id":          user_id,
+        "category":         it["category"],
+        "planned_amount":   float(it.get("planned_amount") or 0),
+        "suggested_amount": it.get("suggested_amount"),
+        "is_eventual":      bool(it.get("is_eventual")),
+    } for it in items]
+    if rows:
+        client.table("monthly_plan_items").insert(rows).execute()
+
+    _plan_cache.pop(month_id, None)
+    _plan_items_cache.pop(plan["id"], None)
+    return plan
+
+
+def _close_previous_plans(month_id: int) -> None:
+    """Fecha planos `ativo` de meses anteriores ao mês dado."""
+    months  = get_months()
+    current = next((m for m in months if m["id"] == month_id), None)
+    if current is None:
+        return
+    key       = (current["year"], current["month"])
+    prior_ids = [m["id"] for m in months if (m["year"], m["month"]) < key]
+    if not prior_ids:
+        return
+    get_client().table("monthly_plans") \
+        .update({"status": "fechado"}) \
+        .eq("status", "ativo") \
+        .in_("month_id", prior_ids) \
+        .execute()
+    for mid in prior_ids:
+        _plan_cache.pop(mid, None)
+
+
+def get_plan_history(month_id: int, n: int = 3) -> tuple:
+    """Histórico para a sugestão do plano: até n meses anteriores ao mês dado.
+
+    Retorna (gastos, rendas), ambos do mês mais recente ao mais antigo:
+      gastos: [{categoria: total}, ...]
+      rendas: [total_entradas, ...]  (apenas entradas confirmadas)
+    """
+    months  = get_months()  # já vem ordenado do mais recente ao mais antigo
+    current = next((m for m in months if m["id"] == month_id), None)
+    if current is None:
+        return [], []
+    key   = (current["year"], current["month"])
+    prior = [m for m in months if (m["year"], m["month"]) < key][:n]
+
+    expenses, incomes = [], []
+    for m in prior:
+        cat_totals = {r["category"]: float(r["total"]) for r in get_expenses_by_category(m["id"])}
+        inv_net = get_month_investment_net(m["id"])
+        if inv_net > 0:
+            cat_totals["Investimentos"] = inv_net
+        expenses.append(cat_totals)
+        incomes.append(get_month_income(m["id"]))
+    return expenses, incomes
+
+
+def get_plan_realized(month_id: int) -> Dict[str, float]:
+    """Realizado por categoria para o plano: gastos + aportes líquidos do mês."""
+    realized = {r["category"]: float(r["total"]) for r in get_expenses_by_category(month_id)}
+    inv_net = get_month_investment_net(month_id)
+    if inv_net > 0:
+        realized["Investimentos"] = inv_net
+    return realized
+
+
+def get_month_income(month_id: int, include_expectations: bool = False) -> float:
+    """Soma das entradas do mês (fixas + variáveis)."""
+    total = 0.0
+    for r in get_transactions(month_id):
+        if r["type"] not in ("entrada_fixa", "entrada_variavel"):
+            continue
+        if r.get("is_expectation") and not include_expectations:
+            continue
+        total += float(r["amount"] or 0)
+    return total
 
 
 def export_month_csv(month_id: int) -> str:
