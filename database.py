@@ -99,6 +99,7 @@ def add_transaction(
     category: str = "Outros",
     card_id: Optional[int] = None,
     is_expectation: bool = False,
+    benefit_id: Optional[int] = None,
 ) -> None:
     client  = get_client()
     user_id = client.auth.get_user().user.id
@@ -113,8 +114,18 @@ def add_transaction(
     }
     if card_id is not None:
         row["card_id"] = card_id
+    if benefit_id is not None:
+        row["benefit_id"] = benefit_id
     client.table("transactions").insert(row).execute()
+    # Gasto pago com benefício debita o saldo na hora (previsões não debitam)
+    if benefit_id is not None and not is_expectation:
+        _adjust_benefit_balance(benefit_id, -float(amount))
     _invalidate(month_id)
+
+
+def _find_tx(month_id: int, transaction_id: int) -> Optional[dict]:
+    return next((t for t in get_transactions(month_id)
+                 if t["id"] == transaction_id), None)
 
 
 def update_transaction(
@@ -125,20 +136,36 @@ def update_transaction(
     category: str,
     card_id: Optional[int] = None,
     is_expectation: Optional[bool] = None,
+    benefit_id: Optional[int] = None,
 ) -> None:
+    # Estorna o efeito antigo no saldo do benefício antes de aplicar o novo
+    old = _find_tx(month_id, transaction_id)
+    if old and old.get("benefit_id") and not old.get("is_expectation"):
+        _adjust_benefit_balance(old["benefit_id"], float(old["amount"] or 0))
+
     update = {
         "description": description,
         "amount":      amount,
         "category":    category,
         "card_id":     card_id,
+        "benefit_id":  benefit_id,
     }
     if is_expectation is not None:
         update["is_expectation"] = is_expectation
     get_client().table("transactions").update(update).eq("id", transaction_id).execute()
+
+    debit_now = benefit_id is not None and not (
+        is_expectation if is_expectation is not None
+        else bool(old and old.get("is_expectation")))
+    if debit_now:
+        _adjust_benefit_balance(benefit_id, -float(amount))
     _invalidate(month_id)
 
 
 def delete_transaction(transaction_id: int, month_id: int) -> None:
+    old = _find_tx(month_id, transaction_id)
+    if old and old.get("benefit_id") and not old.get("is_expectation"):
+        _adjust_benefit_balance(old["benefit_id"], float(old["amount"] or 0))
     get_client().table("transactions").delete().eq("id", transaction_id).execute()
     _invalidate(month_id)
 
@@ -146,11 +173,15 @@ def delete_transaction(transaction_id: int, month_id: int) -> None:
 def confirm_expectation(transaction_id: int, month_id: int,
                         description: str, amount: float) -> None:
     """Confirma uma transação prevista: atualiza valor/descrição e marca como real."""
+    old = _find_tx(month_id, transaction_id)
     get_client().table("transactions").update({
         "is_expectation": False,
         "description":    description,
         "amount":         amount,
     }).eq("id", transaction_id).execute()
+    # Previsão com benefício só debita o saldo ao ser confirmada
+    if old and old.get("benefit_id"):
+        _adjust_benefit_balance(old["benefit_id"], -float(amount))
     _invalidate(month_id)
 
 
@@ -191,6 +222,9 @@ def get_month_summary(month_id: int) -> Dict[str, float]:
             continue
         # Compras no cartão não afetam o saldo — só debitam quando a fatura é paga
         if row.get("card_id") and t == "saida_variavel":
+            continue
+        # Gastos com VR/VA saem do saldo carimbado, não do caixa do mês
+        if row.get("benefit_id") and t in ("saida_fixa", "saida_variavel"):
             continue
         if row.get("is_expectation"):
             proj_extra[t] += amt
@@ -268,7 +302,9 @@ def get_expenses_by_category(month_id: int) -> List[dict]:
     rows   = get_transactions(month_id)
     totals: Dict[str, float] = {}
     for row in rows:
-        if row["type"] in ("saida_fixa", "saida_variavel") and not row.get("is_expectation"):
+        if (row["type"] in ("saida_fixa", "saida_variavel")
+                and not row.get("is_expectation")
+                and not row.get("benefit_id")):   # carimbado: fora dos envelopes
             cat = row["category"] or "Outros"
             totals[cat] = totals.get(cat, 0.0) + float(row["amount"] or 0)
     result = [{"category": c, "total": t} for c, t in totals.items()]
@@ -415,6 +451,7 @@ def clear_cache() -> None:
     _plan_cache.clear()
     _plan_items_cache.clear()
     _invalidate_debts()
+    _invalidate_benefits()
 
 
 # ---------------------------------------------------------------------------
@@ -1003,6 +1040,219 @@ def get_debt_overview() -> dict:
         "n_atrasadas":  n_atrasadas,
         "future":       future,
     }
+
+
+# ---------------------------------------------------------------------------
+# Benefícios (VR / VA)
+# ---------------------------------------------------------------------------
+
+_benefits_cache: Optional[List[dict]] = None
+
+
+def _invalidate_benefits() -> None:
+    global _benefits_cache
+    _benefits_cache = None
+
+
+def get_benefits(include_archived: bool = False) -> List[dict]:
+    global _benefits_cache
+    if _benefits_cache is None:
+        resp = get_client().table("benefit_cards").select("*") \
+            .order("created_at", desc=False).execute()
+        _benefits_cache = resp.data or []
+    if include_archived:
+        return list(_benefits_cache)
+    return [b for b in _benefits_cache if not b.get("archived_at")]
+
+
+def get_benefit_by_id(benefit_id: int) -> Optional[dict]:
+    return next((b for b in get_benefits(include_archived=True)
+                 if b["id"] == benefit_id), None)
+
+
+def _clamp_day(year: int, month: int, day: int) -> int:
+    import calendar
+    return min(day, calendar.monthrange(year, month)[1])
+
+
+def _renewal_date(year: int, month: int, renewal_day: int):
+    from datetime import date
+    return date(year, month, _clamp_day(year, month, renewal_day))
+
+
+def _last_occurrence(renewal_day: int, ref):
+    """Data de renovação mais recente <= ref (dia ajustado p/ meses curtos)."""
+    d = _renewal_date(ref.year, ref.month, renewal_day)
+    if d <= ref:
+        return d
+    if ref.month == 1:
+        y, m = ref.year - 1, 12
+    else:
+        y, m = ref.year, ref.month - 1
+    return _renewal_date(y, m, renewal_day)
+
+
+def days_until_renewal(benefit: dict) -> int:
+    from datetime import date
+    today = date.today()
+    d = _renewal_date(today.year, today.month, benefit["renewal_day"])
+    if d <= today:
+        if today.month == 12:
+            y, m = today.year + 1, 1
+        else:
+            y, m = today.year, today.month + 1
+        d = _renewal_date(y, m, benefit["renewal_day"])
+    return (d - today).days
+
+
+def create_benefit(name: str, benefit_type: str, balance: float,
+                   renewal_day: int, recharge_amount: float,
+                   recharge_mode: str, color: str) -> dict:
+    """Cria o benefício. O saldo inicial NÃO gera registro de renovação.
+
+    last_renewal é fixado na última renovação já ocorrida, para que a próxima
+    abertura do app não dispare uma renovação retroativa sobre o saldo inicial.
+    """
+    from datetime import date
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    last = _last_occurrence(renewal_day, date.today()).isoformat()
+    resp = client.table("benefit_cards").insert({
+        "user_id":         user_id,
+        "name":            name,
+        "benefit_type":    benefit_type,
+        "balance":         balance,
+        "renewal_day":     renewal_day,
+        "recharge_amount": recharge_amount,
+        "recharge_mode":   recharge_mode,
+        "color":           color,
+        "last_renewal":    last,
+    }).execute()
+    _invalidate_benefits()
+    return resp.data[0]
+
+
+def update_benefit(benefit_id: int, name: str, benefit_type: str,
+                   renewal_day: int, recharge_amount: float,
+                   recharge_mode: str, color: str) -> None:
+    """Edita o benefício. Mudanças de recarga/dia valem a partir da próxima
+    renovação (sem efeito retroativo). O saldo não é alterado aqui."""
+    get_client().table("benefit_cards").update({
+        "name":            name,
+        "benefit_type":    benefit_type,
+        "renewal_day":     renewal_day,
+        "recharge_amount": recharge_amount,
+        "recharge_mode":   recharge_mode,
+        "color":           color,
+    }).eq("id", benefit_id).execute()
+    _invalidate_benefits()
+
+
+def set_benefit_balance(benefit_id: int, balance: float) -> None:
+    """Ajuste manual de saldo (correção)."""
+    get_client().table("benefit_cards").update(
+        {"balance": balance}).eq("id", benefit_id).execute()
+    _invalidate_benefits()
+
+
+def archive_benefit(benefit_id: int) -> None:
+    """Exclusão = arquivamento: some da lista mas mantém os gastos vinculados."""
+    from datetime import datetime, timezone
+    get_client().table("benefit_cards").update({
+        "archived_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", benefit_id).execute()
+    _invalidate_benefits()
+
+
+def get_benefit_renewals(benefit_id: int) -> List[dict]:
+    resp = get_client().table("benefit_renewals").select("*") \
+        .eq("benefit_id", benefit_id) \
+        .order("renewed_at", desc=True).execute()
+    return resp.data or []
+
+
+def _adjust_benefit_balance(benefit_id: int, delta: float) -> None:
+    """delta < 0 debita (gasto); delta > 0 credita (estorno)."""
+    b = get_benefit_by_id(benefit_id)
+    if b is None:
+        return
+    new_balance = float(b["balance"] or 0) + delta
+    get_client().table("benefit_cards").update(
+        {"balance": new_balance}).eq("id", benefit_id).execute()
+    _invalidate_benefits()
+
+
+def apply_due_renewals(benefit: dict) -> List[dict]:
+    """Aplica todas as renovações pendentes entre last_renewal e hoje.
+
+    Modo 'acumula': saldo += recarga a cada renovação.
+    Modo 'zera':    saldo = recarga a cada renovação (na prática só a última
+                    muda o saldo, mas todas são registradas no histórico).
+    Retorna a lista de renovações aplicadas (para feedback na UI).
+    """
+    from datetime import date
+    raw = benefit.get("last_renewal")
+    if not raw:
+        return []
+    last = date.fromisoformat(str(raw)[:10])
+    today = date.today()
+    recharge = float(benefit.get("recharge_amount") or 0)
+    mode     = benefit.get("recharge_mode") or "acumula"
+    balance  = float(benefit.get("balance") or 0)
+
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+
+    applied   = []
+    rows       = []
+    y, m = last.year, last.month
+    while True:
+        if m == 12:
+            y, m = y + 1, 1
+        else:
+            m += 1
+        nxt = _renewal_date(y, m, benefit["renewal_day"])
+        if nxt > today:
+            break
+        before  = balance
+        balance = recharge if mode == "zera" else balance + recharge
+        rows.append({
+            "benefit_id":     benefit["id"],
+            "user_id":        user_id,
+            "renewed_at":     nxt.isoformat(),
+            "amount":         recharge,
+            "balance_before": before,
+            "balance_after":  balance,
+        })
+        applied.append({"date": nxt, "amount": recharge,
+                        "balance_after": balance})
+        last = nxt
+
+    if rows:
+        client.table("benefit_renewals").insert(rows).execute()
+        client.table("benefit_cards").update({
+            "balance":      balance,
+            "last_renewal": last.isoformat(),
+        }).eq("id", benefit["id"]).execute()
+        _invalidate_benefits()
+    return applied
+
+
+def apply_all_due_renewals() -> List[dict]:
+    """Roda na abertura do app. Retorna resumo p/ feedback:
+    [{"name", "benefit_type", "total", "count", "balance_after"}]."""
+    summary = []
+    for b in get_benefits():
+        applied = apply_due_renewals(b)
+        if applied:
+            summary.append({
+                "name":          b["name"],
+                "benefit_type":  b["benefit_type"],
+                "total":         sum(a["amount"] for a in applied),
+                "count":         len(applied),
+                "balance_after": applied[-1]["balance_after"],
+            })
+    return summary
 
 
 def export_month_csv(month_id: int) -> str:

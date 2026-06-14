@@ -28,6 +28,10 @@ class TransactionsTab(ctk.CTkFrame):
         self._editing_id: Optional[int] = None
         self._card_id_map:     dict = {}   # card name → card id
         self._card_info:       dict = {}   # card id   → {name, color}
+        self._benefit_info:    dict = {}   # benefit id → {name, color, balance, type}
+        self._benefits_list:   list = []   # benefícios ativos (com saldo)
+        self._origin_map:      dict = {}   # display name → ("card"|"benefit", id)
+        self._cards_list:      list = []
         self._row_widgets:     dict = {}   # tx_id     → {frame, labels, separator, tx}
         self._empty_lbl            = None
         self._initialized          = False
@@ -43,10 +47,11 @@ class TransactionsTab(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
 
         if self._is_var_expense:
-            self.grid_rowconfigure(2, weight=1)
-            self._build_card_bar()   # row 0
-            self._build_form(row=1)
-            self._build_table(row=2)
+            self.grid_rowconfigure(3, weight=1)
+            self._build_card_bar(row=0)
+            self._build_benefits_bar(row=1)
+            self._build_form(row=2)
+            self._build_table(row=3)
         else:
             self.grid_rowconfigure(1, weight=1)
             self._build_form(row=0)
@@ -54,29 +59,75 @@ class TransactionsTab(ctk.CTkFrame):
         # Não chama refresh() aqui — a aba carrega ao ser exibida pela primeira vez
 
     # ------------------------------------------------------------------
-    def _build_card_bar(self) -> None:
+    def _build_card_bar(self, row: int = 0) -> None:
         from ui.credit_cards import CardPresetsBar
         wrap = ctk.CTkFrame(
             self, fg_color=T.CARD, corner_radius=12,
             border_width=1, border_color=T.BORDER,
         )
-        wrap.grid(row=0, column=0, sticky="ew", padx=28, pady=(20, 0))
+        wrap.grid(row=row, column=0, sticky="ew", padx=28, pady=(20, 0))
         bar = CardPresetsBar(wrap, month_id=self.month_id, on_cards_changed=self._on_cards_changed)
         bar.pack(fill="x", padx=16, pady=14)
         self._card_bar = bar
 
+    def _build_benefits_bar(self, row: int = 1) -> None:
+        from ui.benefits import BenefitsBar
+        wrap = ctk.CTkFrame(
+            self, fg_color=T.CARD, corner_radius=12,
+            border_width=1, border_color=T.BORDER,
+        )
+        wrap.grid(row=row, column=0, sticky="ew", padx=28, pady=(10, 0))
+        bar = BenefitsBar(wrap, on_benefits_changed=self._on_benefits_changed)
+        bar.pack(fill="x", padx=16, pady=14)
+        self._benefits_bar = bar
+
     def _on_cards_changed(self, cards: List[dict]) -> None:
+        self._cards_list  = cards
         self._card_id_map = {c["name"]: c["id"] for c in cards}
         self._card_info   = {
             c["id"]: {"name": c["name"], "color": c.get("color", "#6C8EFF")}
             for c in cards
         }
-        names = ["Nenhum"] + [c["name"] for c in cards]
-        if hasattr(self, "_card_combo"):
-            self._card_combo.configure(values=names)
-        # Só atualiza a lista se já foi inicializada — evita double-refresh na primeira carga
+        self._rebuild_origin_combo()
         if self._initialized:
             self.refresh()
+
+    def _on_benefits_changed(self, benefits: List[dict]) -> None:
+        self._benefits_list = benefits
+        self._benefit_info  = {
+            b["id"]: {"name": b["name"], "color": b.get("color", "#2EAF7D"),
+                      "balance": float(b.get("balance") or 0),
+                      "type": b["benefit_type"]}
+            for b in benefits
+        }
+        self._rebuild_origin_combo()
+        if self._initialized:
+            self.refresh()
+
+    def _rebuild_origin_combo(self) -> None:
+        """Monta o combo de origem com 'Nenhum' + cartões + benefícios (VR/VA)."""
+        self._origin_map = {}
+        names = ["Nenhum"]
+        for c in self._cards_list:
+            names.append(c["name"])
+            self._origin_map[c["name"]] = ("card", c["id"])
+        for b in self._benefits_list:
+            label = f"{b['name']} ({b['benefit_type']})"
+            names.append(label)
+            self._origin_map[label] = ("benefit", b["id"])
+        if hasattr(self, "_card_combo"):
+            self._card_combo.configure(values=names)
+
+    def _origin_label_for(self, card_id, benefit_id) -> str:
+        if benefit_id:
+            info = self._benefit_info.get(benefit_id)
+            if info:
+                return f"{info['name']} ({info['type']})"
+        if card_id:
+            info = self._card_info.get(card_id)
+            if info:
+                return info["name"]
+        return "Nenhum"
 
     # ------------------------------------------------------------------
     def _build_form(self, row: int = 0) -> None:
@@ -168,7 +219,7 @@ class TransactionsTab(ctk.CTkFrame):
         # Card selector — saida_variavel only
         _err_row = 3
         if self._is_var_expense:
-            ctk.CTkLabel(form, text="CARTÃO (opcional)", font=F(11, "bold"),
+            ctk.CTkLabel(form, text="ORIGEM / PAGAMENTO (opcional)", font=F(11, "bold"),
                          text_color=T.MUTED, anchor="w").grid(
                 row=3, column=0, padx=(18, 6), pady=(10, 2), sticky="w")
             self._card_combo_var = ctk.StringVar(value="Nenhum")
@@ -279,25 +330,50 @@ class TransactionsTab(ctk.CTkFrame):
             self._amount.focus()
             return
 
-        card_id: Optional[int] = None
+        card_id:    Optional[int] = None
+        benefit_id: Optional[int] = None
         if self._is_var_expense and hasattr(self, "_card_combo"):
-            card_id = self._card_id_map.get(self._card_combo.get())
+            kind, oid = self._origin_map.get(self._card_combo.get(), (None, None))
+            if kind == "card":
+                card_id = oid
+            elif kind == "benefit":
+                benefit_id = oid
+
+        # Saldo de VR/VA não pode ficar negativo — bloqueia (gastos reais, não previsões)
+        if benefit_id is not None and not self._expectation_active:
+            info  = self._benefit_info.get(benefit_id, {})
+            avail = float(info.get("balance", 0))
+            # Em edição sobre o MESMO benefício, o valor antigo volta ao saldo
+            if self._editing_id is not None:
+                old = self._row_widgets.get(self._editing_id, {}).get("tx", {})
+                if old.get("benefit_id") == benefit_id and not old.get("is_expectation"):
+                    avail += float(old.get("amount") or 0)
+            if amount > avail + 1e-9:
+                self._show_error(
+                    f"Saldo insuficiente em {info.get('name', 'benefício')}: "
+                    f"disponível {format_currency(avail)}. Reduza o valor ou troque a origem.")
+                self._amount.focus()
+                return
 
         self._hide_error()
 
         if self._editing_id is not None:
             db.update_transaction(
                 self._editing_id, self.month_id, desc, amount, category,
-                card_id=card_id, is_expectation=self._expectation_active)
+                card_id=card_id, is_expectation=self._expectation_active,
+                benefit_id=benefit_id)
             self._cancel_edit()
         else:
             db.add_transaction(
                 self.month_id, self.tx_type, desc, amount, category,
-                card_id=card_id, is_expectation=self._expectation_active)
+                card_id=card_id, is_expectation=self._expectation_active,
+                benefit_id=benefit_id)
             self._desc.delete(0, "end")
             self._amount.delete(0, "end")
             self._desc.focus()
 
+        if self._is_var_expense and hasattr(self, "_benefits_bar"):
+            self._benefits_bar.refresh()   # saldo mudou
         self.refresh()
         self.on_change()
 
@@ -319,9 +395,8 @@ class TransactionsTab(ctk.CTkFrame):
         if self.is_expense:
             self._cat_var.set(tx["category"] or "Outros")
         if self._is_var_expense and hasattr(self, "_card_combo"):
-            card_id   = tx.get("card_id")
-            card_name = self._card_info.get(card_id, {}).get("name", "Nenhum") if card_id else "Nenhum"
-            self._card_combo.set(card_name)
+            self._card_combo.set(
+                self._origin_label_for(tx.get("card_id"), tx.get("benefit_id")))
         self._form_title.configure(text="✏  Editando lançamento")
         self._add_btn.configure(text="✓ Salvar")
         self._cancel_btn.grid(row=1, column=0, sticky="ew", pady=(4, 0))
@@ -415,11 +490,17 @@ class TransactionsTab(ctk.CTkFrame):
             w["amount_lbl"].configure(fg_color=row_bg, text=format_currency(tx["amount"]), text_color=amt_col)
             w["cat_lbl"].configure(text=f" {tx['category'] or 'Outros'} ", text_color=amt_col)
 
-            # Badge do cartão (só na aba saida_variavel)
+            # Badge da origem: cartão ou benefício (só na aba saida_variavel)
             if self._is_var_expense and w["badge_lbl"] is not None:
-                info = self._card_info.get(tx.get("card_id"))
-                if info:
-                    w["badge_lbl"].configure(text=f"  {info['name']} ", text_color=info["color"])
+                b_info = self._benefit_info.get(tx.get("benefit_id"))
+                c_info = self._card_info.get(tx.get("card_id"))
+                if b_info:
+                    w["badge_lbl"].configure(
+                        text=f"  {b_info['name']} · {b_info['type']} ",
+                        text_color=b_info["color"])
+                    w["badge_lbl"].pack(anchor="w", pady=(2, 0))
+                elif c_info:
+                    w["badge_lbl"].configure(text=f"  {c_info['name']} ", text_color=c_info["color"])
                     w["badge_lbl"].pack(anchor="w", pady=(2, 0))
                 else:
                     w["badge_lbl"].pack_forget()
@@ -545,6 +626,8 @@ class TransactionsTab(ctk.CTkFrame):
         if self._editing_id == tid:
             self._cancel_edit()
         db.delete_transaction(tid, self.month_id)
+        if self._is_var_expense and hasattr(self, "_benefits_bar"):
+            self._benefits_bar.refresh()   # estorno do saldo
         self.refresh()
         self.on_change()
 

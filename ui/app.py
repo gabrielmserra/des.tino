@@ -31,6 +31,7 @@ class FinanceApp(ctk.CTkFrame):
 
         self._build()
         self._load_months()
+        self._check_benefit_renewals()
 
     # ------------------------------------------------------------------
     def _build(self) -> None:
@@ -164,6 +165,41 @@ class FinanceApp(ctk.CTkFrame):
     def _on_investments_change(self) -> None:
         if self._main_content:
             self._main_content._refresh_dashboard()
+
+    # ------------------------------------------------------------------
+    def _check_benefit_renewals(self) -> None:
+        """Aplica renovações de VR/VA pendentes na abertura e mostra um toast."""
+        def _work():
+            try:
+                summary = db.apply_all_due_renewals()
+            except Exception:
+                summary = []
+            if summary:
+                self.after(0, lambda: self._show_renewal_toast(summary))
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _show_renewal_toast(self, summary: list) -> None:
+        from utils.helpers import format_currency
+        lines = []
+        for s in summary:
+            extra = f" ({s['count']}x)" if s["count"] > 1 else ""
+            lines.append(f"{s['name']} ({s['benefit_type']}): "
+                         f"+{format_currency(s['total'])}{extra}")
+        text = "  •  ".join(lines)
+
+        toast = ctk.CTkFrame(self, fg_color=T.GREEN_DIM, corner_radius=10,
+                             border_width=1, border_color=T.GREEN)
+        ctk.CTkLabel(toast, text=f"🔄  Benefício renovado:  {text}",
+                     font=F(12, "bold"), text_color=T.GREEN).pack(padx=16, pady=10)
+        toast.place(relx=0.5, rely=0.02, anchor="n")
+        toast.lift()
+        self.after(6000, lambda: self._dismiss_toast(toast))
+
+    def _dismiss_toast(self, toast) -> None:
+        try:
+            toast.destroy()
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     def _show_debts(self) -> None:
