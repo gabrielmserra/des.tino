@@ -30,8 +30,8 @@ class Dashboard(ctk.CTkScrollableFrame):
             ("total_saidas",        "SAÍDAS",               T.RED),
             ("total_investimentos", "INVESTIMENTOS MÊS",    T.VIOLET),
             ("investimentos_total", "INVESTIMENTOS TOTAIS", T.VIOLET),
-            ("saldo",               "SALDO",                T.BLUE),
             ("saldo_beneficios",    "SALDO VR/VA",          T.GOLD),
+            ("saldo",               "SALDO",                T.BLUE),
         ]
 
         # ── KPI section (cards + barra de saldo projetado) ────────────

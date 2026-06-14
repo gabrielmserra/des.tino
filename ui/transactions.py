@@ -120,6 +120,17 @@ class TransactionsTab(ctk.CTkFrame):
             self._origin_map[label] = ("benefit", b["id"])
         if hasattr(self, "_card_combo"):
             self._card_combo.configure(values=names)
+        if hasattr(self, "_q_origin"):
+            self._q_origin.configure(values=names)
+
+    def _resolve_origin(self, label: str):
+        """Converte o rótulo do combo em (card_id, benefit_id)."""
+        kind, oid = self._origin_map.get(label, (None, None))
+        if kind == "card":
+            return oid, None
+        if kind == "benefit":
+            return None, oid
+        return None, None
 
     def _origin_label_for(self, card_id, benefit_id) -> str:
         if benefit_id:
@@ -266,7 +277,7 @@ class TransactionsTab(ctk.CTkFrame):
         wrapper = ctk.CTkFrame(self, fg_color="transparent")
         wrapper.grid(row=row, column=0, sticky="nsew", padx=28, pady=(14, 24))
         wrapper.grid_columnconfigure(0, weight=1)
-        wrapper.grid_rowconfigure(1, weight=1)
+        wrapper.grid_rowconfigure(2, weight=1)
 
         top = ctk.CTkFrame(wrapper, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew", pady=(0, 10))
@@ -285,9 +296,11 @@ class TransactionsTab(ctk.CTkFrame):
         )
         self._expand_btn.grid(row=0, column=1, sticky="e")
 
+        self._build_quick_add(wrapper, row=1)   # escondido até expandir
+
         table = ctk.CTkFrame(wrapper, fg_color=T.CARD, corner_radius=12,
                              border_width=1, border_color=T.BORDER)
-        table.grid(row=1, column=0, sticky="nsew")
+        table.grid(row=2, column=0, sticky="nsew")
         table.grid_columnconfigure(0, weight=1)
         table.grid_rowconfigure(1, weight=1)
 
@@ -325,8 +338,106 @@ class TransactionsTab(ctk.CTkFrame):
         # Packed/unpacked in refresh() when expectations exist
 
     # ------------------------------------------------------------------
+    def _build_quick_add(self, parent, row: int) -> None:
+        """Barra compacta de adição, visível apenas com a lista expandida."""
+        qa = ctk.CTkFrame(parent, fg_color=T.CARD, corner_radius=10,
+                          border_width=1, border_color=T.BORDER)
+        qa.grid(row=row, column=0, sticky="ew", pady=(0, 10))
+        qa.grid_remove()
+        self._qa_frame = qa
+
+        inner = ctk.CTkFrame(qa, fg_color="transparent")
+        inner.pack(fill="x", padx=12, pady=10)
+
+        self._q_desc = ctk.CTkEntry(
+            inner, placeholder_text=_PLACEHOLDER.get(self.tx_type, "Descrição…"),
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            placeholder_text_color=T.SUBTLE, corner_radius=8,
+        )
+        self._q_desc.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        self._q_desc.bind("<Return>", lambda _: self._q_amount.focus())
+
+        self._q_amount = ctk.CTkEntry(
+            inner, placeholder_text="0,00", width=110,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            placeholder_text_color=T.SUBTLE, corner_radius=8,
+        )
+        self._q_amount.pack(side="left", padx=6)
+        self._q_amount.bind("<Return>", lambda _: self._quick_add())
+
+        if self.is_expense:
+            self._q_cat_var = ctk.StringVar(value="Outros")
+            ctk.CTkComboBox(
+                inner, values=CATEGORIES, variable=self._q_cat_var, width=150,
+                fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+                button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
+                dropdown_text_color=T.TEXT, corner_radius=8,
+            ).pack(side="left", padx=6)
+
+        if self._is_var_expense:
+            self._q_origin = ctk.CTkComboBox(
+                inner, values=["Nenhum"], width=170,
+                fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+                button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
+                dropdown_text_color=T.TEXT, corner_radius=8,
+            )
+            self._q_origin.set("Nenhum")
+            self._q_origin.pack(side="left", padx=6)
+
+        ctk.CTkButton(
+            inner, text="+ Adicionar", command=self._quick_add,
+            height=36, width=130, corner_radius=8,
+            fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
+            text_color="#ffffff", font=F(13, "bold"),
+        ).pack(side="left", padx=(6, 0))
+
+        self._q_err = ctk.CTkLabel(qa, text="", font=F(11), text_color=T.RED, anchor="w")
+        self._q_err.pack(fill="x", padx=14, pady=(0, 8))
+
+    def _quick_add(self) -> None:
+        desc = self._q_desc.get().strip()
+        if not desc:
+            self._q_err.configure(text="⚠  Preencha a descrição.")
+            self._q_desc.focus()
+            return
+        try:
+            amount = float(self._q_amount.get().strip().replace(",", "."))
+            if amount <= 0:
+                raise ValueError
+        except ValueError:
+            self._q_err.configure(text="⚠  Digite um valor positivo (ex: 1500,00).")
+            self._q_amount.focus()
+            return
+
+        category = self._q_cat_var.get() if self.is_expense else "Receita"
+        card_id = benefit_id = None
+        if self._is_var_expense and hasattr(self, "_q_origin"):
+            card_id, benefit_id = self._resolve_origin(self._q_origin.get())
+            if benefit_id is not None:
+                info  = self._benefit_info.get(benefit_id, {})
+                avail = float(info.get("balance", 0))
+                if amount > avail + 1e-9:
+                    self._q_err.configure(
+                        text=f"⚠  Saldo insuficiente em {info.get('name', 'benefício')}: "
+                             f"disponível {format_currency(avail)}.")
+                    self._q_amount.focus()
+                    return
+
+        self._q_err.configure(text="")
+        db.add_transaction(self.month_id, self.tx_type, desc, amount, category,
+                           card_id=card_id, benefit_id=benefit_id)
+        self._q_desc.delete(0, "end")
+        self._q_amount.delete(0, "end")
+        self._q_desc.focus()
+        if self._is_var_expense and hasattr(self, "_benefits_bar"):
+            self._benefits_bar.refresh()
+        self.refresh()
+        self.on_change()
+
+    # ------------------------------------------------------------------
     def _toggle_list_expand(self) -> None:
-        """Recolhe formulário e barras de origem para a lista ocupar a tela toda."""
+        """Recolhe formulário e barras de origem para a lista ocupar a tela toda.
+        Uma barra de adição rápida aparece para ainda permitir novos lançamentos."""
         self._expanded_list = not self._expanded_list
         for attr in ("_card_wrap", "_benefits_wrap", "_form_frame"):
             w = getattr(self, attr, None)
@@ -336,6 +447,11 @@ class TransactionsTab(ctk.CTkFrame):
                 w.grid_remove()
             else:
                 w.grid()
+        if self._expanded_list:
+            self._qa_frame.grid()
+            self._q_desc.focus()
+        else:
+            self._qa_frame.grid_remove()
         self._expand_btn.configure(
             text="⤡  Recolher" if self._expanded_list else "⤢  Expandir lista")
 
