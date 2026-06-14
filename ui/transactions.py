@@ -36,6 +36,7 @@ class TransactionsTab(ctk.CTkFrame):
         self._empty_lbl            = None
         self._initialized          = False
         self._expectation_active   = False
+        self._expanded_list        = False
 
         if tx_type in ("entrada_fixa", "entrada_variavel"):
             self._style = {"color": T.GREEN, "dim": T.GREEN_DIM}
@@ -68,7 +69,8 @@ class TransactionsTab(ctk.CTkFrame):
         wrap.grid(row=row, column=0, sticky="ew", padx=28, pady=(20, 0))
         bar = CardPresetsBar(wrap, month_id=self.month_id, on_cards_changed=self._on_cards_changed)
         bar.pack(fill="x", padx=16, pady=14)
-        self._card_bar = bar
+        self._card_bar  = bar
+        self._card_wrap = wrap
 
     def _build_benefits_bar(self, row: int = 1) -> None:
         from ui.benefits import BenefitsBar
@@ -79,7 +81,8 @@ class TransactionsTab(ctk.CTkFrame):
         wrap.grid(row=row, column=0, sticky="ew", padx=28, pady=(10, 0))
         bar = BenefitsBar(wrap, on_benefits_changed=self._on_benefits_changed)
         bar.pack(fill="x", padx=16, pady=14)
-        self._benefits_bar = bar
+        self._benefits_bar  = bar
+        self._benefits_wrap = wrap
 
     def _on_cards_changed(self, cards: List[dict]) -> None:
         self._cards_list  = cards
@@ -135,6 +138,7 @@ class TransactionsTab(ctk.CTkFrame):
                             border_width=1, border_color=T.BORDER)
         form.grid(row=row, column=0, sticky="ew", padx=28, pady=(10, 0))
         form.grid_columnconfigure((0, 1, 2, 3), weight=1)
+        self._form_frame = form
 
         self._form_title = ctk.CTkLabel(
             form, text="Novo Lançamento",
@@ -272,6 +276,15 @@ class TransactionsTab(ctk.CTkFrame):
             top, text="0 registros", font=F(13), text_color=T.MUTED, anchor="w")
         self._count_lbl.grid(row=0, column=0, sticky="w")
 
+        self._expand_btn = ctk.CTkButton(
+            top, text="⤢  Expandir lista", command=self._toggle_list_expand,
+            height=28, width=150, corner_radius=7,
+            fg_color=T.CARD2, hover_color=T.BORDER_L,
+            border_width=1, border_color=T.BORDER_L,
+            text_color=T.MUTED, font=F(11),
+        )
+        self._expand_btn.grid(row=0, column=1, sticky="e")
+
         table = ctk.CTkFrame(wrapper, fg_color=T.CARD, corner_radius=12,
                              border_width=1, border_color=T.BORDER)
         table.grid(row=1, column=0, sticky="nsew")
@@ -310,6 +323,21 @@ class TransactionsTab(ctk.CTkFrame):
         self._proj_total_lbl = ctk.CTkLabel(
             footer, text="", font=F(11), text_color=T.GOLD)
         # Packed/unpacked in refresh() when expectations exist
+
+    # ------------------------------------------------------------------
+    def _toggle_list_expand(self) -> None:
+        """Recolhe formulário e barras de origem para a lista ocupar a tela toda."""
+        self._expanded_list = not self._expanded_list
+        for attr in ("_card_wrap", "_benefits_wrap", "_form_frame"):
+            w = getattr(self, attr, None)
+            if w is None:
+                continue
+            if self._expanded_list:
+                w.grid_remove()
+            else:
+                w.grid()
+        self._expand_btn.configure(
+            text="⤡  Recolher" if self._expanded_list else "⤢  Expandir lista")
 
     # ------------------------------------------------------------------
     def _submit(self) -> None:
@@ -386,6 +414,8 @@ class TransactionsTab(ctk.CTkFrame):
 
     # ------------------------------------------------------------------
     def _start_edit(self, tx: dict) -> None:
+        if self._expanded_list:        # garante que o formulário esteja visível
+            self._toggle_list_expand()
         self._editing_id = tx["id"]
         self._set_expectation(bool(tx.get("is_expectation")))
         self._desc.delete(0, "end")
