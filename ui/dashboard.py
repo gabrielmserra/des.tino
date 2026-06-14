@@ -31,6 +31,7 @@ class Dashboard(ctk.CTkScrollableFrame):
             ("total_investimentos", "INVESTIMENTOS MÊS",    T.VIOLET),
             ("investimentos_total", "INVESTIMENTOS TOTAIS", T.VIOLET),
             ("saldo",               "SALDO",                T.BLUE),
+            ("saldo_beneficios",    "SALDO VR/VA",          T.GOLD),
         ]
 
         # ── KPI section (cards + barra de saldo projetado) ────────────
@@ -40,7 +41,7 @@ class Dashboard(ctk.CTkScrollableFrame):
 
         kpi_row = ctk.CTkFrame(kpi_section, fg_color="transparent")
         kpi_row.grid(row=0, column=0, sticky="ew")
-        for col in range(5):
+        for col in range(len(kpi)):
             kpi_row.grid_columnconfigure(col, weight=1)
 
         _inv_keys = {"total_investimentos", "investimentos_total"}
@@ -208,7 +209,7 @@ class Dashboard(ctk.CTkScrollableFrame):
         s = db.get_month_summary(self.month_id)
 
         for key, (lbl, default_color) in self._card_lbls.items():
-            if key == "investimentos_total":
+            if key in ("investimentos_total", "saldo_beneficios"):
                 lbl.configure(text="...", text_color=default_color)
                 continue
             val   = s.get(key, 0.0)
@@ -240,6 +241,10 @@ class Dashboard(ctk.CTkScrollableFrame):
                 total_inv = db.get_total_investments()
             except Exception:
                 total_inv = 0.0
+            try:
+                benefit_total = sum(float(b.get("balance") or 0) for b in db.get_benefits())
+            except Exception:
+                benefit_total = 0.0
             try:
                 goals = db.get_goals()
             except Exception:
@@ -285,6 +290,7 @@ class Dashboard(ctk.CTkScrollableFrame):
             self.after(0, lambda: self._draw_goals(goals))
             self.after(0, lambda cp=card_payments: self._draw_credit_panel(cards, s, cp))
             self.after(0, lambda t=total_inv: self._update_total_inv(t))
+            self.after(0, lambda t=benefit_total: self._update_benefit_balance(t))
             self.after(0, lambda g=goals, c=pie_data, h=history,
                        iv=investments, ti=total_inv, uc=total_unpaid_cards:
                        self._draw_tips(s, g, c, h, iv, ti, uc))
@@ -315,6 +321,12 @@ class Dashboard(ctk.CTkScrollableFrame):
 
     def _update_total_inv(self, total: float) -> None:
         entry = self._card_lbls.get("investimentos_total")
+        if entry:
+            lbl, color = entry
+            lbl.configure(text=format_currency(total), text_color=color)
+
+    def _update_benefit_balance(self, total: float) -> None:
+        entry = self._card_lbls.get("saldo_beneficios")
         if entry:
             lbl, color = entry
             lbl.configure(text=format_currency(total), text_color=color)
