@@ -50,6 +50,11 @@ class PlanningTab(ctk.CTkFrame):
         month_id = self.month_id
 
         def _fetch():
+            synced = False
+            try:
+                synced = db.sync_debts_into_plan(month_id)
+            except Exception:
+                pass
             try:
                 plan     = db.get_plan(month_id)
                 items    = db.get_plan_items(plan["id"]) if plan else []
@@ -57,16 +62,16 @@ class PlanningTab(ctk.CTkFrame):
             except Exception:
                 plan, items, realized = None, [], {}
             if month_id == self.month_id:
-                self.after(0, lambda: self._apply(plan, items, realized))
+                self.after(0, lambda: self._apply(plan, items, realized, synced))
 
         threading.Thread(target=_fetch, daemon=True).start()
 
-    def _apply(self, plan, items, realized) -> None:
+    def _apply(self, plan, items, realized, synced: bool = False) -> None:
         self._clear()
         if plan is None:
             self._render_empty()
         else:
-            self._render_tracking(plan, items, realized)
+            self._render_tracking(plan, items, realized, synced)
 
     def _clear(self) -> None:
         for w in self._header.winfo_children():
@@ -115,14 +120,18 @@ class PlanningTab(ctk.CTkFrame):
                 income = db.get_month_income(month_id, include_expectations=True)
             except Exception:
                 expenses_hist, income_hist, income = [], [], 0.0
+            try:
+                debt_totals = db.get_month_debt_totals_for(month_id)
+            except Exception:
+                debt_totals = {}
             if month_id == self.month_id:
                 self.after(0, lambda: self._ask_income_and_render(
-                    expenses_hist, income_hist, income))
+                    expenses_hist, income_hist, income, debt_totals))
 
         threading.Thread(target=_fetch, daemon=True).start()
 
     def _ask_income_and_render(self, expenses_hist: list, income_hist: list,
-                               income: float) -> None:
+                               income: float, debt_totals: dict = None) -> None:
         """Mês sem entradas → pede uma estimativa de renda antes de sugerir."""
         if income <= 0:
             dlg = _IncomeDialog(self.winfo_toplevel(),
@@ -130,16 +139,33 @@ class PlanningTab(ctk.CTkFrame):
             self.winfo_toplevel().wait_window(dlg)
             income = dlg.amount or 0.0
 
-        suggestions = suggest_allocations(expenses_hist, income_hist, income)
+        debt_totals = debt_totals or {}
+        # Dívidas são reserva obrigatória: a sugestão por histórico distribui
+        # apenas o que sobra da renda depois delas
+        free_income = max(0.0, income - sum(debt_totals.values()))
+        suggestions = suggest_allocations(expenses_hist, income_hist, free_income)
+
         rows = [{
+            "category":         cat,
+            "planned_amount":   round(total, 2),
+            "suggested_amount": round(total, 2),
+            "is_eventual":      False,
+            "capped":           False,
+            "is_mandatory":     True,
+        } for cat, total in sorted(debt_totals.items(),
+                                   key=lambda x: x[1], reverse=True)]
+
+        free_rows = [{
             "category":         cat,
             "planned_amount":   s["amount"],
             "suggested_amount": s["amount"],
             "is_eventual":      s["eventual"],
             "capped":           s.get("capped", False),
-        } for cat, s in suggestions.items()]
-        rows.sort(key=lambda r: r["planned_amount"], reverse=True)
-        self._render_review(income, rows, n_hist=len(expenses_hist))
+            "is_mandatory":     False,
+        } for cat, s in suggestions.items() if cat not in debt_totals]
+        free_rows.sort(key=lambda r: r["planned_amount"], reverse=True)
+
+        self._render_review(income, rows + free_rows, n_hist=len(expenses_hist))
 
     # ==================================================================
     # Estado 2 — revisão / edição do plano
@@ -256,6 +282,7 @@ class PlanningTab(ctk.CTkFrame):
                 r.get("suggested_amount"),
                 bool(r.get("is_eventual")),
                 bool(r.get("capped")),
+                bool(r.get("is_mandatory")),
             )
         self._recalc()
 
@@ -263,7 +290,8 @@ class PlanningTab(ctk.CTkFrame):
         return [c for c in PLAN_CATEGORIES if c not in self._review_rows]
 
     def _make_review_row(self, category: str, planned: float,
-                         suggested, eventual: bool, capped: bool = False) -> None:
+                         suggested, eventual: bool, capped: bool = False,
+                         mandatory: bool = False) -> None:
         row = ctk.CTkFrame(self._rows_box, fg_color=T.CARD, corner_radius=10,
                            border_width=1, border_color=T.BORDER)
         row.pack(fill="x", pady=(0, 8))
@@ -273,6 +301,11 @@ class PlanningTab(ctk.CTkFrame):
         name_box.grid(row=0, column=0, padx=16, pady=12, sticky="w")
         ctk.CTkLabel(name_box, text=category, font=F(13, "bold"),
                      text_color=T.TEXT, anchor="w").pack(side="left")
+        if mandatory:
+            badge = ctk.CTkFrame(name_box, fg_color=T.RED_DIM, corner_radius=6)
+            badge.pack(side="left", padx=(8, 0))
+            ctk.CTkLabel(badge, text="🔒 dívidas", font=F(10, "bold"),
+                         text_color=T.RED).pack(padx=7, pady=1)
         if eventual:
             badge = ctk.CTkFrame(name_box, fg_color=T.GOLD_DIM, corner_radius=6)
             badge.pack(side="left", padx=(8, 0))
@@ -297,16 +330,23 @@ class PlanningTab(ctk.CTkFrame):
             entry.insert(0, f"{planned:.2f}".replace(".", ","))
         entry.bind("<KeyRelease>", lambda _: self._recalc())
 
-        ctk.CTkButton(
-            row, text="✕", width=32, height=32, corner_radius=8,
-            fg_color="transparent", hover_color=T.RED,
-            border_width=1, border_color=T.BORDER_L, text_color=T.MUTED,
-            command=lambda c=category: self._remove_category(c),
-        ).grid(row=0, column=2, padx=(0, 12), pady=12)
+        if mandatory:
+            # Valor travado: é a soma das parcelas — gerencia-se na seção Dívidas
+            entry.configure(state="disabled", text_color=T.MUTED)
+            ctk.CTkLabel(row, text="🔒", font=F(13), text_color=T.MUTED,
+                         width=32).grid(row=0, column=2, padx=(0, 12), pady=12)
+        else:
+            ctk.CTkButton(
+                row, text="✕", width=32, height=32, corner_radius=8,
+                fg_color="transparent", hover_color=T.RED,
+                border_width=1, border_color=T.BORDER_L, text_color=T.MUTED,
+                command=lambda c=category: self._remove_category(c),
+            ).grid(row=0, column=2, padx=(0, 12), pady=12)
 
         self._review_rows[category] = {
-            "frame": row, "entry": entry,
+            "frame": row, "entry": entry, "value": planned,
             "suggested": suggested, "eventual": eventual,
+            "mandatory": mandatory,
         }
 
     def _add_category(self) -> None:
@@ -327,7 +367,10 @@ class PlanningTab(ctk.CTkFrame):
 
     def _recalc(self) -> None:
         income = _parse_amount(self._income_entry.get())
-        total  = sum(_parse_amount(i["entry"].get()) for i in self._review_rows.values())
+        total  = sum(
+            i["value"] if i.get("mandatory") else _parse_amount(i["entry"].get())
+            for i in self._review_rows.values()
+        )
         self._alloc_lbl.configure(text=format_currency(total))
 
         if income > 0:
@@ -362,9 +405,11 @@ class PlanningTab(ctk.CTkFrame):
         income = _parse_amount(self._income_entry.get())
         items  = [{
             "category":         cat,
-            "planned_amount":   _parse_amount(info["entry"].get()),
+            "planned_amount":   (info["value"] if info.get("mandatory")
+                                 else _parse_amount(info["entry"].get())),
             "suggested_amount": info["suggested"],
             "is_eventual":      info["eventual"],
+            "is_mandatory":     info.get("mandatory", False),
         } for cat, info in self._review_rows.items()]
         month_id = self.month_id
 
@@ -391,8 +436,17 @@ class PlanningTab(ctk.CTkFrame):
     # ==================================================================
     # Estado 3 — acompanhamento (plano vs. realizado) / fechamento
     # ==================================================================
-    def _render_tracking(self, plan: dict, items: list, realized: dict) -> None:
+    def _render_tracking(self, plan: dict, items: list, realized: dict,
+                         synced: bool = False) -> None:
         self._header.grid()
+        if synced:
+            notice = ctk.CTkFrame(self._scroll, fg_color=T.GOLD_DIM, corner_radius=10)
+            notice.pack(fill="x", pady=(0, 10))
+            ctk.CTkLabel(
+                notice,
+                text="🔄  O plano foi atualizado automaticamente com as dívidas deste mês.",
+                font=F(12), text_color=T.GOLD,
+            ).pack(anchor="w", padx=14, pady=8)
         closed  = plan.get("status") == "fechado"
         income  = float(plan.get("income") or 0)
         planned_total = sum(float(i["planned_amount"] or 0) for i in items)
@@ -463,7 +517,9 @@ class PlanningTab(ctk.CTkFrame):
             cat     = item["category"]
             planned = float(item["planned_amount"] or 0)
             spent   = realized.get(cat, 0.0)
-            self._make_tracking_row(cat, planned, spent, bool(item.get("is_eventual")))
+            self._make_tracking_row(cat, planned, spent,
+                                    bool(item.get("is_eventual")),
+                                    bool(item.get("is_mandatory")))
 
         # ── Fora do plano ─────────────────────────────────────────────
         if out_of_plan:
@@ -486,7 +542,8 @@ class PlanningTab(ctk.CTkFrame):
             ctk.CTkFrame(block, height=8, fg_color="transparent").pack()
 
     def _make_tracking_row(self, category: str, planned: float,
-                           spent: float, eventual: bool) -> None:
+                           spent: float, eventual: bool,
+                           mandatory: bool = False) -> None:
         pct = (spent / planned) if planned > 0 else (1.0 if spent > 0 else 0.0)
         is_investment = category == "Investimentos"
         if is_investment:
@@ -512,6 +569,11 @@ class PlanningTab(ctk.CTkFrame):
         name_box.grid(row=0, column=0, sticky="w")
         ctk.CTkLabel(name_box, text=category, font=F(13, "bold"),
                      text_color=T.TEXT, anchor="w").pack(side="left")
+        if mandatory:
+            badge = ctk.CTkFrame(name_box, fg_color=T.RED_DIM, corner_radius=6)
+            badge.pack(side="left", padx=(8, 0))
+            ctk.CTkLabel(badge, text="🔒 dívidas", font=F(10, "bold"),
+                         text_color=T.RED).pack(padx=7, pady=1)
         if eventual:
             badge = ctk.CTkFrame(name_box, fg_color=T.GOLD_DIM, corner_radius=6)
             badge.pack(side="left", padx=(8, 0))

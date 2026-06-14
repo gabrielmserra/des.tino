@@ -17,6 +17,7 @@ class Sidebar(ctk.CTkFrame):
         on_theme:        Callable,
         on_logout:       Callable,
         on_investments:  Callable = None,
+        on_debts:        Callable = None,
         user_email:      str = "",
     ):
         super().__init__(parent, width=270, corner_radius=0, fg_color=T.SIDEBAR)
@@ -31,11 +32,13 @@ class Sidebar(ctk.CTkFrame):
         self.on_theme       = on_theme
         self.on_logout      = on_logout
         self.on_investments = on_investments or (lambda: None)
+        self.on_debts       = on_debts or (lambda: None)
         self.user_email     = user_email
 
         self._active_id: int | None         = None
         self._buttons:   dict               = {}
         self._inv_btn:   ctk.CTkButton|None = None
+        self._debts_btn: ctk.CTkButton|None = None
 
         self._build()
 
@@ -59,15 +62,28 @@ class Sidebar(ctk.CTkFrame):
         # Separador
         ctk.CTkFrame(self, height=1, fg_color=T.BORDER).grid(row=1, column=0, sticky="ew")
 
-        # ── Navegação: Investimentos ───────────────────────────────────
+        # ── Navegação: Investimentos + Dívidas ─────────────────────────
+        nav = ctk.CTkFrame(self, fg_color="transparent")
+        nav.grid(row=2, column=0, sticky="ew", padx=12, pady=(8, 4))
+        nav.grid_columnconfigure(0, weight=1)
+
         self._inv_btn = ctk.CTkButton(
-            self, text="  📈  Investimentos",
+            nav, text="  📈  Investimentos",
             command=self.on_investments,
             height=36, corner_radius=8, anchor="w",
             fg_color="transparent", hover_color=T.CARD2,
             text_color=T.TEXT, font=F(12),
         )
-        self._inv_btn.grid(row=2, column=0, sticky="ew", padx=12, pady=(8, 4))
+        self._inv_btn.grid(row=0, column=0, sticky="ew")
+
+        self._debts_btn = ctk.CTkButton(
+            nav, text="  💸  Dívidas",
+            command=self.on_debts,
+            height=36, corner_radius=8, anchor="w",
+            fg_color="transparent", hover_color=T.CARD2,
+            text_color=T.TEXT, font=F(12),
+        )
+        self._debts_btn.grid(row=1, column=0, sticky="ew", pady=(2, 0))
 
         # ── Lista de períodos ──────────────────────────────────────────
         scroll_wrapper = ctk.CTkFrame(self, fg_color="transparent")
@@ -223,5 +239,17 @@ class Sidebar(ctk.CTkFrame):
                 )
             else:
                 self._inv_btn.configure(
+                    fg_color="transparent", text_color=T.TEXT, border_width=0,
+                )
+
+    def set_debts_active(self, active: bool) -> None:
+        if self._debts_btn:
+            if active:
+                self._debts_btn.configure(
+                    fg_color=T.RED_DIM, text_color=T.RED,
+                    border_width=1, border_color=T.BORDER_L,
+                )
+            else:
+                self._debts_btn.configure(
                     fg_color="transparent", text_color=T.TEXT, border_width=0,
                 )

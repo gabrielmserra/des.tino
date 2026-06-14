@@ -24,6 +24,7 @@ class FinanceApp(ctk.CTkFrame):
         self._main_content:        MainContent | None  = None
         self._placeholder:         ctk.CTkFrame | None = None
         self._investments_content: InvestmentsTab|None = None
+        self._debts_content                            = None
 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -42,6 +43,7 @@ class FinanceApp(ctk.CTkFrame):
             on_theme       = self._on_theme_change,
             on_logout      = self._logout,
             on_investments = self._show_investments,
+            on_debts       = self._show_debts,
             user_email     = self.user_email,
         )
         self._sidebar.grid(row=0, column=0, sticky="nsew")
@@ -93,8 +95,11 @@ class FinanceApp(ctk.CTkFrame):
         self._current_id = month_id
         self._sidebar.set_active_month(month_id)
         self._sidebar.set_investments_active(False)
+        self._sidebar.set_debts_active(False)
         if self._investments_content:
             self._investments_content.grid_remove()
+        if self._debts_content:
+            self._debts_content.grid_remove()
 
         if db.is_cached(month_id):
             self._render_month(month_id, month_name)
@@ -140,11 +145,14 @@ class FinanceApp(ctk.CTkFrame):
     # ------------------------------------------------------------------
     def _show_investments(self) -> None:
         self._sidebar.set_investments_active(True)
+        self._sidebar.set_debts_active(False)
         self._sidebar.clear_active_month()
         if self._main_content:
             self._main_content.grid_remove()
         if self._placeholder:
             self._placeholder.grid_remove()
+        if self._debts_content:
+            self._debts_content.grid_remove()
         if self._investments_content is None:
             self._investments_content = InvestmentsTab(
                 self, on_change=self._on_investments_change,
@@ -156,6 +164,26 @@ class FinanceApp(ctk.CTkFrame):
     def _on_investments_change(self) -> None:
         if self._main_content:
             self._main_content._refresh_dashboard()
+
+    # ------------------------------------------------------------------
+    def _show_debts(self) -> None:
+        from ui.debts import DebtsTab
+        self._sidebar.set_debts_active(True)
+        self._sidebar.set_investments_active(False)
+        self._sidebar.clear_active_month()
+        if self._main_content:
+            self._main_content.grid_remove()
+        if self._placeholder:
+            self._placeholder.grid_remove()
+        if self._investments_content:
+            self._investments_content.grid_remove()
+        if self._debts_content is None:
+            self._debts_content = DebtsTab(
+                self, on_change=self._on_investments_change,
+            )
+        else:
+            self._debts_content.refresh()
+        self._debts_content.grid(row=0, column=1, sticky="nsew")
 
     # ------------------------------------------------------------------
     def _add_month(self) -> None:
@@ -263,6 +291,12 @@ class FinanceApp(ctk.CTkFrame):
             except Exception:
                 pass
             self._investments_content = None
+        if self._debts_content:
+            try:
+                self._debts_content.destroy()
+            except Exception:
+                pass
+            self._debts_content = None
         if self._placeholder:
             try:
                 self._placeholder.destroy()

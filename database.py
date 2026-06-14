@@ -414,6 +414,7 @@ def clear_cache() -> None:
     _bill_cache.clear()
     _plan_cache.clear()
     _plan_items_cache.clear()
+    _invalidate_debts()
 
 
 # ---------------------------------------------------------------------------
@@ -635,6 +636,7 @@ def save_plan(month_id: int, income: float, items: List[dict]) -> dict:
         "planned_amount":   float(it.get("planned_amount") or 0),
         "suggested_amount": it.get("suggested_amount"),
         "is_eventual":      bool(it.get("is_eventual")),
+        "is_mandatory":     bool(it.get("is_mandatory")),
     } for it in items]
     if rows:
         client.table("monthly_plan_items").insert(rows).execute()
@@ -707,6 +709,300 @@ def get_month_income(month_id: int, include_expectations: bool = False) -> float
             continue
         total += float(r["amount"] or 0)
     return total
+
+
+# ---------------------------------------------------------------------------
+# Dívidas
+# ---------------------------------------------------------------------------
+
+_debts_cache: Optional[List[dict]] = None
+_inst_cache:  Optional[List[dict]] = None
+
+
+def _invalidate_debts() -> None:
+    global _debts_cache, _inst_cache
+    _debts_cache = None
+    _inst_cache  = None
+
+
+def get_debts() -> List[dict]:
+    global _debts_cache
+    if _debts_cache is None:
+        resp = get_client().table("debts").select("*") \
+            .order("created_at", desc=False).execute()
+        _debts_cache = resp.data or []
+    return list(_debts_cache)
+
+
+def get_all_installments() -> List[dict]:
+    global _inst_cache
+    if _inst_cache is None:
+        resp = get_client().table("debt_installments").select("*") \
+            .order("due_year").order("due_month").order("installment_number") \
+            .execute()
+        _inst_cache = resp.data or []
+    return list(_inst_cache)
+
+
+def installment_status(inst: dict) -> str:
+    """Status derivado: paga | atrasada | pendente (nada é gravado no banco)."""
+    from datetime import date
+    if inst.get("paid_at"):
+        return "paga"
+    today = date.today()
+    if (inst["due_year"], inst["due_month"]) < (today.year, today.month):
+        return "atrasada"
+    return "pendente"
+
+
+def create_debt(description: str, creditor: str, total_amount: float,
+                category: str, notes: str, installments: List[dict]) -> dict:
+    """Cria a dívida e suas parcelas.
+
+    installments: [{"number", "amount", "year", "month"}]
+    """
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    resp = client.table("debts").insert({
+        "user_id":      user_id,
+        "description":  description,
+        "creditor":     creditor or None,
+        "total_amount": total_amount,
+        "category":     category or "Dívidas",
+        "notes":        notes or None,
+    }).execute()
+    debt = resp.data[0]
+    rows = [{
+        "debt_id":            debt["id"],
+        "user_id":            user_id,
+        "installment_number": it["number"],
+        "amount":             float(it["amount"]),
+        "due_year":           int(it["year"]),
+        "due_month":          int(it["month"]),
+    } for it in installments]
+    client.table("debt_installments").insert(rows).execute()
+    _invalidate_debts()
+    return debt
+
+
+def update_debt(debt_id: int, description: str, creditor: str,
+                category: str, notes: str) -> None:
+    get_client().table("debts").update({
+        "description": description,
+        "creditor":    creditor or None,
+        "category":    category or "Dívidas",
+        "notes":       notes or None,
+    }).eq("id", debt_id).execute()
+    _invalidate_debts()
+
+
+def update_installment_amount(inst_id: int, debt_id: int, amount: float) -> None:
+    """Atualiza o valor de uma parcela e recalcula o total da dívida."""
+    client = get_client()
+    client.table("debt_installments").update({"amount": amount}) \
+        .eq("id", inst_id).execute()
+    _invalidate_debts()
+    total = sum(float(i["amount"]) for i in get_all_installments()
+                if i["debt_id"] == debt_id)
+    client.table("debts").update({"total_amount": total}).eq("id", debt_id).execute()
+    _invalidate_debts()
+
+
+def reschedule_installment(inst_id: int, year: int, month: int) -> None:
+    get_client().table("debt_installments").update({
+        "due_year": year, "due_month": month,
+    }).eq("id", inst_id).execute()
+    _invalidate_debts()
+
+
+def pay_installment(inst: dict, debt: dict, n_total: int,
+                    launch_expense: bool) -> None:
+    """Marca a parcela como paga; opcionalmente lança o gasto no mês dela."""
+    from datetime import datetime, timezone
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+
+    expense_id = None
+    if launch_expense:
+        month = _ensure_month(inst["due_year"], inst["due_month"])
+        desc  = debt["description"]
+        if n_total > 1:
+            desc += f" (parcela {inst['installment_number']}/{n_total})"
+        resp = client.table("transactions").insert({
+            "month_id":    month["id"],
+            "user_id":     user_id,
+            "type":        "saida_fixa",
+            "description": desc,
+            "amount":      float(inst["amount"]),
+            "category":    debt.get("category") or "Dívidas",
+        }).execute()
+        if resp.data:
+            expense_id = resp.data[0]["id"]
+        _invalidate(month["id"])
+
+    client.table("debt_installments").update({
+        "paid_at":    datetime.now(timezone.utc).isoformat(),
+        "expense_id": expense_id,
+    }).eq("id", inst["id"]).execute()
+    _invalidate_debts()
+
+
+def undo_payment(inst: dict) -> None:
+    """Desfaz o pagamento; remove o gasto vinculado, se houver."""
+    client = get_client()
+    if inst.get("expense_id"):
+        client.table("transactions").delete().eq("id", inst["expense_id"]).execute()
+        _tx_cache.clear()
+    client.table("debt_installments").update({
+        "paid_at": None, "expense_id": None,
+    }).eq("id", inst["id"]).execute()
+    _invalidate_debts()
+
+
+def delete_installment(inst: dict, delete_expense: bool = False) -> None:
+    client = get_client()
+    if delete_expense and inst.get("expense_id"):
+        client.table("transactions").delete().eq("id", inst["expense_id"]).execute()
+        _tx_cache.clear()
+    client.table("debt_installments").delete().eq("id", inst["id"]).execute()
+    _invalidate_debts()
+    # Recalcula o total da dívida (ou remove a dívida se ficou sem parcelas)
+    remaining = [i for i in get_all_installments() if i["debt_id"] == inst["debt_id"]]
+    if remaining:
+        total = sum(float(i["amount"]) for i in remaining)
+        client.table("debts").update({"total_amount": total}) \
+            .eq("id", inst["debt_id"]).execute()
+    else:
+        client.table("debts").delete().eq("id", inst["debt_id"]).execute()
+    _invalidate_debts()
+
+
+def delete_debt(debt_id: int, delete_expenses: bool = False) -> None:
+    client = get_client()
+    if delete_expenses:
+        ids = [i["expense_id"] for i in get_all_installments()
+               if i["debt_id"] == debt_id and i.get("expense_id")]
+        for eid in ids:
+            client.table("transactions").delete().eq("id", eid).execute()
+        if ids:
+            _tx_cache.clear()
+    client.table("debts").delete().eq("id", debt_id).execute()
+    _invalidate_debts()
+
+
+def _ensure_month(year: int, month: int) -> dict:
+    """Retorna o período (year, month), criando-o se ainda não existir."""
+    from utils.helpers import month_name_from_num
+    name = month_name_from_num(month, year)
+    existing = get_month_by_name(name)
+    if existing:
+        return existing
+    created = create_month(name, year, month)
+    if created is None:
+        raise RuntimeError(f"Falha ao criar o período {name}.")
+    return created
+
+
+def get_month_debt_totals(year: int, month: int) -> Dict[str, float]:
+    """Parcelas não pagas com vencimento no mês, somadas por categoria."""
+    debts_by_id = {d["id"]: d for d in get_debts()}
+    totals: Dict[str, float] = {}
+    for i in get_all_installments():
+        if i.get("paid_at") or i["due_year"] != year or i["due_month"] != month:
+            continue
+        cat = debts_by_id.get(i["debt_id"], {}).get("category") or "Dívidas"
+        totals[cat] = totals.get(cat, 0.0) + float(i["amount"])
+    return totals
+
+
+def get_month_debt_totals_for(month_id: int) -> Dict[str, float]:
+    months  = get_months()
+    current = next((m for m in months if m["id"] == month_id), None)
+    if current is None:
+        return {}
+    return get_month_debt_totals(current["year"], current["month"])
+
+
+def sync_debts_into_plan(month_id: int) -> bool:
+    """Garante que o plano ativo do mês reflita as parcelas pendentes.
+
+    Soma as parcelas não pagas do mês por categoria e faz upsert nos itens
+    do plano com is_mandatory=true; remove itens obrigatórios cuja dívida
+    sumiu. Retorna True se o plano foi alterado.
+    """
+    plan = get_plan(month_id)
+    if not plan or plan.get("status") != "ativo":
+        return False
+    desired = get_month_debt_totals_for(month_id)
+    items   = get_plan_items(plan["id"])
+
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    by_cat  = {i["category"]: i for i in items}
+    changed = False
+
+    for cat, total in desired.items():
+        cur = by_cat.get(cat)
+        if cur is None:
+            client.table("monthly_plan_items").insert({
+                "plan_id":          plan["id"],
+                "user_id":          user_id,
+                "category":         cat,
+                "planned_amount":   total,
+                "suggested_amount": total,
+                "is_mandatory":     True,
+            }).execute()
+            changed = True
+        elif (not cur.get("is_mandatory")
+              or abs(float(cur["planned_amount"] or 0) - total) > 0.005):
+            client.table("monthly_plan_items").update({
+                "planned_amount":   total,
+                "suggested_amount": total,
+                "is_mandatory":     True,
+            }).eq("id", cur["id"]).execute()
+            changed = True
+
+    for cat, item in by_cat.items():
+        if item.get("is_mandatory") and cat not in desired:
+            client.table("monthly_plan_items").delete() \
+                .eq("id", item["id"]).execute()
+            changed = True
+
+    if changed:
+        _plan_items_cache.pop(plan["id"], None)
+    return changed
+
+
+def get_debt_overview() -> dict:
+    """Resumo: total em aberto, nº de atrasadas e comprometimento futuro (6 meses)."""
+    from datetime import date
+    insts = get_all_installments()
+    total_aberto = 0.0
+    n_atrasadas  = 0
+    for i in insts:
+        st = installment_status(i)
+        if st != "paga":
+            total_aberto += float(i["amount"])
+        if st == "atrasada":
+            n_atrasadas += 1
+
+    today = date.today()
+    future = []
+    y, m = today.year, today.month
+    for _ in range(6):
+        total = sum(float(i["amount"]) for i in insts
+                    if not i.get("paid_at")
+                    and i["due_year"] == y and i["due_month"] == m)
+        future.append({"year": y, "month": m, "total": total})
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+    return {
+        "total_aberto": total_aberto,
+        "n_atrasadas":  n_atrasadas,
+        "future":       future,
+    }
 
 
 def export_month_csv(month_id: int) -> str:
