@@ -37,6 +37,7 @@ class TransactionsTab(ctk.CTkFrame):
         self._initialized          = False
         self._expectation_active   = False
         self._expanded_list        = False
+        self._q_expect_active      = False
 
         if tx_type in ("entrada_fixa", "entrada_variavel"):
             self._style = {"color": T.GREEN, "dim": T.GREEN_DIM}
@@ -384,6 +385,15 @@ class TransactionsTab(ctk.CTkFrame):
             self._q_origin.set("Nenhum")
             self._q_origin.pack(side="left", padx=6)
 
+        self._q_expect_btn = ctk.CTkButton(
+            inner, text="📋 Previsto", command=self._toggle_q_expect,
+            height=36, width=100, corner_radius=8,
+            fg_color=T.CARD2, hover_color=T.BORDER_L,
+            border_width=1, border_color=T.BORDER_L,
+            text_color=T.MUTED, font=F(11),
+        )
+        self._q_expect_btn.pack(side="left", padx=6)
+
         ctk.CTkButton(
             inner, text="+ Adicionar", command=self._quick_add,
             height=36, width=130, corner_radius=8,
@@ -393,6 +403,15 @@ class TransactionsTab(ctk.CTkFrame):
 
         self._q_err = ctk.CTkLabel(qa, text="", font=F(11), text_color=T.RED, anchor="w")
         self._q_err.pack(fill="x", padx=14, pady=(0, 8))
+
+    def _toggle_q_expect(self) -> None:
+        self._q_expect_active = not self._q_expect_active
+        if self._q_expect_active:
+            self._q_expect_btn.configure(
+                fg_color=T.GOLD_DIM, text_color=T.GOLD, border_color=T.GOLD)
+        else:
+            self._q_expect_btn.configure(
+                fg_color=T.CARD2, text_color=T.MUTED, border_color=T.BORDER_L)
 
     def _quick_add(self) -> None:
         desc = self._q_desc.get().strip()
@@ -413,7 +432,8 @@ class TransactionsTab(ctk.CTkFrame):
         card_id = benefit_id = None
         if self._is_var_expense and hasattr(self, "_q_origin"):
             card_id, benefit_id = self._resolve_origin(self._q_origin.get())
-            if benefit_id is not None:
+            # Previsto não debita o saldo (só ao confirmar) → não valida aqui
+            if benefit_id is not None and not self._q_expect_active:
                 info  = self._benefit_info.get(benefit_id, {})
                 avail = float(info.get("balance", 0))
                 if amount > avail + 1e-9:
@@ -425,7 +445,8 @@ class TransactionsTab(ctk.CTkFrame):
 
         self._q_err.configure(text="")
         db.add_transaction(self.month_id, self.tx_type, desc, amount, category,
-                           card_id=card_id, benefit_id=benefit_id)
+                           card_id=card_id, benefit_id=benefit_id,
+                           is_expectation=self._q_expect_active)
         self._q_desc.delete(0, "end")
         self._q_amount.delete(0, "end")
         self._q_desc.focus()
