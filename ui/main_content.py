@@ -99,7 +99,9 @@ class MainContent(ctk.CTkFrame):
         content.grid_rowconfigure(0, weight=1)
         content.grid_columnconfigure(0, weight=1)
 
-        dash = Dashboard(content, self.month_id, on_investments=self._on_investments)
+        dash = Dashboard(content, self.month_id,
+                         on_investments=self._on_investments,
+                         on_change=self._on_dashboard_change)
         dash.grid(row=0, column=0, sticky="nsew")
         self._frames["dashboard"] = dash
 
@@ -173,6 +175,11 @@ class MainContent(ctk.CTkFrame):
         self._frames["dashboard"].refresh()
         # Gastos mudaram → o plano vs. realizado precisa recarregar na próxima visita
         self._stale_tabs.add("planejamento")
+
+    def _on_dashboard_change(self) -> None:
+        """Uma ação no dashboard (ex: pagar fatura) alterou lançamentos —
+        marca as demais abas para recarregar quando o usuário navegar até elas."""
+        self._stale_tabs.update(t for t in self._frames if t != "dashboard")
 
     def _export_csv(self) -> None:
         filename = self.month_name.replace(" ", "_") + ".csv"

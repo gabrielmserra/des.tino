@@ -274,12 +274,29 @@ class CardPresetsBar(ctk.CTkFrame):
 
     # ------------------------------------------------------------------
     def _pay_bill(self, card: dict, unpaid: float) -> None:
-        dlg = _PayBillDialog(self, card["name"], unpaid)
-        self.wait_window(dlg)
-        if dlg.result:
-            db.pay_card_bill(card["id"], self.month_id,
-                             dlg.result["amount"], dlg.result.get("note", ""))
-            self.refresh()
+        from ui.dialogs import ConfirmDialog, show_error
+        from utils.helpers import format_currency
+
+        def do_pay():
+            try:
+                db.settle_card_bill(card["id"], self.month_id,
+                                    card.get("closing_day", 1), card["name"])
+            except Exception as e:
+                show_error(self.winfo_toplevel(), "Erro ao pagar fatura", str(e)[:200])
+                return
+            self.refresh()   # re-renderiza os cartões e dispara o refresh da lista
+
+        ConfirmDialog(
+            self.winfo_toplevel(),
+            title="Pagar fatura?",
+            message=f"A fatura de {format_currency(unpaid)} do cartão "
+                    f"{card['name']} será paga.\n\n"
+                    "Um lançamento \"Pagamento fatura cartão de crédito\" entra em\n"
+                    "Saídas Variáveis (debitando o saldo) e o cartão é zerado.",
+            confirm_text="Pagar fatura",
+            on_confirm=do_pay,
+            danger=False,
+        )
 
     def _add_card(self) -> None:
         dlg = _CardDialog(self)

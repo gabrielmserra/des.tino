@@ -442,6 +442,66 @@ def pay_card_bill(card_id: int, month_id: int, amount: float, note: str = "") ->
     _bill_cache.pop(month_id, None)
 
 
+def _card_cycle_start(closing_day: int):
+    """Início do ciclo de faturamento atual (réplica de ui.credit_cards._cycle_start)."""
+    import calendar
+    from datetime import date
+    today = date.today()
+    if today.day >= closing_day:
+        try:
+            return date(today.year, today.month, closing_day)
+        except ValueError:
+            return date(today.year, today.month, 1)
+    if today.month == 1:
+        y, m = today.year - 1, 12
+    else:
+        y, m = today.year, today.month - 1
+    max_day = calendar.monthrange(y, m)[1]
+    return date(y, m, min(closing_day, max_day))
+
+
+def settle_card_bill(card_id: int, month_id: int, closing_day: int,
+                     card_name: str) -> float:
+    """Quita a fatura: soma as compras reais do ciclo, exclui esses lançamentos
+    e cria uma única saída 'Pagamento fatura cartão de crédito' que debita o
+    saldo. Retorna o valor pago (0.0 se não havia fatura em aberto)."""
+    from datetime import date
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    start   = _card_cycle_start(closing_day)
+
+    to_settle = []
+    for tx in get_transactions(month_id):
+        if (tx.get("card_id") != card_id or tx["type"] != "saida_variavel"
+                or tx.get("is_expectation")):
+            continue
+        raw = str(tx.get("created_at") or "")[:10]
+        try:
+            if date.fromisoformat(raw) >= start:
+                to_settle.append(tx)
+        except ValueError:
+            to_settle.append(tx)
+
+    total = sum(float(t["amount"] or 0) for t in to_settle)
+    if total <= 0:
+        return 0.0
+
+    for t in to_settle:
+        client.table("transactions").delete().eq("id", t["id"]).execute()
+
+    client.table("transactions").insert({
+        "month_id":    month_id,
+        "user_id":     user_id,
+        "type":        "saida_variavel",
+        "description": f"Pagamento fatura cartão de crédito — {card_name}",
+        "amount":      total,
+        "category":    "Outros",
+    }).execute()
+
+    _invalidate(month_id)
+    return total
+
+
 def clear_cache() -> None:
     """Limpa todo o cache (chamado no logout)."""
     _tx_cache.clear()

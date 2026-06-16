@@ -10,12 +10,14 @@ from utils.helpers import format_currency, MONTHS_PT
 
 class Dashboard(ctk.CTkScrollableFrame):
     def __init__(self, parent, month_id: int,
-                 on_investments: Optional[Callable] = None):
+                 on_investments: Optional[Callable] = None,
+                 on_change: Optional[Callable] = None):
         super().__init__(parent, fg_color=T.BG,
                          scrollbar_button_color=T.BORDER,
                          scrollbar_button_hover_color=T.MUTED)
         self.month_id        = month_id
         self._on_investments = on_investments
+        self._on_change      = on_change
         self._card_lbls: dict = {}
         self._build()
         self.refresh()
@@ -620,13 +622,30 @@ class Dashboard(ctk.CTkScrollableFrame):
                         x=0, y=0, relheight=1, relwidth=min(pct_used, 1.0))
 
     def _pay_bill(self, card: dict, unpaid: float) -> None:
-        from ui.credit_cards import _PayBillDialog
-        dlg = _PayBillDialog(self.winfo_toplevel(), card["name"], unpaid)
-        self.winfo_toplevel().wait_window(dlg)
-        if dlg.result:
-            db.pay_card_bill(card["id"], self.month_id,
-                             dlg.result["amount"], dlg.result.get("note", ""))
+        from ui.dialogs import ConfirmDialog, show_error
+
+        def do_pay():
+            try:
+                db.settle_card_bill(card["id"], self.month_id,
+                                    card.get("closing_day", 1), card["name"])
+            except Exception as e:
+                show_error(self.winfo_toplevel(), "Erro ao pagar fatura", str(e)[:200])
+                return
             self.refresh()
+            if self._on_change:
+                self._on_change()   # marca Saídas Variáveis / Planejamento p/ atualizar
+
+        ConfirmDialog(
+            self.winfo_toplevel(),
+            title="Pagar fatura?",
+            message=f"A fatura de {format_currency(unpaid)} do cartão "
+                    f"{card['name']} será paga.\n\n"
+                    "Um lançamento \"Pagamento fatura cartão de crédito\" entra em\n"
+                    "Saídas Variáveis (debitando o saldo) e o cartão é zerado.",
+            confirm_text="Pagar fatura",
+            on_confirm=do_pay,
+            danger=False,
+        )
 
     # ------------------------------------------------------------------
     def _draw_savings(self, s: dict) -> None:
