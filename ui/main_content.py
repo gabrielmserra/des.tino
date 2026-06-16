@@ -68,29 +68,30 @@ class MainContent(ctk.CTkFrame):
             text_color=T.TEXT, font=F(13, "bold"),
         ).grid(row=0, column=1, sticky="e")
 
-        # ── Tab bar (scrollável horizontalmente) ──────────────────────
-        tab_bar = ctk.CTkScrollableFrame(
+        # ── Tab bar (colunas de largura igual, sem scroll) ────────────
+        tab_bar = ctk.CTkFrame(
             self,
             fg_color=T.CARD,
             border_width=1, border_color=T.BORDER, corner_radius=10,
-            orientation="horizontal",
-            height=50,
-            scrollbar_button_color=T.BORDER_L,
-            scrollbar_button_hover_color=T.MUTED,
+            height=48,
         )
         tab_bar.grid(row=1, column=0, sticky="ew", padx=28, pady=(20, 0))
+        tab_bar.grid_propagate(False)
+        tab_bar.grid_rowconfigure(0, weight=1)
+        for i in range(len(_TABS)):
+            tab_bar.grid_columnconfigure(i, weight=1)
 
-        for tab_id, label in _TABS:
+        for i, (tab_id, label) in enumerate(_TABS):
             btn = ctk.CTkButton(
                 tab_bar,
                 text=label,
                 command=lambda t=tab_id: self._switch_tab(t),
-                height=32, corner_radius=7,
+                height=34, corner_radius=7,
                 fg_color="transparent", hover_color=T.CARD2,
-                text_color=T.MUTED, font=F(12),
+                text_color=T.MUTED, font=F(11),
                 border_width=0,
             )
-            btn.pack(side="left", padx=2, pady=4)
+            btn.grid(row=0, column=i, sticky="ew", padx=3, pady=6)
             self._tab_btns[tab_id] = btn
 
         # ── Conteúdo das tabs ─────────────────────────────────────────
@@ -147,12 +148,12 @@ class MainContent(ctk.CTkFrame):
             if t == tab_id:
                 btn.configure(
                     fg_color=T.BLUE, text_color="#ffffff",
-                    font=F(12, "bold"), hover_color=T.BLUE,
+                    font=F(11, "bold"), hover_color=T.BLUE,
                 )
             else:
                 btn.configure(
                     fg_color="transparent", text_color=T.MUTED,
-                    font=F(12), hover_color=T.CARD2,
+                    font=F(11), hover_color=T.CARD2,
                 )
         self._active_tab = tab_id
 
