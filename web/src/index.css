@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+/* Paleta base (tema Esmeralda do app desktop) */
+:root {
+  --bg: #0d1f1a;
+  --card: #112318;
+  --card2: #162d1e;
+  --border: #1a3d2a;
+  --border-l: #224d35;
+  --text: #e8f5f0;
+  --muted: #7aaf95;
+  --primary: #2eaf7d;
+  --primary-hover: #249a6c;
+  --accent: #f5a623;
+  --red: #e05252;
+  --violet: #9b72f5;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
