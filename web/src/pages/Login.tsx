@@ -14,7 +14,14 @@ export function Login() {
     setLoading(true)
     const { error } = await signIn(email.trim(), password)
     setLoading(false)
-    if (error) setError('E-mail ou senha inválidos.')
+    if (error) {
+      // Mostra a causa real para diagnóstico (credencial x chave/config x rede)
+      if (/invalid login credentials/i.test(error)) {
+        setError('E-mail ou senha inválidos.')
+      } else {
+        setError(error)
+      }
+    }
   }
 
   return (
