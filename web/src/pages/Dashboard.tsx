@@ -1,37 +1,157 @@
-import { useAuth } from '../lib/auth'
+import { useQuery } from '@tanstack/react-query'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
+import { useMonths } from '../lib/month'
+import {
+  fetchMonthSummary,
+  fetchExpensesByCategory,
+  fetchBenefitTotal,
+  fetchTotalInvestments,
+} from '../lib/api'
+import { formatCurrency, todayLabel } from '../lib/format'
 
-// Placeholder da Fase 0 — a Fase 1 traz KPIs, gráfico e lista de lançamentos.
+const PIE_COLORS = [
+  '#E05252', '#F5A623', '#9B72F5', '#2EAF7D',
+  '#22d3ee', '#4A9EFF', '#fb923c', '#e879f9',
+]
+
+function Kpi({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div
+      className="rounded-2xl border p-4"
+      style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+    >
+      <div className="h-1 w-8 rounded" style={{ background: color }} />
+      <p className="mt-2 text-[10px] font-bold" style={{ color: 'var(--muted)' }}>
+        {label}
+      </p>
+      <p className="mt-1 text-lg font-bold" style={{ color }}>
+        {value}
+      </p>
+    </div>
+  )
+}
+
+function Centered({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex h-full items-center justify-center p-8 text-center">
+      <p style={{ color: 'var(--muted)' }}>{children}</p>
+    </div>
+  )
+}
+
 export function Dashboard() {
-  const { session, signOut } = useAuth()
-  const email = session?.user.email ?? ''
+  const { selectedId, selected, loading } = useMonths()
+
+  const summary = useQuery({
+    queryKey: ['summary', selectedId],
+    queryFn: () => fetchMonthSummary(selectedId!),
+    enabled: selectedId != null,
+  })
+  const cats = useQuery({
+    queryKey: ['cats', selectedId],
+    queryFn: () => fetchExpensesByCategory(selectedId!),
+    enabled: selectedId != null,
+  })
+  const benefit = useQuery({ queryKey: ['benefitTotal'], queryFn: fetchBenefitTotal })
+  const totalInv = useQuery({ queryKey: ['totalInv'], queryFn: fetchTotalInvestments })
+
+  if (loading) return <Centered>Carregando…</Centered>
+  if (selectedId == null)
+    return <Centered>Nenhum período encontrado. Crie um no app desktop.</Centered>
+
+  const s = summary.data
+  const saldoColor = (s?.saldo ?? 0) >= 0 ? 'var(--primary)' : 'var(--red)'
+  const val = (n: number | undefined) => (s ? formatCurrency(n ?? 0) : '…')
+
+  const pieData = (cats.data ?? []).map((c) => ({ name: c.category, value: c.total }))
 
   return (
-    <div className="flex min-h-full flex-col p-6">
-      <header className="mb-8 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">
-          des<span style={{ color: 'var(--primary)' }}>.</span>tino
-        </h1>
-        <button
-          onClick={() => signOut()}
-          className="rounded-lg border px-3 py-2 text-sm"
-          style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
-        >
-          Sair
-        </button>
-      </header>
+    <div className="p-4">
+      <div className="mb-4">
+        <h1 className="text-2xl font-bold">{selected?.name}</h1>
+        <p className="text-xs" style={{ color: 'var(--muted)' }}>
+          {todayLabel()}
+        </p>
+      </div>
 
+      {/* Saldo em destaque */}
       <div
-        className="rounded-2xl border p-6"
+        className="mb-3 rounded-2xl border p-5"
         style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
       >
-        <p className="text-sm" style={{ color: 'var(--muted)' }}>
-          Conectado como
+        <p className="text-[11px] font-bold" style={{ color: 'var(--muted)' }}>
+          SALDO DO MÊS
         </p>
-        <p className="text-lg font-semibold">{email}</p>
-        <p className="mt-4 text-sm" style={{ color: 'var(--muted)' }}>
-          ✅ Login funcionando e vinculado ao mesmo Supabase do app. O dashboard
-          com saldo, KPIs e lançamentos chega na Fase 1.
+        <p className="mt-1 text-3xl font-bold" style={{ color: saldoColor }}>
+          {val(s?.saldo)}
         </p>
+        {s?.has_expectations && (
+          <p className="mt-1 text-xs" style={{ color: 'var(--accent)' }}>
+            📋 Projetado com previstos: {formatCurrency(s.saldo_projetado)}
+          </p>
+        )}
+      </div>
+
+      {/* Grade de KPIs */}
+      <div className="mb-3 grid grid-cols-2 gap-3">
+        <Kpi label="ENTRADAS" value={val(s?.total_entradas)} color="var(--primary)" />
+        <Kpi label="SAÍDAS" value={val(s?.total_saidas)} color="var(--red)" />
+        <Kpi
+          label="SALDO VR/VA"
+          value={benefit.data != null ? formatCurrency(benefit.data) : '…'}
+          color="var(--accent)"
+        />
+        <Kpi label="INVESTIMENTOS MÊS" value={val(s?.total_investimentos)} color="var(--violet)" />
+        <Kpi
+          label="INVESTIMENTOS TOTAIS"
+          value={totalInv.data != null ? formatCurrency(totalInv.data) : '…'}
+          color="var(--violet)"
+        />
+      </div>
+
+      {/* Gráfico de categorias */}
+      <div
+        className="rounded-2xl border p-4"
+        style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+      >
+        <p className="mb-2 text-sm font-bold">Despesas por categoria</p>
+        {pieData.length === 0 ? (
+          <p className="py-8 text-center text-sm" style={{ color: 'var(--muted)' }}>
+            Nenhuma despesa registrada.
+          </p>
+        ) : (
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie
+                data={pieData}
+                dataKey="value"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                outerRadius={90}
+                strokeWidth={2}
+                stroke="var(--card)"
+              >
+                {pieData.map((_, i) => (
+                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip
+                formatter={(v) => formatCurrency(Number(v))}
+                contentStyle={{
+                  background: 'var(--card2)',
+                  border: '1px solid var(--border-l)',
+                  borderRadius: 8,
+                  color: 'var(--text)',
+                }}
+              />
+              <Legend
+                wrapperStyle={{ fontSize: 11, color: 'var(--muted)' }}
+                formatter={(v: string) => <span style={{ color: 'var(--muted)' }}>{v}</span>}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        )}
       </div>
     </div>
   )

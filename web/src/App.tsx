@@ -1,7 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './lib/auth'
+import { MonthProvider } from './lib/month'
+import { Layout } from './components/Layout'
 import { Login } from './pages/Login'
 import { Dashboard } from './pages/Dashboard'
+import { Transactions } from './pages/Transactions'
 
 function Splash() {
   return (
@@ -23,11 +26,21 @@ export default function App() {
           path="/login"
           element={session ? <Navigate to="/" replace /> : <Login />}
         />
-        <Route
-          path="/"
-          element={session ? <Dashboard /> : <Navigate to="/login" replace />}
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {session ? (
+          <Route
+            element={
+              <MonthProvider>
+                <Layout />
+              </MonthProvider>
+            }
+          >
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/lancamentos" element={<Transactions />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        ) : (
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        )}
       </Routes>
     </BrowserRouter>
   )
