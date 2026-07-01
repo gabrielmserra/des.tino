@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useMonths } from '../lib/month'
+import { useTxForm } from '../lib/txform'
 import { fetchTransactions } from '../lib/api'
 import { formatCurrency } from '../lib/format'
 import type { Transaction, TxType } from '../lib/types'
@@ -22,6 +23,7 @@ function origemTag(t: Transaction): string | null {
 
 export function Transactions() {
   const { selectedId, selected } = useMonths()
+  const { openEdit } = useTxForm()
   const [filter, setFilter] = useState<Filter>('todos')
 
   const { data, isLoading } = useQuery({
@@ -81,7 +83,8 @@ export function Transactions() {
             return (
               <li
                 key={t.id}
-                className="flex items-center justify-between rounded-xl border p-3"
+                onClick={() => openEdit(t)}
+                className="flex cursor-pointer items-center justify-between rounded-xl border p-3 active:opacity-70"
                 style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
               >
                 <div className="min-w-0 flex-1">

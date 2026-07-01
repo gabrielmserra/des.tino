@@ -53,3 +53,40 @@ export async function fetchTotalInvestments(): Promise<number> {
   if (error) throw error
   return Number(data ?? 0)
 }
+
+// ── Escrita (via RPC centralizada no Postgres) ───────────────────────
+export type TxInput = {
+  type: string
+  description: string
+  amount: number
+  category: string
+  is_expectation: boolean
+}
+
+export async function addTransaction(monthId: number, tx: TxInput): Promise<void> {
+  const { error } = await supabase.rpc('add_transaction', {
+    p_month_id: monthId,
+    p_type: tx.type,
+    p_description: tx.description,
+    p_amount: tx.amount,
+    p_category: tx.category,
+    p_is_expectation: tx.is_expectation,
+  })
+  if (error) throw error
+}
+
+export async function updateTransaction(id: number, tx: TxInput): Promise<void> {
+  const { error } = await supabase.rpc('update_transaction', {
+    p_id: id,
+    p_description: tx.description,
+    p_amount: tx.amount,
+    p_category: tx.category,
+    p_is_expectation: tx.is_expectation,
+  })
+  if (error) throw error
+}
+
+export async function deleteTransaction(id: number): Promise<void> {
+  const { error } = await supabase.rpc('delete_transaction', { p_id: id })
+  if (error) throw error
+}

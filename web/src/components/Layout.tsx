@@ -1,6 +1,8 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useMonths } from '../lib/month'
 import { useAuth } from '../lib/auth'
+import { useTxForm } from '../lib/txform'
+import { TxForm } from './TxForm'
 
 function MonthSelector() {
   const { months, selectedId, setSelectedId } = useMonths()
@@ -32,6 +34,7 @@ const tabStyle = ({ isActive }: { isActive: boolean }) => ({
 
 export function Layout() {
   const { signOut } = useAuth()
+  const { openNew } = useTxForm()
 
   return (
     <div className="flex min-h-full flex-col">
@@ -59,6 +62,19 @@ export function Layout() {
       <main className="flex-1 pb-20">
         <Outlet />
       </main>
+
+      {/* Botão flutuante: novo lançamento */}
+      <button
+        onClick={openNew}
+        aria-label="Novo lançamento"
+        className="fixed bottom-20 right-5 z-20 flex h-14 w-14 items-center justify-center rounded-full text-3xl font-light text-white shadow-lg"
+        style={{ background: 'var(--primary)' }}
+      >
+        +
+      </button>
+
+      {/* Formulário (modal) */}
+      <TxForm />
 
       {/* Navegação inferior */}
       <nav

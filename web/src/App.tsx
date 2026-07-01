@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './lib/auth'
 import { MonthProvider } from './lib/month'
+import { TxFormProvider } from './lib/txform'
 import { Layout } from './components/Layout'
 import { Login } from './pages/Login'
 import { Dashboard } from './pages/Dashboard'
@@ -30,7 +31,9 @@ export default function App() {
           <Route
             element={
               <MonthProvider>
-                <Layout />
+                <TxFormProvider>
+                  <Layout />
+                </TxFormProvider>
               </MonthProvider>
             }
           >
