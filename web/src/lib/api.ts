@@ -9,6 +9,9 @@ import type {
   BenefitBasic,
   BenefitOverview,
   RenewalSummary,
+  Plan,
+  PlanItem,
+  PlanItemInput,
 } from './types'
 
 export async function fetchMonths(): Promise<Month[]> {
@@ -251,4 +254,100 @@ export async function applyAllDueRenewals(): Promise<RenewalSummary[]> {
   const { data, error } = await supabase.rpc('apply_all_due_renewals')
   if (error) throw error
   return (data ?? []) as RenewalSummary[]
+}
+
+// ── Planejamento Mensal ───────────────────────────────────────────────
+// Leituras diretas (sem regra de negócio); investimentos/renda usam RPCs
+// leves (cálculo simples). save_plan é RPC (upsert + fecha planos antigos).
+export async function fetchPlan(monthId: number): Promise<Plan | null> {
+  const { data, error } = await supabase
+    .from('monthly_plans')
+    .select('*')
+    .eq('month_id', monthId)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
+export async function fetchPlanItems(planId: number): Promise<PlanItem[]> {
+  const { data, error } = await supabase
+    .from('monthly_plan_items')
+    .select('*')
+    .eq('plan_id', planId)
+    .order('planned_amount', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function fetchMonthInvestmentNet(monthId: number): Promise<number> {
+  const { data, error } = await supabase.rpc('get_month_investment_net', {
+    p_month_id: monthId,
+  })
+  if (error) throw error
+  return Number(data ?? 0)
+}
+
+export async function fetchMonthIncome(
+  monthId: number,
+  includeExpectations = false,
+): Promise<number> {
+  const { data, error } = await supabase.rpc('get_month_income', {
+    p_month_id: monthId,
+    p_include_expectations: includeExpectations,
+  })
+  if (error) throw error
+  return Number(data ?? 0)
+}
+
+/** Realizado por categoria: gastos + aporte líquido (mesma regra do desktop). */
+export async function fetchPlanRealized(monthId: number): Promise<Record<string, number>> {
+  const [cats, invNet] = await Promise.all([
+    fetchExpensesByCategory(monthId),
+    fetchMonthInvestmentNet(monthId),
+  ])
+  const realized: Record<string, number> = {}
+  for (const c of cats) realized[c.category] = c.total
+  if (invNet > 0) realized['Investimentos'] = invNet
+  return realized
+}
+
+/** Até 3 meses anteriores ao mês dado (mais recente primeiro), p/ sugestão. */
+export function priorMonths(months: Month[], current: Month, n = 3): Month[] {
+  const key = current.year * 100 + current.month
+  return months.filter((m) => m.year * 100 + m.month < key).slice(0, n)
+}
+
+export async function fetchPlanHistory(
+  months: Month[],
+  current: Month,
+): Promise<{ expensesHistory: Record<string, number>[]; incomeHistory: number[] }> {
+  const prior = priorMonths(months, current, 3)
+  const expensesHistory: Record<string, number>[] = []
+  const incomeHistory: number[] = []
+  for (const m of prior) {
+    const [cats, invNet, income] = await Promise.all([
+      fetchExpensesByCategory(m.id),
+      fetchMonthInvestmentNet(m.id),
+      fetchMonthIncome(m.id),
+    ])
+    const catTotals: Record<string, number> = {}
+    for (const c of cats) catTotals[c.category] = c.total
+    if (invNet > 0) catTotals['Investimentos'] = invNet
+    expensesHistory.push(catTotals)
+    incomeHistory.push(income)
+  }
+  return { expensesHistory, incomeHistory }
+}
+
+export async function savePlan(
+  monthId: number,
+  income: number,
+  items: PlanItemInput[],
+): Promise<void> {
+  const { error } = await supabase.rpc('save_plan', {
+    p_month_id: monthId,
+    p_income: income,
+    p_items: items,
+  })
+  if (error) throw error
 }

@@ -141,6 +141,9 @@ export function Layout() {
         <NavLink to="/" end style={tabStyle}>
           📊<br />Dashboard
         </NavLink>
+        <NavLink to="/planejamento" style={tabStyle}>
+          📋<br />Plano
+        </NavLink>
         <NavLink to="/lancamentos" style={tabStyle}>
           📄<br />Lançamentos
         </NavLink>

@@ -66,6 +66,32 @@ export type BenefitBasic = {
   balance: number
 }
 
+export type Plan = {
+  id: number
+  month_id: number
+  income: number
+  status: 'ativo' | 'fechado'
+  updated_at: string
+}
+
+export type PlanItem = {
+  id: number
+  plan_id: number
+  category: string
+  suggested_amount: number | null
+  planned_amount: number
+  is_eventual: boolean
+  is_mandatory: boolean
+}
+
+export type PlanItemInput = {
+  category: string
+  planned_amount: number
+  suggested_amount: number | null
+  is_eventual: boolean
+  is_mandatory: boolean
+}
+
 export type BenefitOverview = {
   id: number
   name: string
