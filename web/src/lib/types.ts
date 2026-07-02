@@ -20,6 +20,8 @@ export type Transaction = {
   category: string | null
   card_id: number | null
   benefit_id: number | null
+  debit_card_id: number | null
+  payment_method: string | null
   is_expectation: boolean
   created_at: string
 }
@@ -64,6 +66,19 @@ export type BenefitBasic = {
   benefit_type: string
   color: string
   balance: number
+}
+
+export type DebitCard = {
+  id: number
+  name: string
+  color: string
+}
+
+export type DebitCardOverview = {
+  id: number
+  name: string
+  color: string
+  spent: number
 }
 
 export type Plan = {

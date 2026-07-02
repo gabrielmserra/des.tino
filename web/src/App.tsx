@@ -7,7 +7,6 @@ import { Login } from './pages/Login'
 import { Dashboard } from './pages/Dashboard'
 import { Transactions } from './pages/Transactions'
 import { Cards } from './pages/Cards'
-import { Benefits } from './pages/Benefits'
 import { Planning } from './pages/Planning'
 
 function Splash() {
@@ -43,7 +42,7 @@ export default function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/lancamentos" element={<Transactions />} />
             <Route path="/cartoes" element={<Cards />} />
-            <Route path="/beneficios" element={<Benefits />} />
+            <Route path="/beneficios" element={<Navigate to="/cartoes" replace />} />
             <Route path="/planejamento" element={<Planning />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

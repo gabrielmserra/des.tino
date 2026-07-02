@@ -8,6 +8,7 @@ import {
   deleteTransaction,
   fetchCardsBasic,
   fetchBenefitsBasic,
+  fetchDebitCardsBasic,
   type TxInput,
 } from '../lib/api'
 import { CATEGORIES } from '../lib/constants'
@@ -60,13 +61,14 @@ export function TxForm() {
   const [amount, setAmount] = useState('')
   const [category, setCategory] = useState('Outros')
   const [previsto, setPrevisto] = useState(false)
-  const [origin, setOrigin] = useState('nenhum') // 'nenhum' | 'card:<id>' | 'benefit:<id>'
+  const [origin, setOrigin] = useState('nenhum') // 'nenhum' | 'pix' | 'card:<id>' | 'debit:<id>' | 'benefit:<id>'
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  // Origem (cartão/VR-VA) só existe para saída variável, igual ao desktop
+  // Origem (cartão/débito/pix/VR-VA) só existe para saída variável, igual ao desktop
   const showOrigin = flow === 'saida' && freq === 'variavel'
   const cardsQ = useQuery({ queryKey: ['cardsBasic'], queryFn: fetchCardsBasic })
+  const debitCardsQ = useQuery({ queryKey: ['debitCardsBasic'], queryFn: fetchDebitCardsBasic })
   const benefitsQ = useQuery({ queryKey: ['benefitsBasic'], queryFn: fetchBenefitsBasic })
 
   // Preenche ao abrir (novo ou edição)
@@ -82,6 +84,8 @@ export function TxForm() {
       setPrevisto(t.is_expectation)
       if (t.benefit_id) setOrigin(`benefit:${t.benefit_id}`)
       else if (t.card_id) setOrigin(`card:${t.card_id}`)
+      else if (t.debit_card_id) setOrigin(`debit:${t.debit_card_id}`)
+      else if (t.payment_method === 'pix') setOrigin('pix')
       else setOrigin('nenhum')
     } else {
       setFlow('saida'); setFreq('variavel'); setDescription(''); setAmount('')
@@ -103,6 +107,8 @@ export function TxForm() {
 
     const cardId = showOrigin && origin.startsWith('card:') ? Number(origin.split(':')[1]) : null
     const benefitId = showOrigin && origin.startsWith('benefit:') ? Number(origin.split(':')[1]) : null
+    const debitCardId = showOrigin && origin.startsWith('debit:') ? Number(origin.split(':')[1]) : null
+    const paymentMethod = showOrigin && origin === 'pix' ? 'pix' : null
 
     // Saldo de VR/VA não pode ficar negativo — bloqueia (gastos reais, não previsões)
     if (benefitId != null && !previsto) {
@@ -128,6 +134,8 @@ export function TxForm() {
       is_expectation: previsto,
       card_id: cardId,
       benefit_id: benefitId,
+      debit_card_id: debitCardId,
+      payment_method: paymentMethod,
     }
     setBusy(true)
     try {
@@ -165,6 +173,9 @@ export function TxForm() {
       qc.invalidateQueries({ queryKey: ['totalInv'] }),
       qc.invalidateQueries({ queryKey: ['cardsOverview'] }),
       qc.invalidateQueries({ queryKey: ['benefitsBasic'] }),
+      qc.invalidateQueries({ queryKey: ['benefitsOverview'] }),
+      qc.invalidateQueries({ queryKey: ['debitCardsBasic'] }),
+      qc.invalidateQueries({ queryKey: ['debitCardsOverview'] }),
     ])
   }
 
@@ -245,9 +256,15 @@ export function TxForm() {
               style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
             >
               <option value="nenhum">Nenhum</option>
+              <option value="pix">💠 Pix</option>
               {(cardsQ.data ?? []).map((c) => (
                 <option key={`card:${c.id}`} value={`card:${c.id}`}>
                   {c.name}
+                </option>
+              ))}
+              {(debitCardsQ.data ?? []).map((d) => (
+                <option key={`debit:${d.id}`} value={`debit:${d.id}`}>
+                  {d.name} (débito)
                 </option>
               ))}
               {(benefitsQ.data ?? []).map((b) => (

@@ -12,6 +12,8 @@ import type {
   Plan,
   PlanItem,
   PlanItemInput,
+  DebitCard,
+  DebitCardOverview,
 } from './types'
 
 export async function fetchMonths(): Promise<Month[]> {
@@ -76,6 +78,8 @@ export type TxInput = {
   is_expectation: boolean
   card_id?: number | null
   benefit_id?: number | null
+  debit_card_id?: number | null
+  payment_method?: string | null
 }
 
 export async function addTransaction(monthId: number, tx: TxInput): Promise<void> {
@@ -88,6 +92,8 @@ export async function addTransaction(monthId: number, tx: TxInput): Promise<void
     p_is_expectation: tx.is_expectation,
     p_card_id: tx.card_id ?? null,
     p_benefit_id: tx.benefit_id ?? null,
+    p_debit_card_id: tx.debit_card_id ?? null,
+    p_payment_method: tx.payment_method ?? null,
   })
   if (error) throw error
 }
@@ -101,6 +107,8 @@ export async function updateTransaction(id: number, tx: TxInput): Promise<void> 
     p_is_expectation: tx.is_expectation,
     p_card_id: tx.card_id ?? null,
     p_benefit_id: tx.benefit_id ?? null,
+    p_debit_card_id: tx.debit_card_id ?? null,
+    p_payment_method: tx.payment_method ?? null,
   })
   if (error) throw error
 }
@@ -349,5 +357,45 @@ export async function savePlan(
     p_income: income,
     p_items: items,
   })
+  if (error) throw error
+}
+
+// ── Cartões de débito (exclusivo web/mobile) ─────────────────────────
+// Entidade simples (só nome/cor) — sem fatura/limite/vencimento, por
+// isso CRUD direto na tabela. O gasto do mês é RPC (soma simples).
+export type DebitCardInput = {
+  name: string
+  color: string
+}
+
+export async function fetchDebitCardsBasic(): Promise<DebitCard[]> {
+  const { data, error } = await supabase
+    .from('debit_cards')
+    .select('id, name, color')
+    .order('created_at')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function fetchDebitCardsOverview(monthId: number): Promise<DebitCardOverview[]> {
+  const { data, error } = await supabase.rpc('get_debit_cards_overview', {
+    p_month_id: monthId,
+  })
+  if (error) throw error
+  return (data ?? []) as DebitCardOverview[]
+}
+
+export async function createDebitCard(input: DebitCardInput): Promise<void> {
+  const { error } = await supabase.from('debit_cards').insert(input)
+  if (error) throw error
+}
+
+export async function updateDebitCard(id: number, input: DebitCardInput): Promise<void> {
+  const { error } = await supabase.from('debit_cards').update(input).eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteDebitCard(id: number): Promise<void> {
+  const { error } = await supabase.from('debit_cards').delete().eq('id', id)
   if (error) throw error
 }

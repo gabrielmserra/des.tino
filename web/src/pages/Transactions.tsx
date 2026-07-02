@@ -18,6 +18,8 @@ type Filter = 'todos' | 'entradas' | 'saidas'
 function origemTag(t: Transaction): string | null {
   if (t.benefit_id) return 'VR/VA'
   if (t.card_id) return 'Cartão'
+  if (t.debit_card_id) return 'Débito'
+  if (t.payment_method === 'pix') return 'Pix'
   return null
 }
 
