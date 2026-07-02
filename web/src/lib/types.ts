@@ -42,3 +42,28 @@ export type CategoryTotal = {
   category: string
   total: number
 }
+
+export type Card = {
+  id: number
+  name: string
+  limit: number
+  due_day: number
+  closing_day: number
+  color: string
+}
+
+export type CardOverview = {
+  id: number
+  name: string
+  card_limit: number
+  due_day: number
+  closing_day: number
+  color: string
+  spent: number
+  paid: number
+  unpaid: number
+  available: number | null
+  days_until_closing: number
+  days_until_due: number
+  cycle_open: boolean
+}

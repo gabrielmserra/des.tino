@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Month, MonthSummary, CategoryTotal, Transaction } from './types'
+import type { Month, MonthSummary, CategoryTotal, Transaction, CardOverview } from './types'
 
 export async function fetchMonths(): Promise<Month[]> {
   const { data, error } = await supabase
@@ -89,4 +89,63 @@ export async function updateTransaction(id: number, tx: TxInput): Promise<void> 
 export async function deleteTransaction(id: number): Promise<void> {
   const { error } = await supabase.rpc('delete_transaction', { p_id: id })
   if (error) throw error
+}
+
+// ── Cartões de crédito ────────────────────────────────────────────────
+// CRUD simples via tabela (sem regra de negócio → sem RPC). O overview
+// (gasto/disponível/dias) e o pagamento de fatura são RPCs (têm cálculo
+// e efeito colateral, precisam ser a mesma fonte de verdade do desktop).
+export type CardInput = {
+  name: string
+  limit: number
+  due_day: number
+  closing_day: number
+  color: string
+}
+
+export async function fetchCardsOverview(monthId: number): Promise<CardOverview[]> {
+  const { data, error } = await supabase.rpc('get_cards_overview', {
+    p_month_id: monthId,
+  })
+  if (error) throw error
+  return (data ?? []) as CardOverview[]
+}
+
+export async function createCard(card: CardInput): Promise<void> {
+  const { error } = await supabase.from('credit_cards').insert({
+    name: card.name,
+    limit: card.limit,
+    due_day: card.due_day,
+    closing_day: card.closing_day,
+    color: card.color,
+  })
+  if (error) throw error
+}
+
+export async function updateCard(id: number, card: CardInput): Promise<void> {
+  const { error } = await supabase
+    .from('credit_cards')
+    .update({
+      name: card.name,
+      limit: card.limit,
+      due_day: card.due_day,
+      closing_day: card.closing_day,
+      color: card.color,
+    })
+    .eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteCard(id: number): Promise<void> {
+  const { error } = await supabase.from('credit_cards').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function payCardBill(cardId: number, monthId: number): Promise<number> {
+  const { data, error } = await supabase.rpc('pay_card_bill', {
+    p_card_id: cardId,
+    p_month_id: monthId,
+  })
+  if (error) throw error
+  return Number(data ?? 0)
 }
