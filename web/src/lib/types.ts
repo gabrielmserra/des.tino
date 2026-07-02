@@ -52,6 +52,20 @@ export type Card = {
   color: string
 }
 
+export type CardBasic = {
+  id: number
+  name: string
+  color: string
+}
+
+export type BenefitBasic = {
+  id: number
+  name: string
+  benefit_type: string
+  color: string
+  balance: number
+}
+
 export type CardOverview = {
   id: number
   name: string

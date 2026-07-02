@@ -1,5 +1,13 @@
 import { supabase } from './supabase'
-import type { Month, MonthSummary, CategoryTotal, Transaction, CardOverview } from './types'
+import type {
+  Month,
+  MonthSummary,
+  CategoryTotal,
+  Transaction,
+  CardOverview,
+  CardBasic,
+  BenefitBasic,
+} from './types'
 
 export async function fetchMonths(): Promise<Month[]> {
   const { data, error } = await supabase
@@ -61,6 +69,8 @@ export type TxInput = {
   amount: number
   category: string
   is_expectation: boolean
+  card_id?: number | null
+  benefit_id?: number | null
 }
 
 export async function addTransaction(monthId: number, tx: TxInput): Promise<void> {
@@ -71,6 +81,8 @@ export async function addTransaction(monthId: number, tx: TxInput): Promise<void
     p_amount: tx.amount,
     p_category: tx.category,
     p_is_expectation: tx.is_expectation,
+    p_card_id: tx.card_id ?? null,
+    p_benefit_id: tx.benefit_id ?? null,
   })
   if (error) throw error
 }
@@ -82,6 +94,8 @@ export async function updateTransaction(id: number, tx: TxInput): Promise<void> 
     p_amount: tx.amount,
     p_category: tx.category,
     p_is_expectation: tx.is_expectation,
+    p_card_id: tx.card_id ?? null,
+    p_benefit_id: tx.benefit_id ?? null,
   })
   if (error) throw error
 }
@@ -139,6 +153,26 @@ export async function updateCard(id: number, card: CardInput): Promise<void> {
 export async function deleteCard(id: number): Promise<void> {
   const { error } = await supabase.from('credit_cards').delete().eq('id', id)
   if (error) throw error
+}
+
+// Lista leve p/ o seletor de origem no formulário de lançamento
+export async function fetchCardsBasic(): Promise<CardBasic[]> {
+  const { data, error } = await supabase
+    .from('credit_cards')
+    .select('id, name, color')
+    .order('created_at')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function fetchBenefitsBasic(): Promise<BenefitBasic[]> {
+  const { data, error } = await supabase
+    .from('benefit_cards')
+    .select('id, name, benefit_type, color, balance')
+    .is('archived_at', null)
+    .order('created_at')
+  if (error) throw error
+  return (data ?? []).map((b) => ({ ...b, balance: Number(b.balance) }))
 }
 
 export async function payCardBill(cardId: number, monthId: number): Promise<number> {
