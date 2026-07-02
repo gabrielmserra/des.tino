@@ -1,8 +1,13 @@
 import { NavLink, Outlet } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useMonths } from '../lib/month'
 import { useAuth } from '../lib/auth'
 import { useTxForm } from '../lib/txform'
 import { TxForm } from './TxForm'
+import { applyAllDueRenewals } from '../lib/api'
+import { formatCurrency } from '../lib/format'
+import type { RenewalSummary } from '../lib/types'
 
 function MonthSelector() {
   const { months, selectedId, setSelectedId } = useMonths()
@@ -32,9 +37,57 @@ const tabStyle = ({ isActive }: { isActive: boolean }) => ({
   fontWeight: 600,
 })
 
+// Roda uma vez por sessão do site (igual ao app desktop na abertura): aplica
+// renovações de VR/VA pendentes e mostra um toast quando algo foi renovado.
+function useRenewalCheck() {
+  const qc = useQueryClient()
+  const [summary, setSummary] = useState<RenewalSummary[] | null>(null)
+  const ranRef = useRef(false)
+
+  useEffect(() => {
+    if (ranRef.current) return
+    ranRef.current = true
+    applyAllDueRenewals()
+      .then((result) => {
+        if (result.length > 0) {
+          setSummary(result)
+          qc.invalidateQueries({ queryKey: ['benefitsOverview'] })
+          qc.invalidateQueries({ queryKey: ['benefitsBasic'] })
+          qc.invalidateQueries({ queryKey: ['benefitTotal'] })
+        }
+      })
+      .catch(() => {})
+  }, [qc])
+
+  return summary
+}
+
+function RenewalToast({ summary, onDismiss }: { summary: RenewalSummary[]; onDismiss: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 6000)
+    return () => clearTimeout(t)
+  }, [onDismiss])
+
+  const text = summary
+    .map((s) => `${s.name} (${s.benefit_type}): +${formatCurrency(s.total)}${s.count > 1 ? ` (${s.count}x)` : ''}`)
+    .join('  •  ')
+
+  return (
+    <div
+      className="fixed left-1/2 top-16 z-30 w-[92%] max-w-md -translate-x-1/2 rounded-xl border p-3 text-center text-xs font-bold shadow-lg"
+      style={{ background: 'var(--primary)', borderColor: 'var(--primary)', color: '#fff' }}
+      onClick={onDismiss}
+    >
+      🔄 Benefício renovado: {text}
+    </div>
+  )
+}
+
 export function Layout() {
   const { signOut } = useAuth()
   const { openNew } = useTxForm()
+  const renewalSummary = useRenewalCheck()
+  const [showToast, setShowToast] = useState(true)
 
   return (
     <div className="flex min-h-full flex-col">
@@ -57,6 +110,10 @@ export function Layout() {
           </button>
         </div>
       </header>
+
+      {renewalSummary && renewalSummary.length > 0 && showToast && (
+        <RenewalToast summary={renewalSummary} onDismiss={() => setShowToast(false)} />
+      )}
 
       {/* Conteúdo */}
       <main className="flex-1 pb-20">
@@ -89,6 +146,9 @@ export function Layout() {
         </NavLink>
         <NavLink to="/cartoes" style={tabStyle}>
           💳<br />Cartões
+        </NavLink>
+        <NavLink to="/beneficios" style={tabStyle}>
+          🍽️<br />VR/VA
         </NavLink>
       </nav>
     </div>

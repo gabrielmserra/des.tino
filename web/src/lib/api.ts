@@ -7,6 +7,8 @@ import type {
   CardOverview,
   CardBasic,
   BenefitBasic,
+  BenefitOverview,
+  RenewalSummary,
 } from './types'
 
 export async function fetchMonths(): Promise<Month[]> {
@@ -182,4 +184,71 @@ export async function payCardBill(cardId: number, monthId: number): Promise<numb
   })
   if (error) throw error
   return Number(data ?? 0)
+}
+
+// ── Benefícios VR/VA ──────────────────────────────────────────────────
+// Criação e a lista com dias-até-renovar são RPC (têm cálculo de data).
+// Editar/ajustar saldo/arquivar são updates simples direto na tabela.
+export type BenefitInput = {
+  name: string
+  benefit_type: string
+  renewal_day: number
+  recharge_amount: number
+  recharge_mode: string
+  color: string
+}
+
+export async function fetchBenefitsOverview(): Promise<BenefitOverview[]> {
+  const { data, error } = await supabase.rpc('get_benefits_overview')
+  if (error) throw error
+  return (data ?? []) as BenefitOverview[]
+}
+
+export async function createBenefit(
+  input: BenefitInput & { balance: number },
+): Promise<void> {
+  const { error } = await supabase.rpc('create_benefit', {
+    p_name: input.name,
+    p_benefit_type: input.benefit_type,
+    p_balance: input.balance,
+    p_renewal_day: input.renewal_day,
+    p_recharge_amount: input.recharge_amount,
+    p_recharge_mode: input.recharge_mode,
+    p_color: input.color,
+  })
+  if (error) throw error
+}
+
+export async function updateBenefit(id: number, input: BenefitInput): Promise<void> {
+  const { error } = await supabase
+    .from('benefit_cards')
+    .update({
+      name: input.name,
+      benefit_type: input.benefit_type,
+      renewal_day: input.renewal_day,
+      recharge_amount: input.recharge_amount,
+      recharge_mode: input.recharge_mode,
+      color: input.color,
+    })
+    .eq('id', id)
+  if (error) throw error
+}
+
+export async function setBenefitBalance(id: number, balance: number): Promise<void> {
+  const { error } = await supabase.from('benefit_cards').update({ balance }).eq('id', id)
+  if (error) throw error
+}
+
+export async function archiveBenefit(id: number): Promise<void> {
+  const { error } = await supabase
+    .from('benefit_cards')
+    .update({ archived_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw error
+}
+
+export async function applyAllDueRenewals(): Promise<RenewalSummary[]> {
+  const { data, error } = await supabase.rpc('apply_all_due_renewals')
+  if (error) throw error
+  return (data ?? []) as RenewalSummary[]
 }

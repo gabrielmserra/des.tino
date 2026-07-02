@@ -66,6 +66,26 @@ export type BenefitBasic = {
   balance: number
 }
 
+export type BenefitOverview = {
+  id: number
+  name: string
+  benefit_type: string
+  balance: number
+  renewal_day: number
+  recharge_amount: number
+  recharge_mode: string
+  color: string
+  days_until_renewal: number
+}
+
+export type RenewalSummary = {
+  name: string
+  benefit_type: string
+  total: number
+  count: number
+  balance_after: number
+}
+
 export type CardOverview = {
   id: number
   name: string
