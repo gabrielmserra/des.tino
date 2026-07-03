@@ -100,6 +100,8 @@ def add_transaction(
     card_id: Optional[int] = None,
     is_expectation: bool = False,
     benefit_id: Optional[int] = None,
+    debit_card_id: Optional[int] = None,
+    payment_method: Optional[str] = None,
 ) -> None:
     client  = get_client()
     user_id = client.auth.get_user().user.id
@@ -116,6 +118,10 @@ def add_transaction(
         row["card_id"] = card_id
     if benefit_id is not None:
         row["benefit_id"] = benefit_id
+    if debit_card_id is not None:
+        row["debit_card_id"] = debit_card_id
+    if payment_method is not None:
+        row["payment_method"] = payment_method
     client.table("transactions").insert(row).execute()
     # Gasto pago com benefício debita o saldo na hora (previsões não debitam)
     if benefit_id is not None and not is_expectation:
@@ -137,6 +143,8 @@ def update_transaction(
     card_id: Optional[int] = None,
     is_expectation: Optional[bool] = None,
     benefit_id: Optional[int] = None,
+    debit_card_id: Optional[int] = None,
+    payment_method: Optional[str] = None,
 ) -> None:
     # Estorna o efeito antigo no saldo do benefício antes de aplicar o novo
     old = _find_tx(month_id, transaction_id)
@@ -144,11 +152,13 @@ def update_transaction(
         _adjust_benefit_balance(old["benefit_id"], float(old["amount"] or 0))
 
     update = {
-        "description": description,
-        "amount":      amount,
-        "category":    category,
-        "card_id":     card_id,
-        "benefit_id":  benefit_id,
+        "description":    description,
+        "amount":         amount,
+        "category":       category,
+        "card_id":        card_id,
+        "benefit_id":     benefit_id,
+        "debit_card_id":  debit_card_id,
+        "payment_method": payment_method,
     }
     if is_expectation is not None:
         update["is_expectation"] = is_expectation
@@ -500,6 +510,36 @@ def settle_card_bill(card_id: int, month_id: int, closing_day: int,
 
     _invalidate(month_id)
     return total
+
+
+# ---------------------------------------------------------------------------
+# Cartões de Débito
+# ---------------------------------------------------------------------------
+# Entidade simples (só nome/cor): débito não tem fatura/limite/vencimento —
+# a transação já debita o saldo na hora, igual a "Nenhuma origem".
+
+def get_debit_cards() -> List[dict]:
+    resp = get_client().table("debit_cards").select("*").order("created_at").execute()
+    return resp.data or []
+
+
+def create_debit_card(name: str, color: str) -> Optional[dict]:
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    resp = client.table("debit_cards").insert({
+        "name": name, "color": color, "user_id": user_id,
+    }).execute()
+    return resp.data[0] if resp.data else None
+
+
+def update_debit_card(debit_card_id: int, name: str, color: str) -> None:
+    get_client().table("debit_cards").update({
+        "name": name, "color": color,
+    }).eq("id", debit_card_id).execute()
+
+
+def delete_debit_card(debit_card_id: int) -> None:
+    get_client().table("debit_cards").delete().eq("id", debit_card_id).execute()
 
 
 def clear_cache() -> None:

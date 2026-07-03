@@ -30,7 +30,9 @@ class TransactionsTab(ctk.CTkFrame):
         self._card_info:       dict = {}   # card id   → {name, color}
         self._benefit_info:    dict = {}   # benefit id → {name, color, balance, type}
         self._benefits_list:   list = []   # benefícios ativos (com saldo)
-        self._origin_map:      dict = {}   # display name → ("card"|"benefit", id)
+        self._debit_info:      dict = {}   # debit card id → {name, color}
+        self._debit_list:      list = []   # cartões de débito
+        self._origin_map:      dict = {}   # display name → ("card"|"benefit"|"debit"|"pix", id)
         self._cards_list:      list = []
         self._row_widgets:     dict = {}   # tx_id     → {frame, labels, separator, tx}
         self._empty_lbl            = None
@@ -49,11 +51,12 @@ class TransactionsTab(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
 
         if self._is_var_expense:
-            self.grid_rowconfigure(3, weight=1)
+            self.grid_rowconfigure(4, weight=1)
             self._build_card_bar(row=0)
             self._build_benefits_bar(row=1)
-            self._build_form(row=2)
-            self._build_table(row=3)
+            self._build_debit_bar(row=2)
+            self._build_form(row=3)
+            self._build_table(row=4)
         else:
             self.grid_rowconfigure(1, weight=1)
             self._build_form(row=0)
@@ -85,6 +88,18 @@ class TransactionsTab(ctk.CTkFrame):
         self._benefits_bar  = bar
         self._benefits_wrap = wrap
 
+    def _build_debit_bar(self, row: int = 2) -> None:
+        from ui.debit_cards import DebitCardsBar
+        wrap = ctk.CTkFrame(
+            self, fg_color=T.CARD, corner_radius=12,
+            border_width=1, border_color=T.BORDER,
+        )
+        wrap.grid(row=row, column=0, sticky="ew", padx=28, pady=(10, 0))
+        bar = DebitCardsBar(wrap, month_id=self.month_id, on_debit_changed=self._on_debit_changed)
+        bar.pack(fill="x", padx=16, pady=14)
+        self._debit_bar  = bar
+        self._debit_wrap = wrap
+
     def _on_cards_changed(self, cards: List[dict]) -> None:
         self._cards_list  = cards
         self._card_id_map = {c["name"]: c["id"] for c in cards}
@@ -108,13 +123,27 @@ class TransactionsTab(ctk.CTkFrame):
         if self._initialized:
             self.refresh()
 
+    def _on_debit_changed(self, cards: List[dict]) -> None:
+        self._debit_list = cards
+        self._debit_info = {
+            c["id"]: {"name": c["name"], "color": c.get("color", "#6C8EFF")}
+            for c in cards
+        }
+        self._rebuild_origin_combo()
+        if self._initialized:
+            self.refresh()
+
     def _rebuild_origin_combo(self) -> None:
-        """Monta o combo de origem com 'Nenhum' + cartões + benefícios (VR/VA)."""
-        self._origin_map = {}
-        names = ["Nenhum"]
+        """Monta o combo de origem: Nenhum, Pix, cartões, débito, benefícios (VR/VA)."""
+        self._origin_map = {"Pix": ("pix", None)}
+        names = ["Nenhum", "Pix"]
         for c in self._cards_list:
             names.append(c["name"])
             self._origin_map[c["name"]] = ("card", c["id"])
+        for d in self._debit_list:
+            label = f"{d['name']} (débito)"
+            names.append(label)
+            self._origin_map[label] = ("debit", d["id"])
         for b in self._benefits_list:
             label = f"{b['name']} ({b['benefit_type']})"
             names.append(label)
@@ -125,15 +154,19 @@ class TransactionsTab(ctk.CTkFrame):
             self._q_origin.configure(values=names)
 
     def _resolve_origin(self, label: str):
-        """Converte o rótulo do combo em (card_id, benefit_id)."""
+        """Converte o rótulo do combo em (card_id, benefit_id, debit_card_id, payment_method)."""
         kind, oid = self._origin_map.get(label, (None, None))
         if kind == "card":
-            return oid, None
+            return oid, None, None, None
         if kind == "benefit":
-            return None, oid
-        return None, None
+            return None, oid, None, None
+        if kind == "debit":
+            return None, None, oid, None
+        if kind == "pix":
+            return None, None, None, "pix"
+        return None, None, None, None
 
-    def _origin_label_for(self, card_id, benefit_id) -> str:
+    def _origin_label_for(self, card_id, benefit_id, debit_card_id=None, payment_method=None) -> str:
         if benefit_id:
             info = self._benefit_info.get(benefit_id)
             if info:
@@ -142,6 +175,12 @@ class TransactionsTab(ctk.CTkFrame):
             info = self._card_info.get(card_id)
             if info:
                 return info["name"]
+        if debit_card_id:
+            info = self._debit_info.get(debit_card_id)
+            if info:
+                return f"{info['name']} (débito)"
+        if payment_method == "pix":
+            return "Pix"
         return "Nenhum"
 
     # ------------------------------------------------------------------
@@ -429,9 +468,10 @@ class TransactionsTab(ctk.CTkFrame):
             return
 
         category = self._q_cat_var.get() if self.is_expense else "Receita"
-        card_id = benefit_id = None
+        card_id = benefit_id = debit_card_id = None
+        payment_method = None
         if self._is_var_expense and hasattr(self, "_q_origin"):
-            card_id, benefit_id = self._resolve_origin(self._q_origin.get())
+            card_id, benefit_id, debit_card_id, payment_method = self._resolve_origin(self._q_origin.get())
             # Previsto não debita o saldo (só ao confirmar) → não valida aqui
             if benefit_id is not None and not self._q_expect_active:
                 info  = self._benefit_info.get(benefit_id, {})
@@ -446,12 +486,15 @@ class TransactionsTab(ctk.CTkFrame):
         self._q_err.configure(text="")
         db.add_transaction(self.month_id, self.tx_type, desc, amount, category,
                            card_id=card_id, benefit_id=benefit_id,
+                           debit_card_id=debit_card_id, payment_method=payment_method,
                            is_expectation=self._q_expect_active)
         self._q_desc.delete(0, "end")
         self._q_amount.delete(0, "end")
         self._q_desc.focus()
         if self._is_var_expense and hasattr(self, "_benefits_bar"):
             self._benefits_bar.refresh()
+        if self._is_var_expense and hasattr(self, "_debit_bar"):
+            self._debit_bar.refresh()
         self.refresh()
         self.on_change()
 
@@ -460,7 +503,7 @@ class TransactionsTab(ctk.CTkFrame):
         """Recolhe formulário e barras de origem para a lista ocupar a tela toda.
         Uma barra de adição rápida aparece para ainda permitir novos lançamentos."""
         self._expanded_list = not self._expanded_list
-        for attr in ("_card_wrap", "_benefits_wrap", "_form_frame"):
+        for attr in ("_card_wrap", "_benefits_wrap", "_debit_wrap", "_form_frame"):
             w = getattr(self, attr, None)
             if w is None:
                 continue
@@ -495,14 +538,12 @@ class TransactionsTab(ctk.CTkFrame):
             self._amount.focus()
             return
 
-        card_id:    Optional[int] = None
-        benefit_id: Optional[int] = None
+        card_id:        Optional[int] = None
+        benefit_id:     Optional[int] = None
+        debit_card_id:  Optional[int] = None
+        payment_method: Optional[str] = None
         if self._is_var_expense and hasattr(self, "_card_combo"):
-            kind, oid = self._origin_map.get(self._card_combo.get(), (None, None))
-            if kind == "card":
-                card_id = oid
-            elif kind == "benefit":
-                benefit_id = oid
+            card_id, benefit_id, debit_card_id, payment_method = self._resolve_origin(self._card_combo.get())
 
         # Saldo de VR/VA não pode ficar negativo — bloqueia (gastos reais, não previsões)
         if benefit_id is not None and not self._expectation_active:
@@ -526,19 +567,23 @@ class TransactionsTab(ctk.CTkFrame):
             db.update_transaction(
                 self._editing_id, self.month_id, desc, amount, category,
                 card_id=card_id, is_expectation=self._expectation_active,
-                benefit_id=benefit_id)
+                benefit_id=benefit_id, debit_card_id=debit_card_id,
+                payment_method=payment_method)
             self._cancel_edit()
         else:
             db.add_transaction(
                 self.month_id, self.tx_type, desc, amount, category,
                 card_id=card_id, is_expectation=self._expectation_active,
-                benefit_id=benefit_id)
+                benefit_id=benefit_id, debit_card_id=debit_card_id,
+                payment_method=payment_method)
             self._desc.delete(0, "end")
             self._amount.delete(0, "end")
             self._desc.focus()
 
         if self._is_var_expense and hasattr(self, "_benefits_bar"):
             self._benefits_bar.refresh()   # saldo mudou
+        if self._is_var_expense and hasattr(self, "_debit_bar"):
+            self._debit_bar.refresh()
         self.refresh()
         self.on_change()
 
@@ -563,7 +608,8 @@ class TransactionsTab(ctk.CTkFrame):
             self._cat_var.set(tx["category"] or "Outros")
         if self._is_var_expense and hasattr(self, "_card_combo"):
             self._card_combo.set(
-                self._origin_label_for(tx.get("card_id"), tx.get("benefit_id")))
+                self._origin_label_for(tx.get("card_id"), tx.get("benefit_id"),
+                                       tx.get("debit_card_id"), tx.get("payment_method")))
         self._form_title.configure(text="✏  Editando lançamento")
         self._add_btn.configure(text="✓ Salvar")
         self._cancel_btn.grid(row=1, column=0, sticky="ew", pady=(4, 0))
@@ -657,10 +703,11 @@ class TransactionsTab(ctk.CTkFrame):
             w["amount_lbl"].configure(fg_color=row_bg, text=format_currency(tx["amount"]), text_color=amt_col)
             w["cat_lbl"].configure(text=f" {tx['category'] or 'Outros'} ", text_color=amt_col)
 
-            # Badge da origem: cartão ou benefício (só na aba saida_variavel)
+            # Badge da origem: cartão, débito, pix ou benefício (só em saida_variavel)
             if self._is_var_expense and w["badge_lbl"] is not None:
                 b_info = self._benefit_info.get(tx.get("benefit_id"))
                 c_info = self._card_info.get(tx.get("card_id"))
+                d_info = self._debit_info.get(tx.get("debit_card_id"))
                 if b_info:
                     w["badge_lbl"].configure(
                         text=f"  {b_info['name']} · {b_info['type']} ",
@@ -668,6 +715,12 @@ class TransactionsTab(ctk.CTkFrame):
                     w["badge_lbl"].pack(anchor="w", pady=(2, 0))
                 elif c_info:
                     w["badge_lbl"].configure(text=f"  {c_info['name']} ", text_color=c_info["color"])
+                    w["badge_lbl"].pack(anchor="w", pady=(2, 0))
+                elif d_info:
+                    w["badge_lbl"].configure(text=f"  {d_info['name']} · débito ", text_color=d_info["color"])
+                    w["badge_lbl"].pack(anchor="w", pady=(2, 0))
+                elif tx.get("payment_method") == "pix":
+                    w["badge_lbl"].configure(text="  Pix ", text_color=T.VIOLET)
                     w["badge_lbl"].pack(anchor="w", pady=(2, 0))
                 else:
                     w["badge_lbl"].pack_forget()
@@ -795,6 +848,8 @@ class TransactionsTab(ctk.CTkFrame):
         db.delete_transaction(tid, self.month_id)
         if self._is_var_expense and hasattr(self, "_benefits_bar"):
             self._benefits_bar.refresh()   # estorno do saldo
+        if self._is_var_expense and hasattr(self, "_debit_bar"):
+            self._debit_bar.refresh()
         self.refresh()
         self.on_change()
 
