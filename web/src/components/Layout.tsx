@@ -15,26 +15,52 @@ import { useMonths } from '../lib/month'
 import { useAuth } from '../lib/auth'
 import { useTxForm } from '../lib/txform'
 import { TxForm } from './TxForm'
+import { AddMonthDialog } from './AddMonthDialog'
 import { applyAllDueRenewals } from '../lib/api'
 import { formatCurrency } from '../lib/format'
 import type { RenewalSummary } from '../lib/types'
 
 function MonthSelector() {
   const { months, selectedId, setSelectedId } = useMonths()
-  if (months.length === 0) return null
+  const qc = useQueryClient()
+  const [showAdd, setShowAdd] = useState(false)
+
   return (
-    <select
-      value={selectedId ?? ''}
-      onChange={(e) => setSelectedId(Number(e.target.value))}
-      className="rounded-lg border px-3 py-2 text-sm font-semibold outline-none"
-      style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
-    >
-      {months.map((m) => (
-        <option key={m.id} value={m.id}>
-          {m.name}
-        </option>
-      ))}
-    </select>
+    <div className="flex items-center gap-1.5">
+      {months.length > 0 && (
+        <select
+          value={selectedId ?? ''}
+          onChange={(e) => setSelectedId(Number(e.target.value))}
+          className="rounded-lg border px-3 py-2 text-sm font-semibold outline-none"
+          style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+        >
+          {months.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+        </select>
+      )}
+      <button
+        onClick={() => setShowAdd(true)}
+        aria-label="Novo período"
+        className="flex items-center justify-center rounded-lg border p-2"
+        style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
+      >
+        <Plus size={16} strokeWidth={2} />
+      </button>
+      {showAdd && (
+        <AddMonthDialog
+          months={months}
+          onClose={() => setShowAdd(false)}
+          onCreated={async (id) => {
+            await qc.invalidateQueries({ queryKey: ['months'] })
+            setSelectedId(id)
+            setShowAdd(false)
+          }}
+        />
+      )}
+    </div>
   )
 }
 

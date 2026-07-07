@@ -30,6 +30,16 @@ export async function fetchMonths(): Promise<Month[]> {
   return data ?? []
 }
 
+export async function createMonth(name: string, year: number, month: number): Promise<number> {
+  const { data, error } = await supabase.rpc('create_month', {
+    p_name: name,
+    p_year: year,
+    p_month: month,
+  })
+  if (error) throw error
+  return data as number
+}
+
 export async function fetchMonthSummary(monthId: number): Promise<MonthSummary> {
   const { data, error } = await supabase.rpc('get_month_summary', {
     p_month_id: monthId,
