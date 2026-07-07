@@ -32,6 +32,17 @@ class FinanceApp(ctk.CTkFrame):
         self._build()
         self._load_months()
         self._check_benefit_renewals()
+        self._sync_theme_from_cloud()
+
+    # ------------------------------------------------------------------
+    def _sync_theme_from_cloud(self) -> None:
+        """Se o tema foi trocado no site, aplica aqui também (fase 4 do site)."""
+        def _work():
+            from ui.theme import sync_theme_from_cloud
+            new_name = sync_theme_from_cloud()
+            if new_name:
+                self.after(0, self._rebuild_ui)
+        threading.Thread(target=_work, daemon=True).start()
 
     # ------------------------------------------------------------------
     def _build(self) -> None:

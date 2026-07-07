@@ -118,7 +118,7 @@ def _settings_file() -> Path:
     return folder / "settings.json"
 
 
-def save_theme(name: str) -> None:
+def _write_local_theme(name: str) -> None:
     try:
         p = _settings_file()
         data = {}
@@ -132,12 +132,58 @@ def save_theme(name: str) -> None:
         pass
 
 
+def save_theme(name: str) -> None:
+    _write_local_theme(name)
+    _push_theme_to_cloud(name)
+
+
+def _push_theme_to_cloud(name: str) -> None:
+    """Envia o tema pra nuvem em segundo plano, pra sincronizar com o site (best-effort)."""
+    import threading
+
+    def _work():
+        try:
+            from config import get_client
+            client  = get_client()
+            user_id = client.auth.get_user().user.id
+            existing = client.table("user_settings").select("user_id").eq("user_id", user_id).execute()
+            if existing.data:
+                client.table("user_settings").update({"theme": name}).eq("user_id", user_id).execute()
+            else:
+                client.table("user_settings").insert({"user_id": user_id, "theme": name}).execute()
+        except Exception:
+            pass
+
+    threading.Thread(target=_work, daemon=True).start()
+
+
 def load_saved_theme() -> str:
     try:
         data = json.loads(_settings_file().read_text())
         return data.get("destino_theme", "Esmeralda")
     except Exception:
         return "Esmeralda"
+
+
+def sync_theme_from_cloud() -> str | None:
+    """Busca o tema salvo na nuvem (ex.: trocado no site) e aplica se for diferente do
+    atual. Só deve ser chamado depois do login, numa thread de fundo (bloqueia em
+    rede). Retorna o novo nome do tema se mudou, ou None se não mudou/deu erro."""
+    try:
+        from config import get_client
+        client   = get_client()
+        user_id  = client.auth.get_user().user.id
+        resp     = client.table("user_settings").select("theme").eq("user_id", user_id).execute()
+        if not resp.data:
+            return None
+        cloud_name = resp.data[0]["theme"]
+        if cloud_name == _CURRENT_THEME or cloud_name not in THEMES:
+            return None
+        apply_theme(cloud_name)
+        _write_local_theme(cloud_name)
+        return cloud_name
+    except Exception:
+        return None
 
 
 # ── Fonte: Plus Jakarta Sans ──────────────────────────────────────────

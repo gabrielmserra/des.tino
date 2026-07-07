@@ -40,6 +40,17 @@ export async function createMonth(name: string, year: number, month: number): Pr
   return data as number
 }
 
+export async function fetchTheme(): Promise<string> {
+  const { data, error } = await supabase.from('user_settings').select('theme').maybeSingle()
+  if (error) throw error
+  return data?.theme ?? 'Esmeralda'
+}
+
+export async function saveTheme(theme: string): Promise<void> {
+  const { error } = await supabase.from('user_settings').upsert({ theme }, { onConflict: 'user_id' })
+  if (error) throw error
+}
+
 export async function fetchMonthSummary(monthId: number): Promise<MonthSummary> {
   const { data, error } = await supabase.rpc('get_month_summary', {
     p_month_id: monthId,

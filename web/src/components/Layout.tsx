@@ -9,13 +9,16 @@ import {
   HandCoins,
   Plus,
   LogOut,
+  Palette,
   type LucideIcon,
 } from 'lucide-react'
 import { useMonths } from '../lib/month'
 import { useAuth } from '../lib/auth'
 import { useTxForm } from '../lib/txform'
+import { useTheme } from '../lib/theme'
 import { TxForm } from './TxForm'
 import { AddMonthDialog } from './AddMonthDialog'
+import { ThemeDialog } from './ThemeDialog'
 import { applyAllDueRenewals } from '../lib/api'
 import { formatCurrency } from '../lib/format'
 import type { RenewalSummary } from '../lib/types'
@@ -138,8 +141,10 @@ function RenewalToast({ summary, onDismiss }: { summary: RenewalSummary[]; onDis
 export function Layout() {
   const { signOut } = useAuth()
   const { openNew } = useTxForm()
+  const { theme, setTheme } = useTheme()
   const renewalSummary = useRenewalCheck()
   const [showToast, setShowToast] = useState(true)
+  const [showTheme, setShowTheme] = useState(false)
 
   return (
     <div className="flex min-h-full flex-col">
@@ -154,6 +159,14 @@ export function Layout() {
         <div className="flex items-center gap-2">
           <MonthSelector />
           <button
+            onClick={() => setShowTheme(true)}
+            aria-label="Escolher tema"
+            className="flex items-center justify-center rounded-lg border p-2"
+            style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
+          >
+            <Palette size={16} strokeWidth={2} />
+          </button>
+          <button
             onClick={() => signOut()}
             aria-label="Sair"
             className="flex items-center justify-center rounded-lg border p-2"
@@ -163,6 +176,10 @@ export function Layout() {
           </button>
         </div>
       </header>
+
+      {showTheme && (
+        <ThemeDialog current={theme} onClose={() => setShowTheme(false)} onSelect={setTheme} />
+      )}
 
       {renewalSummary && renewalSummary.length > 0 && showToast && (
         <RenewalToast summary={renewalSummary} onDismiss={() => setShowToast(false)} />

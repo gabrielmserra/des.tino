@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './lib/auth'
 import { MonthProvider } from './lib/month'
+import { ThemeProvider } from './lib/theme'
 import { TxFormProvider } from './lib/txform'
 import { Layout } from './components/Layout'
 import { Login } from './pages/Login'
@@ -37,11 +38,13 @@ export default function App() {
         {session ? (
           <Route
             element={
-              <MonthProvider>
-                <TxFormProvider>
-                  <Layout />
-                </TxFormProvider>
-              </MonthProvider>
+              <ThemeProvider>
+                <MonthProvider>
+                  <TxFormProvider>
+                    <Layout />
+                  </TxFormProvider>
+                </MonthProvider>
+              </ThemeProvider>
             }
           >
             <Route path="/" element={<Dashboard />} />
