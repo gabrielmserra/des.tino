@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './lib/auth'
 import { MonthProvider } from './lib/month'
@@ -15,6 +16,9 @@ import { Debts } from './pages/Debts'
 import { Investments } from './pages/Investments'
 import { Goals } from './pages/Goals'
 import { More } from './pages/More'
+
+// Carregado sob demanda: só quem usa a importação baixa o pdfjs-dist (~440kB)
+const Import = lazy(() => import('./pages/Import').then((m) => ({ default: m.Import })))
 
 function Splash() {
   return (
@@ -58,6 +62,14 @@ export default function App() {
             <Route path="/dividas" element={<Debts />} />
             <Route path="/investimentos" element={<Investments />} />
             <Route path="/metas" element={<Goals />} />
+            <Route
+              path="/importar"
+              element={
+                <Suspense fallback={<Splash />}>
+                  <Import />
+                </Suspense>
+              }
+            />
             <Route path="/mais" element={<More />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

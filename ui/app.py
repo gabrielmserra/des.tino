@@ -25,6 +25,7 @@ class FinanceApp(ctk.CTkFrame):
         self._placeholder:         ctk.CTkFrame | None = None
         self._investments_content: InvestmentsTab|None = None
         self._debts_content                            = None
+        self._import_content                           = None
 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -56,6 +57,7 @@ class FinanceApp(ctk.CTkFrame):
             on_logout      = self._logout,
             on_investments = self._show_investments,
             on_debts       = self._show_debts,
+            on_import      = self._show_import,
             user_email     = self.user_email,
         )
         self._sidebar.grid(row=0, column=0, sticky="nsew")
@@ -108,10 +110,13 @@ class FinanceApp(ctk.CTkFrame):
         self._sidebar.set_active_month(month_id)
         self._sidebar.set_investments_active(False)
         self._sidebar.set_debts_active(False)
+        self._sidebar.set_import_active(False)
         if self._investments_content:
             self._investments_content.grid_remove()
         if self._debts_content:
             self._debts_content.grid_remove()
+        if self._import_content:
+            self._import_content.grid_remove()
 
         if db.is_cached(month_id):
             self._render_month(month_id, month_name)
@@ -158,6 +163,7 @@ class FinanceApp(ctk.CTkFrame):
     def _show_investments(self) -> None:
         self._sidebar.set_investments_active(True)
         self._sidebar.set_debts_active(False)
+        self._sidebar.set_import_active(False)
         self._sidebar.clear_active_month()
         if self._main_content:
             self._main_content.grid_remove()
@@ -165,6 +171,8 @@ class FinanceApp(ctk.CTkFrame):
             self._placeholder.grid_remove()
         if self._debts_content:
             self._debts_content.grid_remove()
+        if self._import_content:
+            self._import_content.grid_remove()
         if self._investments_content is None:
             self._investments_content = InvestmentsTab(
                 self, on_change=self._on_investments_change,
@@ -217,6 +225,7 @@ class FinanceApp(ctk.CTkFrame):
         from ui.debts import DebtsTab
         self._sidebar.set_debts_active(True)
         self._sidebar.set_investments_active(False)
+        self._sidebar.set_import_active(False)
         self._sidebar.clear_active_month()
         if self._main_content:
             self._main_content.grid_remove()
@@ -224,6 +233,8 @@ class FinanceApp(ctk.CTkFrame):
             self._placeholder.grid_remove()
         if self._investments_content:
             self._investments_content.grid_remove()
+        if self._import_content:
+            self._import_content.grid_remove()
         if self._debts_content is None:
             self._debts_content = DebtsTab(
                 self, on_change=self._on_investments_change,
@@ -231,6 +242,31 @@ class FinanceApp(ctk.CTkFrame):
         else:
             self._debts_content.refresh()
         self._debts_content.grid(row=0, column=1, sticky="nsew")
+
+    # ------------------------------------------------------------------
+    def _show_import(self) -> None:
+        from ui.import_statement import ImportTab
+        self._sidebar.set_import_active(True)
+        self._sidebar.set_investments_active(False)
+        self._sidebar.set_debts_active(False)
+        self._sidebar.clear_active_month()
+        if self._main_content:
+            self._main_content.grid_remove()
+        if self._placeholder:
+            self._placeholder.grid_remove()
+        if self._investments_content:
+            self._investments_content.grid_remove()
+        if self._debts_content:
+            self._debts_content.grid_remove()
+        if self._import_content is None:
+            self._import_content = ImportTab(
+                self, on_change=self._on_investments_change,
+                on_months_changed=self._on_months_changed_by_import,
+            )
+        self._import_content.grid(row=0, column=1, sticky="nsew")
+
+    def _on_months_changed_by_import(self) -> None:
+        self._sidebar.update_months(db.get_months())
 
     # ------------------------------------------------------------------
     def _add_month(self) -> None:

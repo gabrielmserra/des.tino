@@ -18,6 +18,7 @@ class Sidebar(ctk.CTkFrame):
         on_logout:       Callable,
         on_investments:  Callable = None,
         on_debts:        Callable = None,
+        on_import:       Callable = None,
         user_email:      str = "",
     ):
         super().__init__(parent, width=270, corner_radius=0, fg_color=T.SIDEBAR)
@@ -33,12 +34,14 @@ class Sidebar(ctk.CTkFrame):
         self.on_logout      = on_logout
         self.on_investments = on_investments or (lambda: None)
         self.on_debts       = on_debts or (lambda: None)
+        self.on_import      = on_import or (lambda: None)
         self.user_email     = user_email
 
         self._active_id: int | None         = None
         self._buttons:   dict               = {}
         self._inv_btn:   ctk.CTkButton|None = None
         self._debts_btn: ctk.CTkButton|None = None
+        self._import_btn: ctk.CTkButton|None = None
 
         self._build()
 
@@ -84,6 +87,15 @@ class Sidebar(ctk.CTkFrame):
             text_color=T.TEXT, font=F(12),
         )
         self._debts_btn.grid(row=1, column=0, sticky="ew", pady=(2, 0))
+
+        self._import_btn = ctk.CTkButton(
+            nav, text="  📥  Importar Extrato",
+            command=self.on_import,
+            height=36, corner_radius=8, anchor="w",
+            fg_color="transparent", hover_color=T.CARD2,
+            text_color=T.TEXT, font=F(12),
+        )
+        self._import_btn.grid(row=2, column=0, sticky="ew", pady=(2, 0))
 
         # ── Lista de períodos ──────────────────────────────────────────
         scroll_wrapper = ctk.CTkFrame(self, fg_color="transparent")
@@ -251,5 +263,17 @@ class Sidebar(ctk.CTkFrame):
                 )
             else:
                 self._debts_btn.configure(
+                    fg_color="transparent", text_color=T.TEXT, border_width=0,
+                )
+
+    def set_import_active(self, active: bool) -> None:
+        if self._import_btn:
+            if active:
+                self._import_btn.configure(
+                    fg_color=T.GREEN_DIM, text_color=T.GREEN,
+                    border_width=1, border_color=T.BORDER_L,
+                )
+            else:
+                self._import_btn.configure(
                     fg_color="transparent", text_color=T.TEXT, border_width=0,
                 )

@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom'
-import { TrendingUp, Target, ChevronRight } from 'lucide-react'
+import { TrendingUp, Target, Upload, ChevronRight } from 'lucide-react'
 
 const ITEMS = [
   { to: '/investimentos', icon: TrendingUp, label: 'Investimentos', desc: 'Aportes, saques e histórico' },
   { to: '/metas', icon: Target, label: 'Metas de poupança', desc: 'Crie e acompanhe suas metas' },
+  { to: '/importar', icon: Upload, label: 'Importar extrato', desc: 'Banco Inter — OFX, CSV ou PDF' },
 ]
 
 export function More() {
