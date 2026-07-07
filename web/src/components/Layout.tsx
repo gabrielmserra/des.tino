@@ -23,10 +23,8 @@ import { applyAllDueRenewals } from '../lib/api'
 import { formatCurrency } from '../lib/format'
 import type { RenewalSummary } from '../lib/types'
 
-function MonthSelector() {
+function MonthSelector({ onAdd }: { onAdd: () => void }) {
   const { months, selectedId, setSelectedId } = useMonths()
-  const qc = useQueryClient()
-  const [showAdd, setShowAdd] = useState(false)
 
   return (
     <div className="flex items-center gap-1.5">
@@ -45,24 +43,13 @@ function MonthSelector() {
         </select>
       )}
       <button
-        onClick={() => setShowAdd(true)}
+        onClick={onAdd}
         aria-label="Novo período"
         className="flex items-center justify-center rounded-lg border p-2"
         style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
       >
         <Plus size={16} strokeWidth={2} />
       </button>
-      {showAdd && (
-        <AddMonthDialog
-          months={months}
-          onClose={() => setShowAdd(false)}
-          onCreated={async (id) => {
-            await qc.invalidateQueries({ queryKey: ['months'] })
-            setSelectedId(id)
-            setShowAdd(false)
-          }}
-        />
-      )}
     </div>
   )
 }
@@ -142,9 +129,12 @@ export function Layout() {
   const { signOut } = useAuth()
   const { openNew } = useTxForm()
   const { theme, setTheme } = useTheme()
+  const { months, setSelectedId } = useMonths()
+  const qc = useQueryClient()
   const renewalSummary = useRenewalCheck()
   const [showToast, setShowToast] = useState(true)
   const [showTheme, setShowTheme] = useState(false)
+  const [showAddMonth, setShowAddMonth] = useState(false)
 
   return (
     <div className="flex min-h-full flex-col">
@@ -157,7 +147,7 @@ export function Layout() {
           des<span style={{ color: 'var(--primary)' }}>.</span>tino
         </span>
         <div className="flex items-center gap-2">
-          <MonthSelector />
+          <MonthSelector onAdd={() => setShowAddMonth(true)} />
           <button
             onClick={() => setShowTheme(true)}
             aria-label="Escolher tema"
@@ -176,6 +166,19 @@ export function Layout() {
           </button>
         </div>
       </header>
+
+      {/* Diálogos ficam fora do header (sticky+z-10 cria stacking context próprio, que a nav de baixo sempre venceria) */}
+      {showAddMonth && (
+        <AddMonthDialog
+          months={months}
+          onClose={() => setShowAddMonth(false)}
+          onCreated={async (id) => {
+            await qc.invalidateQueries({ queryKey: ['months'] })
+            setSelectedId(id)
+            setShowAddMonth(false)
+          }}
+        />
+      )}
 
       {showTheme && (
         <ThemeDialog current={theme} onClose={() => setShowTheme(false)} onSelect={setTheme} />
