@@ -4,6 +4,7 @@ Cada usuário vê apenas os próprios dados via Row Level Security (RLS).
 """
 
 from typing import Optional, List, Dict
+from datetime import date
 from config import get_client
 
 # Cache em memória: evita re-buscar transações do mesmo mês a cada ação
@@ -102,6 +103,7 @@ def add_transaction(
     benefit_id: Optional[int] = None,
     debit_card_id: Optional[int] = None,
     payment_method: Optional[str] = None,
+    payment_date: Optional[date] = None,
 ) -> None:
     client  = get_client()
     user_id = client.auth.get_user().user.id
@@ -122,6 +124,8 @@ def add_transaction(
         row["debit_card_id"] = debit_card_id
     if payment_method is not None:
         row["payment_method"] = payment_method
+    if payment_date is not None:
+        row["payment_date"] = payment_date.isoformat()
     client.table("transactions").insert(row).execute()
     # Gasto pago com benefício debita o saldo na hora (previsões não debitam)
     if benefit_id is not None and not is_expectation:
@@ -145,6 +149,7 @@ def update_transaction(
     benefit_id: Optional[int] = None,
     debit_card_id: Optional[int] = None,
     payment_method: Optional[str] = None,
+    payment_date: Optional[date] = None,
 ) -> None:
     # Estorna o efeito antigo no saldo do benefício antes de aplicar o novo
     old = _find_tx(month_id, transaction_id)
@@ -159,6 +164,7 @@ def update_transaction(
         "benefit_id":     benefit_id,
         "debit_card_id":  debit_card_id,
         "payment_method": payment_method,
+        "payment_date":   payment_date.isoformat() if payment_date else None,
     }
     if is_expectation is not None:
         update["is_expectation"] = is_expectation
@@ -170,6 +176,28 @@ def update_transaction(
     if debit_now:
         _adjust_benefit_balance(benefit_id, -float(amount))
     _invalidate(month_id)
+
+
+def import_transactions_bulk(rows: List[dict]) -> None:
+    """Confirma uma importação de extrato/fatura: chama add_transaction pra
+    cada linha já revisada pelo usuário. Cada dict precisa ter month_id,
+    type, description, amount e pode ter category/payment_method/
+    payment_date/card_id/benefit_id/debit_card_id. is_expectation é sempre
+    False (lançamento importado já é real, nunca previsto)."""
+    for r in rows:
+        add_transaction(
+            month_id=r["month_id"],
+            tx_type=r["type"],
+            description=r["description"],
+            amount=r["amount"],
+            category=r.get("category") or "Outros",
+            card_id=r.get("card_id"),
+            is_expectation=False,
+            benefit_id=r.get("benefit_id"),
+            debit_card_id=r.get("debit_card_id"),
+            payment_method=r.get("payment_method"),
+            payment_date=r.get("payment_date"),
+        )
 
 
 def delete_transaction(transaction_id: int, month_id: int) -> None:
@@ -318,6 +346,21 @@ def get_expenses_by_category(month_id: int) -> List[dict]:
             cat = row["category"] or "Outros"
             totals[cat] = totals.get(cat, 0.0) + float(row["amount"] or 0)
     result = [{"category": c, "total": t} for c, t in totals.items()]
+    result.sort(key=lambda x: x["total"], reverse=True)
+    return result
+
+
+def get_expenses_by_payment_method(month_id: int) -> List[dict]:
+    """Igual a get_expenses_by_category, mas agrupado por forma de pagamento.
+    Inclui gastos com VR/VA (aqui é uma fatia própria, ao contrário do
+    card de categorias, que os exclui por já terem envelope separado)."""
+    rows   = get_transactions(month_id)
+    totals: Dict[str, float] = {}
+    for row in rows:
+        if row["type"] in ("saida_fixa", "saida_variavel") and not row.get("is_expectation"):
+            pm = row.get("payment_method") or "outro"
+            totals[pm] = totals.get(pm, 0.0) + float(row["amount"] or 0)
+    result = [{"payment_method": pm, "total": t} for pm, t in totals.items()]
     result.sort(key=lambda x: x["total"], reverse=True)
     return result
 

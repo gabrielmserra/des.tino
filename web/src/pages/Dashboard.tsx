@@ -5,11 +5,13 @@ import { useMonths } from '../lib/month'
 import {
   fetchMonthSummary,
   fetchExpensesByCategory,
+  fetchExpensesByPaymentMethod,
   fetchBenefitTotal,
   fetchTotalInvestments,
   fetchGoals,
 } from '../lib/api'
 import { formatCurrency, todayLabel } from '../lib/format'
+import { PAYMENT_METHODS } from '../lib/constants'
 import { DashboardSkeleton } from '../components/Skeleton'
 
 const PIE_COLORS = [
@@ -116,6 +118,11 @@ export function Dashboard() {
   })
   const benefit = useQuery({ queryKey: ['benefitTotal'], queryFn: fetchBenefitTotal })
   const totalInv = useQuery({ queryKey: ['totalInv'], queryFn: fetchTotalInvestments })
+  const byMethod = useQuery({
+    queryKey: ['expensesByMethod', selectedId],
+    queryFn: () => fetchExpensesByPaymentMethod(selectedId!),
+    enabled: selectedId != null,
+  })
 
   if (loading) return <DashboardSkeleton />
   if (selectedId == null)
@@ -126,6 +133,10 @@ export function Dashboard() {
   const val = (n: number | undefined) => (s ? formatCurrency(n ?? 0) : '…')
 
   const pieData = (cats.data ?? []).map((c) => ({ name: c.category, value: c.total }))
+  const methodData = (byMethod.data ?? []).map((c) => ({
+    name: PAYMENT_METHODS[c.category] ?? c.category,
+    value: c.total,
+  }))
 
   return (
     <div className="p-4">
@@ -198,6 +209,51 @@ export function Dashboard() {
                 stroke="var(--card)"
               >
                 {pieData.map((_, i) => (
+                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip
+                formatter={(v) => formatCurrency(Number(v))}
+                contentStyle={{
+                  background: 'var(--card2)',
+                  border: '1px solid var(--border-l)',
+                  borderRadius: 8,
+                  color: 'var(--text)',
+                }}
+              />
+              <Legend
+                wrapperStyle={{ fontSize: 11, color: 'var(--muted)' }}
+                formatter={(v: string) => <span style={{ color: 'var(--muted)' }}>{v}</span>}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* Gráfico de forma de pagamento */}
+      <div
+        className="mt-3 rounded-2xl border p-4"
+        style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+      >
+        <p className="mb-2 text-sm font-bold">Gastos por forma de pagamento</p>
+        {methodData.length === 0 ? (
+          <p className="py-8 text-center text-sm" style={{ color: 'var(--muted)' }}>
+            Nenhuma despesa registrada.
+          </p>
+        ) : (
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie
+                data={methodData}
+                dataKey="value"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                outerRadius={90}
+                strokeWidth={2}
+                stroke="var(--card)"
+              >
+                {methodData.map((_, i) => (
                   <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                 ))}
               </Pie>

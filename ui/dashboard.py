@@ -5,7 +5,7 @@ from typing import Optional, Callable
 import database as db
 import ui.theme as T
 from ui.theme import F
-from utils.helpers import format_currency, MONTHS_PT
+from utils.helpers import format_currency, MONTHS_PT, PAYMENT_METHODS
 
 
 class Dashboard(ctk.CTkScrollableFrame):
@@ -116,10 +116,22 @@ class Dashboard(ctk.CTkScrollableFrame):
         self._bar_host = ctk.CTkFrame(bar_card, fg_color="transparent")
         self._bar_host.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 12))
 
+        # ── Gastos por forma de pagamento (linha cheia, abaixo dos 2 gráficos) ──
+        pm_card = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14,
+                               border_width=1, border_color=T.BORDER)
+        pm_card.grid(row=4, column=0, sticky="ew", padx=28, pady=(16, 0))
+        pm_card.grid_rowconfigure(1, weight=1)
+        pm_card.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(pm_card, text="Gastos por Forma de Pagamento",
+                     font=F(13, "bold"), text_color=T.TEXT, anchor="w").grid(
+            row=0, column=0, padx=20, pady=(16, 8), sticky="w")
+        self._pm_host = ctk.CTkFrame(pm_card, fg_color="transparent", height=280)
+        self._pm_host.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 12))
+
         # ── Savings bar ───────────────────────────────────────────────
         self._savings_card = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14,
                                           border_width=1, border_color=T.BORDER)
-        self._savings_card.grid(row=4, column=0, sticky="ew", padx=28, pady=(16, 0))
+        self._savings_card.grid(row=5, column=0, sticky="ew", padx=28, pady=(16, 0))
         self._savings_card.grid_columnconfigure(2, weight=1)
 
         ctk.CTkLabel(self._savings_card, text="Taxa de poupança:",
@@ -159,7 +171,7 @@ class Dashboard(ctk.CTkScrollableFrame):
         # ── Metas de poupança ─────────────────────────────────────────
         goals_card = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14,
                                   border_width=1, border_color=T.BORDER)
-        goals_card.grid(row=5, column=0, sticky="ew", padx=28, pady=(16, 28))
+        goals_card.grid(row=6, column=0, sticky="ew", padx=28, pady=(16, 28))
         goals_card.grid_columnconfigure(0, weight=1)
 
         hdr = ctk.CTkFrame(goals_card, fg_color="transparent")
@@ -239,6 +251,10 @@ class Dashboard(ctk.CTkScrollableFrame):
             pie_data  = db.get_expenses_by_category(self.month_id)
             pie_fig   = self._build_pie_figure(pie_data)
             bar_fig   = self._build_bar_figure(s)
+            pm_data   = db.get_expenses_by_payment_method(self.month_id)
+            pm_fig    = self._build_pie_figure(
+                [{"category": PAYMENT_METHODS.get(r["payment_method"], r["payment_method"]),
+                  "total": r["total"]} for r in pm_data])
             try:
                 total_inv = db.get_total_investments()
             except Exception:
@@ -289,6 +305,7 @@ class Dashboard(ctk.CTkScrollableFrame):
                        self._update_plan_alert(p, it, pr))
             self.after(0, lambda: self._embed_pie(pie_fig))
             self.after(0, lambda: self._embed_bar(bar_fig))
+            self.after(0, lambda: self._embed_pm(pm_fig))
             self.after(0, lambda: self._draw_goals(goals))
             self.after(0, lambda cp=card_payments: self._draw_credit_panel(cards, s, cp))
             self.after(0, lambda t=total_inv: self._update_total_inv(t))
@@ -380,6 +397,21 @@ class Dashboard(ctk.CTkScrollableFrame):
             for w in self._pie_host.winfo_children():
                 w.destroy()
             canvas = FigureCanvasTkAgg(fig, master=self._pie_host)
+            canvas.draw()
+            canvas.get_tk_widget().pack(fill="both", expand=True)
+        except Exception:
+            pass
+        finally:
+            plt.close(fig)
+
+    def _embed_pm(self, fig) -> None:
+        """Embute a Figure de forma de pagamento no Tkinter — roda no main thread."""
+        import matplotlib.pyplot as plt
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+        try:
+            for w in self._pm_host.winfo_children():
+                w.destroy()
+            canvas = FigureCanvasTkAgg(fig, master=self._pm_host)
             canvas.draw()
             canvas.get_tk_widget().pack(fill="both", expand=True)
         except Exception:

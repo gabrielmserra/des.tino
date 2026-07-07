@@ -49,6 +49,17 @@ INVESTMENT_CATEGORIES = [
     "Outros",
 ]
 
+PAYMENT_METHODS = {
+    "dinheiro":     "Dinheiro",
+    "pix":          "Pix",
+    "debito":       "Débito",
+    "credito":      "Crédito",
+    "vr_va":        "VR/VA",
+    "boleto":       "Boleto",
+    "transferencia": "Transferência",
+    "outro":        "Outro",
+}
+
 
 def apply_app_icon(dialog) -> None:
     """Aplica o ícone do app em qualquer CTkToplevel."""
@@ -80,3 +91,8 @@ def format_currency(value: float) -> str:
 def month_name_from_num(month_num: int, year: int) -> str:
     """Retorna o nome completo do mês: ex. 'Janeiro 2026'"""
     return f"{MONTHS_PT[month_num - 1]} {year}"
+
+
+def format_date_br(d) -> str:
+    """Formata uma date/datetime como dd/mm/aaaa."""
+    return d.strftime("%d/%m/%Y")

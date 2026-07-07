@@ -11,7 +11,7 @@ import {
   fetchDebitCardsBasic,
   type TxInput,
 } from '../lib/api'
-import { CATEGORIES } from '../lib/constants'
+import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants'
 import { formatCurrency } from '../lib/format'
 import type { TxType } from '../lib/types'
 
@@ -61,12 +61,13 @@ export function TxForm() {
   const [amount, setAmount] = useState('')
   const [category, setCategory] = useState('Outros')
   const [previsto, setPrevisto] = useState(false)
-  const [origin, setOrigin] = useState('nenhum') // 'nenhum' | 'pix' | 'card:<id>' | 'debit:<id>' | 'benefit:<id>'
+  const [paymentMethod, setPaymentMethod] = useState('')
+  const [originId, setOriginId] = useState<number | null>(null)
+  const [paymentDate, setPaymentDate] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  // Origem (cartão/débito/pix/VR-VA) só existe para saída variável, igual ao desktop
-  const showOrigin = flow === 'saida' && freq === 'variavel'
+  const needsSecondary = paymentMethod === 'credito' || paymentMethod === 'debito' || paymentMethod === 'vr_va'
   const cardsQ = useQuery({ queryKey: ['cardsBasic'], queryFn: fetchCardsBasic })
   const debitCardsQ = useQuery({ queryKey: ['debitCardsBasic'], queryFn: fetchDebitCardsBasic })
   const benefitsQ = useQuery({ queryKey: ['benefitsBasic'], queryFn: fetchBenefitsBasic })
@@ -82,14 +83,13 @@ export function TxForm() {
       setAmount(String(t.amount).replace('.', ','))
       setCategory(t.category || 'Outros')
       setPrevisto(t.is_expectation)
-      if (t.benefit_id) setOrigin(`benefit:${t.benefit_id}`)
-      else if (t.card_id) setOrigin(`card:${t.card_id}`)
-      else if (t.debit_card_id) setOrigin(`debit:${t.debit_card_id}`)
-      else if (t.payment_method === 'pix') setOrigin('pix')
-      else setOrigin('nenhum')
+      setPaymentMethod(t.payment_method || '')
+      setOriginId(t.benefit_id ?? t.card_id ?? t.debit_card_id ?? null)
+      setPaymentDate(t.payment_date ?? '')
     } else {
       setFlow('saida'); setFreq('variavel'); setDescription(''); setAmount('')
-      setCategory('Outros'); setPrevisto(false); setOrigin('nenhum')
+      setCategory('Outros'); setPrevisto(false)
+      setPaymentMethod(''); setOriginId(null); setPaymentDate('')
     }
     setError('')
   }, [state])
@@ -104,11 +104,11 @@ export function TxForm() {
     const value = parseAmount(amount)
     if (value <= 0) return setError('Digite um valor positivo.')
     if (selectedId == null) return setError('Nenhum mês selecionado.')
+    if (!paymentMethod) return setError('Selecione a forma de pagamento.')
 
-    const cardId = showOrigin && origin.startsWith('card:') ? Number(origin.split(':')[1]) : null
-    const benefitId = showOrigin && origin.startsWith('benefit:') ? Number(origin.split(':')[1]) : null
-    const debitCardId = showOrigin && origin.startsWith('debit:') ? Number(origin.split(':')[1]) : null
-    const paymentMethod = showOrigin && origin === 'pix' ? 'pix' : null
+    const cardId = paymentMethod === 'credito' ? originId : null
+    const benefitId = paymentMethod === 'vr_va' ? originId : null
+    const debitCardId = paymentMethod === 'debito' ? originId : null
 
     // Saldo de VR/VA não pode ficar negativo — bloqueia (gastos reais, não previsões)
     if (benefitId != null && !previsto) {
@@ -136,6 +136,7 @@ export function TxForm() {
       benefit_id: benefitId,
       debit_card_id: debitCardId,
       payment_method: paymentMethod,
+      payment_date: paymentDate || null,
     }
     setBusy(true)
     try {
@@ -244,37 +245,71 @@ export function TxForm() {
           </select>
         )}
 
-        {showOrigin && (
-          <div className="mb-3">
-            <label className="mb-1 block text-xs font-bold" style={{ color: 'var(--muted)' }}>
-              ORIGEM / PAGAMENTO (opcional)
-            </label>
-            <select
-              value={origin}
-              onChange={(e) => setOrigin(e.target.value)}
-              className="w-full rounded-lg border px-3 py-3 text-base outline-none"
-              style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
-            >
-              <option value="nenhum">Nenhum</option>
-              <option value="pix">💠 Pix</option>
-              {(cardsQ.data ?? []).map((c) => (
-                <option key={`card:${c.id}`} value={`card:${c.id}`}>
+        <div className="mb-3">
+          <label className="mb-1 block text-xs font-bold" style={{ color: 'var(--muted)' }}>
+            FORMA DE PAGAMENTO
+          </label>
+          <select
+            value={paymentMethod}
+            onChange={(e) => {
+              setPaymentMethod(e.target.value)
+              setOriginId(null)
+            }}
+            className="w-full rounded-lg border px-3 py-3 text-base outline-none"
+            style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+          >
+            <option value="" disabled>
+              Selecione…
+            </option>
+            {Object.entries(PAYMENT_METHODS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {needsSecondary && (
+          <select
+            value={originId ?? ''}
+            onChange={(e) => setOriginId(e.target.value ? Number(e.target.value) : null)}
+            className="mb-3 w-full rounded-lg border px-3 py-3 text-base outline-none"
+            style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+          >
+            <option value="">Selecione…</option>
+            {paymentMethod === 'credito' &&
+              (cardsQ.data ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-              {(debitCardsQ.data ?? []).map((d) => (
-                <option key={`debit:${d.id}`} value={`debit:${d.id}`}>
-                  {d.name} (débito)
+            {paymentMethod === 'debito' &&
+              (debitCardsQ.data ?? []).map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
                 </option>
               ))}
-              {(benefitsQ.data ?? []).map((b) => (
-                <option key={`benefit:${b.id}`} value={`benefit:${b.id}`}>
+            {paymentMethod === 'vr_va' &&
+              (benefitsQ.data ?? []).map((b) => (
+                <option key={b.id} value={b.id}>
                   {b.name} ({b.benefit_type}) — {formatCurrency(b.balance)}
                 </option>
               ))}
-            </select>
-          </div>
+          </select>
         )}
+
+        <div className="mb-3">
+          <label className="mb-1 block text-xs font-bold" style={{ color: 'var(--muted)' }}>
+            DATA DO PAGAMENTO (opcional)
+          </label>
+          <input
+            type="date"
+            value={paymentDate}
+            onChange={(e) => setPaymentDate(e.target.value)}
+            className="w-full rounded-lg border px-3 py-3 text-base outline-none"
+            style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+          />
+        </div>
 
         <label className="mb-4 flex items-center gap-2 text-sm" style={{ color: 'var(--text)' }}>
           <input

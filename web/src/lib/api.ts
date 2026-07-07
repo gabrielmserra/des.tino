@@ -98,6 +98,27 @@ export async function fetchTotalInvestments(): Promise<number> {
   return Number(data ?? 0)
 }
 
+export async function fetchExpensesByPaymentMethod(monthId: number): Promise<CategoryTotal[]> {
+  const { data, error } = await supabase.rpc('get_expenses_by_payment_method', {
+    p_month_id: monthId,
+  })
+  if (error) throw error
+  return (data ?? []).map((r: { payment_method: string; total: number | string }) => ({
+    category: r.payment_method,
+    total: Number(r.total),
+  }))
+}
+
+export async function ensureMonth(name: string, year: number, month: number): Promise<number> {
+  const { data, error } = await supabase.rpc('ensure_month', {
+    p_name: name,
+    p_year: year,
+    p_month: month,
+  })
+  if (error) throw error
+  return data as number
+}
+
 // ── Escrita (via RPC centralizada no Postgres) ───────────────────────
 export type TxInput = {
   type: string
@@ -109,6 +130,7 @@ export type TxInput = {
   benefit_id?: number | null
   debit_card_id?: number | null
   payment_method?: string | null
+  payment_date?: string | null
 }
 
 export async function addTransaction(monthId: number, tx: TxInput): Promise<void> {
@@ -123,6 +145,7 @@ export async function addTransaction(monthId: number, tx: TxInput): Promise<void
     p_benefit_id: tx.benefit_id ?? null,
     p_debit_card_id: tx.debit_card_id ?? null,
     p_payment_method: tx.payment_method ?? null,
+    p_payment_date: tx.payment_date ?? null,
   })
   if (error) throw error
 }
@@ -138,6 +161,7 @@ export async function updateTransaction(id: number, tx: TxInput): Promise<void> 
     p_benefit_id: tx.benefit_id ?? null,
     p_debit_card_id: tx.debit_card_id ?? null,
     p_payment_method: tx.payment_method ?? null,
+    p_payment_date: tx.payment_date ?? null,
   })
   if (error) throw error
 }
@@ -673,4 +697,24 @@ export async function updateGoal(id: number, name: string, targetAmount: number)
 export async function deleteGoal(id: number): Promise<void> {
   const { error } = await supabase.from('goals').delete().eq('id', id)
   if (error) throw error
+}
+
+// ── Importação de extrato/fatura ─────────────────────────────────────
+export type ImportRow = {
+  month_id: number
+  type: string
+  description: string
+  amount: number
+  category?: string | null
+  payment_method?: string | null
+  payment_date?: string | null
+  card_id?: number | null
+  benefit_id?: number | null
+  debit_card_id?: number | null
+}
+
+export async function importTransactionsBulk(rows: ImportRow[]): Promise<number[]> {
+  const { data, error } = await supabase.rpc('import_transactions_bulk', { p_rows: rows })
+  if (error) throw error
+  return (data ?? []) as number[]
 }

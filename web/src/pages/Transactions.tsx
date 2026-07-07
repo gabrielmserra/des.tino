@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useMonths } from '../lib/month'
 import { useTxForm } from '../lib/txform'
-import { fetchTransactions } from '../lib/api'
+import { fetchTransactions, fetchCardsBasic, fetchDebitCardsBasic, fetchBenefitsBasic } from '../lib/api'
 import { Skeleton } from '../components/Skeleton'
-import { formatCurrency } from '../lib/format'
-import type { Transaction, TxType } from '../lib/types'
+import { formatCurrency, formatDate } from '../lib/format'
+import { PAYMENT_METHODS } from '../lib/constants'
+import type { Transaction, TxType, CardBasic, DebitCard, BenefitBasic } from '../lib/types'
 
 const IS_INCOME: Record<TxType, boolean> = {
   entrada_fixa: true,
@@ -16,11 +17,22 @@ const IS_INCOME: Record<TxType, boolean> = {
 
 type Filter = 'todos' | 'entradas' | 'saidas'
 
-function origemTag(t: Transaction): string | null {
-  if (t.benefit_id) return 'VR/VA'
-  if (t.card_id) return 'Cartão'
-  if (t.debit_card_id) return 'Débito'
-  if (t.payment_method === 'pix') return 'Pix'
+function origemTag(
+  t: Transaction,
+  cards: CardBasic[],
+  debitCards: DebitCard[],
+  benefits: BenefitBasic[],
+): string | null {
+  if (t.payment_method === 'credito' && t.card_id) {
+    return cards.find((c) => c.id === t.card_id)?.name ?? 'Crédito'
+  }
+  if (t.payment_method === 'debito' && t.debit_card_id) {
+    return debitCards.find((d) => d.id === t.debit_card_id)?.name ?? 'Débito'
+  }
+  if (t.payment_method === 'vr_va' && t.benefit_id) {
+    return benefits.find((b) => b.id === t.benefit_id)?.name ?? 'VR/VA'
+  }
+  if (t.payment_method) return PAYMENT_METHODS[t.payment_method] ?? t.payment_method
   return null
 }
 
@@ -34,6 +46,9 @@ export function Transactions() {
     queryFn: () => fetchTransactions(selectedId!),
     enabled: selectedId != null,
   })
+  const cardsQ = useQuery({ queryKey: ['cardsBasic'], queryFn: fetchCardsBasic })
+  const debitCardsQ = useQuery({ queryKey: ['debitCardsBasic'], queryFn: fetchDebitCardsBasic })
+  const benefitsQ = useQuery({ queryKey: ['benefitsBasic'], queryFn: fetchBenefitsBasic })
 
   const all = data ?? []
   const txs = all.filter((t) => {
@@ -84,7 +99,7 @@ export function Transactions() {
           {txs.map((t) => {
             const income = IS_INCOME[t.type]
             const color = income ? 'var(--primary)' : 'var(--red)'
-            const tag = origemTag(t)
+            const tag = origemTag(t, cardsQ.data ?? [], debitCardsQ.data ?? [], benefitsQ.data ?? [])
             return (
               <li
                 key={t.id}
@@ -117,6 +132,11 @@ export function Transactions() {
                         style={{ background: 'var(--card2)', color: 'var(--muted)' }}
                       >
                         {tag}
+                      </span>
+                    )}
+                    {t.payment_date && (
+                      <span className="text-[10px]" style={{ color: 'var(--muted)' }}>
+                        {formatDate(t.payment_date)}
                       </span>
                     )}
                   </div>

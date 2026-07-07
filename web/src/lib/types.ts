@@ -22,6 +22,7 @@ export type Transaction = {
   benefit_id: number | null
   debit_card_id: number | null
   payment_method: string | null
+  payment_date: string | null
   is_expectation: boolean
   created_at: string
 }

@@ -1,12 +1,14 @@
 """Aba de lançamentos: formulário + tabela com badges de categoria."""
 import tkinter as tk
 import customtkinter as ctk
+import threading
+from datetime import datetime
 from typing import Callable, List, Optional
 
 import database as db
 import ui.theme as T
 from ui.theme import F
-from utils.helpers import CATEGORIES, EXPENSE_TYPES, format_currency
+from utils.helpers import CATEGORIES, EXPENSE_TYPES, format_currency, format_date_br, PAYMENT_METHODS
 
 _PLACEHOLDER = {
     "entrada_fixa":     "Ex: Salário, Aluguel recebido…",
@@ -14,6 +16,9 @@ _PLACEHOLDER = {
     "saida_fixa":       "Ex: Aluguel, Financiamento, Internet…",
     "saida_variavel":   "Ex: Mercado, Restaurante, Uber…",
 }
+
+_METHOD_LABELS = list(PAYMENT_METHODS.values())
+_LABEL_TO_METHOD_KEY = {v: k for k, v in PAYMENT_METHODS.items()}
 
 
 class TransactionsTab(ctk.CTkFrame):
@@ -32,7 +37,6 @@ class TransactionsTab(ctk.CTkFrame):
         self._benefits_list:   list = []   # benefícios ativos (com saldo)
         self._debit_info:      dict = {}   # debit card id → {name, color}
         self._debit_list:      list = []   # cartões de débito
-        self._origin_map:      dict = {}   # display name → ("card"|"benefit"|"debit"|"pix", id)
         self._cards_list:      list = []
         self._row_widgets:     dict = {}   # tx_id     → {frame, labels, separator, tx}
         self._empty_lbl            = None
@@ -61,7 +65,25 @@ class TransactionsTab(ctk.CTkFrame):
             self.grid_rowconfigure(1, weight=1)
             self._build_form(row=0)
             self._build_table(row=1)
+            # Nas outras abas não há as barras de preset (cartão/débito/VR-VA),
+            # mas o combo de "forma de pagamento" precisa das mesmas listas
+            # pra popular o seletor secundário (crédito/débito/VR-VA).
+            self._load_payment_sources_async()
         # Não chama refresh() aqui — a aba carrega ao ser exibida pela primeira vez
+
+    # ------------------------------------------------------------------
+    def _load_payment_sources_async(self) -> None:
+        def _fetch():
+            cards    = db.get_cards()
+            debits   = db.get_debit_cards()
+            benefits = db.get_benefits()
+            self.after(0, lambda: self._apply_payment_sources(cards, debits, benefits))
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _apply_payment_sources(self, cards: List[dict], debits: List[dict], benefits: List[dict]) -> None:
+        self._on_cards_changed(cards)
+        self._on_debit_changed(debits)
+        self._on_benefits_changed(benefits)
 
     # ------------------------------------------------------------------
     def _build_card_bar(self, row: int = 0) -> None:
@@ -107,7 +129,7 @@ class TransactionsTab(ctk.CTkFrame):
             c["id"]: {"name": c["name"], "color": c.get("color", "#6C8EFF")}
             for c in cards
         }
-        self._rebuild_origin_combo()
+        self._refresh_secondary_combo()
         if self._initialized:
             self.refresh()
 
@@ -119,7 +141,7 @@ class TransactionsTab(ctk.CTkFrame):
                       "type": b["benefit_type"]}
             for b in benefits
         }
-        self._rebuild_origin_combo()
+        self._refresh_secondary_combo()
         if self._initialized:
             self.refresh()
 
@@ -129,59 +151,120 @@ class TransactionsTab(ctk.CTkFrame):
             c["id"]: {"name": c["name"], "color": c.get("color", "#6C8EFF")}
             for c in cards
         }
-        self._rebuild_origin_combo()
+        self._refresh_secondary_combo()
         if self._initialized:
             self.refresh()
 
-    def _rebuild_origin_combo(self) -> None:
-        """Monta o combo de origem: Nenhum, Pix, cartões, débito, benefícios (VR/VA)."""
-        self._origin_map = {"Pix": ("pix", None)}
-        names = ["Nenhum", "Pix"]
-        for c in self._cards_list:
-            names.append(c["name"])
-            self._origin_map[c["name"]] = ("card", c["id"])
-        for d in self._debit_list:
-            label = f"{d['name']} (débito)"
-            names.append(label)
-            self._origin_map[label] = ("debit", d["id"])
-        for b in self._benefits_list:
-            label = f"{b['name']} ({b['benefit_type']})"
-            names.append(label)
-            self._origin_map[label] = ("benefit", b["id"])
-        if hasattr(self, "_card_combo"):
-            self._card_combo.configure(values=names)
-        if hasattr(self, "_q_origin"):
-            self._q_origin.configure(values=names)
+    def _secondary_values_for(self, method_key: str) -> list:
+        """Valores do combo secundário (cartão/débito/benefício específico)
+        de acordo com a forma de pagamento escolhida."""
+        if method_key == "credito":
+            return [c["name"] for c in self._cards_list]
+        if method_key == "debito":
+            return [d["name"] for d in self._debit_list]
+        if method_key == "vr_va":
+            return [f"{b['name']} ({b['benefit_type']})" for b in self._benefits_list]
+        return []
 
-    def _resolve_origin(self, label: str):
-        """Converte o rótulo do combo em (card_id, benefit_id, debit_card_id, payment_method)."""
-        kind, oid = self._origin_map.get(label, (None, None))
-        if kind == "card":
-            return oid, None, None, None
-        if kind == "benefit":
-            return None, oid, None, None
-        if kind == "debit":
-            return None, None, oid, None
-        if kind == "pix":
-            return None, None, None, "pix"
-        return None, None, None, None
+    def _refresh_secondary_combo(self) -> None:
+        """Chamado quando a forma de pagamento muda ou quando as listas de
+        cartões/débito/benefícios são (re)carregadas — atualiza os valores
+        do combo secundário do formulário principal e da barra rápida."""
+        if hasattr(self, "_secondary_combo"):
+            key = self._method_key()
+            values = self._secondary_values_for(key)
+            self._secondary_combo.configure(values=values)
+            if key in ("credito", "debito", "vr_va"):
+                self._secondary_combo.grid()
+                if self._secondary_var.get() not in values:
+                    self._secondary_var.set(values[0] if values else "")
+            else:
+                self._secondary_var.set("")
+                self._secondary_combo.grid_remove()
+        if hasattr(self, "_q_secondary_combo"):
+            qkey = _LABEL_TO_METHOD_KEY.get(self._q_method_var.get(), "")
+            qvalues = self._secondary_values_for(qkey)
+            self._q_secondary_combo.configure(values=qvalues)
+            if self._q_secondary_var.get() not in qvalues:
+                self._q_secondary_var.set(qvalues[0] if qvalues else "")
 
-    def _origin_label_for(self, card_id, benefit_id, debit_card_id=None, payment_method=None) -> str:
-        if benefit_id:
-            info = self._benefit_info.get(benefit_id)
+    def _method_key(self) -> str:
+        return _LABEL_TO_METHOD_KEY.get(self._method_var.get(), "")
+
+    def _on_method_change(self, _choice=None) -> None:
+        self._refresh_secondary_combo()
+
+    def _resolve_payment_from(self, method_key: str, secondary_label: str):
+        """Converte (forma de pagamento, rótulo secundário) em (card_id, benefit_id, debit_card_id)."""
+        card_id = benefit_id = debit_card_id = None
+        if method_key == "credito":
+            card_id = self._card_id_map.get(secondary_label)
+        elif method_key == "debito":
+            debit_card_id = next((d["id"] for d in self._debit_list if d["name"] == secondary_label), None)
+        elif method_key == "vr_va":
+            for b in self._benefits_list:
+                if f"{b['name']} ({b['benefit_type']})" == secondary_label:
+                    benefit_id = b["id"]
+                    break
+        return card_id, benefit_id, debit_card_id
+
+    def _resolve_payment(self):
+        """Lê os combos do formulário principal. Retorna (card_id, benefit_id,
+        debit_card_id, payment_method) — payment_method é "" se nada selecionado."""
+        key = self._method_key()
+        card_id, benefit_id, debit_card_id = self._resolve_payment_from(key, self._secondary_var.get())
+        return card_id, benefit_id, debit_card_id, key
+
+    def _payment_prefill(self, tx: dict) -> tuple:
+        """Retorna (rótulo do método, rótulo da origem específica) pra
+        pré-preencher os combos ao editar. Lançamentos antigos sem
+        payment_method explícito caem na mesma inferência de antes
+        (benefício > cartão > débito > pix)."""
+        method = tx.get("payment_method") or ""
+        if method not in PAYMENT_METHODS:
+            if tx.get("benefit_id"):
+                method = "vr_va"
+            elif tx.get("card_id"):
+                method = "credito"
+            elif tx.get("debit_card_id"):
+                method = "debito"
+            elif tx.get("payment_method") == "pix":
+                method = "pix"
+        method_label = PAYMENT_METHODS.get(method, "")
+        secondary_label = ""
+        if method == "credito" and tx.get("card_id"):
+            info = self._card_info.get(tx["card_id"])
+            secondary_label = info["name"] if info else ""
+        elif method == "debito" and tx.get("debit_card_id"):
+            info = self._debit_info.get(tx["debit_card_id"])
+            secondary_label = info["name"] if info else ""
+        elif method == "vr_va" and tx.get("benefit_id"):
+            info = self._benefit_info.get(tx["benefit_id"])
+            secondary_label = f"{info['name']} ({info['type']})" if info else ""
+        return method_label, secondary_label
+
+    def _payment_badge_info(self, tx: dict) -> tuple:
+        """Retorna (rótulo, cor) do badge de forma de pagamento de uma linha
+        da tabela — nome+cor da entidade específica quando crédito/débito/
+        VR-VA, senão o rótulo genérico da forma de pagamento. Lançamentos
+        antigos sem payment_method caem na mesma inferência de _payment_prefill."""
+        method_label, _ = self._payment_prefill(tx)
+        method = _LABEL_TO_METHOD_KEY.get(method_label, "")
+        if method == "credito" and tx.get("card_id"):
+            info = self._card_info.get(tx["card_id"])
             if info:
-                return f"{info['name']} ({info['type']})"
-        if card_id:
-            info = self._card_info.get(card_id)
+                return info["name"], info["color"]
+        elif method == "debito" and tx.get("debit_card_id"):
+            info = self._debit_info.get(tx["debit_card_id"])
             if info:
-                return info["name"]
-        if debit_card_id:
-            info = self._debit_info.get(debit_card_id)
+                return f"{info['name']} · débito", info["color"]
+        elif method == "vr_va" and tx.get("benefit_id"):
+            info = self._benefit_info.get(tx["benefit_id"])
             if info:
-                return f"{info['name']} (débito)"
-        if payment_method == "pix":
-            return "Pix"
-        return "Nenhum"
+                return f"{info['name']} · {info['type']}", info["color"]
+        if method:
+            return PAYMENT_METHODS.get(method, method), T.VIOLET
+        return "", T.MUTED
 
     # ------------------------------------------------------------------
     def _build_form(self, row: int = 0) -> None:
@@ -271,27 +354,46 @@ class TransactionsTab(ctk.CTkFrame):
             text_color=T.MUTED, font=F(12),
         )
 
-        # Card selector — saida_variavel only
-        _err_row = 3
-        if self._is_var_expense:
-            ctk.CTkLabel(form, text="ORIGEM / PAGAMENTO (opcional)", font=F(11, "bold"),
-                         text_color=T.MUTED, anchor="w").grid(
-                row=3, column=0, padx=(18, 6), pady=(10, 2), sticky="w")
-            self._card_combo_var = ctk.StringVar(value="Nenhum")
-            self._card_combo = ctk.CTkComboBox(
-                form, values=["Nenhum"],
-                variable=self._card_combo_var,
-                fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
-                button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
-                dropdown_text_color=T.TEXT, corner_radius=8, width=240,
-            )
-            self._card_combo.grid(row=3, column=1, columnspan=2,
-                                  padx=6, pady=(10, 2), sticky="w")
-            _err_row = 4
+        # Forma de pagamento (obrigatória) + origem específica (opcional,
+        # só quando é crédito/débito/VR-VA) + data de pagamento (opcional) —
+        # presente em todas as abas.
+        ctk.CTkLabel(form, text="FORMA DE PAGAMENTO", font=F(11, "bold"),
+                     text_color=T.MUTED, anchor="w").grid(
+            row=3, column=0, padx=(18, 6), pady=(10, 2), sticky="w")
+        ctk.CTkLabel(form, text="DATA DO PAGAMENTO (opcional)", font=F(11, "bold"),
+                     text_color=T.MUTED, anchor="w").grid(
+            row=3, column=2, padx=6, pady=(10, 2), sticky="w")
+
+        self._method_var = ctk.StringVar(value="")
+        self._method_combo = ctk.CTkComboBox(
+            form, values=_METHOD_LABELS, variable=self._method_var,
+            command=self._on_method_change,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
+            dropdown_text_color=T.TEXT, corner_radius=8,
+        )
+        self._method_combo.grid(row=4, column=0, padx=(18, 6), pady=(0, 2), sticky="ew")
+
+        self._secondary_var = ctk.StringVar(value="")
+        self._secondary_combo = ctk.CTkComboBox(
+            form, values=[], variable=self._secondary_var,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
+            dropdown_text_color=T.TEXT, corner_radius=8,
+        )
+        self._secondary_combo.grid(row=4, column=1, padx=6, pady=(0, 2), sticky="ew")
+        self._secondary_combo.grid_remove()
+
+        self._date_entry = ctk.CTkEntry(
+            form, placeholder_text="dd/mm/aaaa",
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            placeholder_text_color=T.SUBTLE, corner_radius=8,
+        )
+        self._date_entry.grid(row=4, column=2, padx=6, pady=(0, 2), sticky="ew")
 
         self._error_lbl = ctk.CTkLabel(
             form, text="", font=F(11), text_color=T.RED, anchor="w")
-        self._error_lbl.grid(row=_err_row, column=0, columnspan=4,
+        self._error_lbl.grid(row=5, column=0, columnspan=4,
                               padx=18, pady=(6, 12), sticky="w")
 
     # ------------------------------------------------------------------
@@ -414,15 +516,31 @@ class TransactionsTab(ctk.CTkFrame):
                 dropdown_text_color=T.TEXT, corner_radius=8,
             ).pack(side="left", padx=6)
 
-        if self._is_var_expense:
-            self._q_origin = ctk.CTkComboBox(
-                inner, values=["Nenhum"], width=170,
-                fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
-                button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
-                dropdown_text_color=T.TEXT, corner_radius=8,
-            )
-            self._q_origin.set("Nenhum")
-            self._q_origin.pack(side="left", padx=6)
+        self._q_method_var = ctk.StringVar(value="")
+        self._q_method_combo = ctk.CTkComboBox(
+            inner, values=_METHOD_LABELS, variable=self._q_method_var,
+            command=self._on_method_change, width=130,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
+            dropdown_text_color=T.TEXT, corner_radius=8,
+        )
+        self._q_method_combo.pack(side="left", padx=6)
+
+        self._q_secondary_var = ctk.StringVar(value="")
+        self._q_secondary_combo = ctk.CTkComboBox(
+            inner, values=[], variable=self._q_secondary_var, width=150,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
+            dropdown_text_color=T.TEXT, corner_radius=8,
+        )
+        self._q_secondary_combo.pack(side="left", padx=6)
+
+        self._q_date_entry = ctk.CTkEntry(
+            inner, placeholder_text="dd/mm/aaaa", width=100,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            placeholder_text_color=T.SUBTLE, corner_radius=8,
+        )
+        self._q_date_entry.pack(side="left", padx=6)
 
         self._q_expect_btn = ctk.CTkButton(
             inner, text="📋 Previsto", command=self._toggle_q_expect,
@@ -468,32 +586,47 @@ class TransactionsTab(ctk.CTkFrame):
             return
 
         category = self._q_cat_var.get() if self.is_expense else "Receita"
-        card_id = benefit_id = debit_card_id = None
-        payment_method = None
-        if self._is_var_expense and hasattr(self, "_q_origin"):
-            card_id, benefit_id, debit_card_id, payment_method = self._resolve_origin(self._q_origin.get())
-            # Previsto não debita o saldo (só ao confirmar) → não valida aqui
-            if benefit_id is not None and not self._q_expect_active:
-                info  = self._benefit_info.get(benefit_id, {})
-                avail = float(info.get("balance", 0))
-                if amount > avail + 1e-9:
-                    self._q_err.configure(
-                        text=f"⚠  Saldo insuficiente em {info.get('name', 'benefício')}: "
-                             f"disponível {format_currency(avail)}.")
-                    self._q_amount.focus()
-                    return
+
+        payment_method = _LABEL_TO_METHOD_KEY.get(self._q_method_var.get(), "")
+        if not payment_method:
+            self._q_err.configure(text="⚠  Selecione a forma de pagamento.")
+            return
+        card_id, benefit_id, debit_card_id = self._resolve_payment_from(
+            payment_method, self._q_secondary_var.get())
+
+        payment_date = None
+        date_raw = self._q_date_entry.get().strip()
+        if date_raw:
+            try:
+                payment_date = datetime.strptime(date_raw, "%d/%m/%Y").date()
+            except ValueError:
+                self._q_err.configure(text="⚠  Data inválida. Use o formato dd/mm/aaaa.")
+                self._q_date_entry.focus()
+                return
+
+        # Previsto não debita o saldo (só ao confirmar) → não valida aqui
+        if benefit_id is not None and not self._q_expect_active:
+            info  = self._benefit_info.get(benefit_id, {})
+            avail = float(info.get("balance", 0))
+            if amount > avail + 1e-9:
+                self._q_err.configure(
+                    text=f"⚠  Saldo insuficiente em {info.get('name', 'benefício')}: "
+                         f"disponível {format_currency(avail)}.")
+                self._q_amount.focus()
+                return
 
         self._q_err.configure(text="")
         db.add_transaction(self.month_id, self.tx_type, desc, amount, category,
                            card_id=card_id, benefit_id=benefit_id,
                            debit_card_id=debit_card_id, payment_method=payment_method,
-                           is_expectation=self._q_expect_active)
+                           payment_date=payment_date, is_expectation=self._q_expect_active)
         self._q_desc.delete(0, "end")
         self._q_amount.delete(0, "end")
+        self._q_date_entry.delete(0, "end")
         self._q_desc.focus()
-        if self._is_var_expense and hasattr(self, "_benefits_bar"):
+        if hasattr(self, "_benefits_bar"):
             self._benefits_bar.refresh()
-        if self._is_var_expense and hasattr(self, "_debit_bar"):
+        if hasattr(self, "_debit_bar"):
             self._debit_bar.refresh()
         self.refresh()
         self.on_change()
@@ -538,12 +671,22 @@ class TransactionsTab(ctk.CTkFrame):
             self._amount.focus()
             return
 
-        card_id:        Optional[int] = None
-        benefit_id:     Optional[int] = None
-        debit_card_id:  Optional[int] = None
-        payment_method: Optional[str] = None
-        if self._is_var_expense and hasattr(self, "_card_combo"):
-            card_id, benefit_id, debit_card_id, payment_method = self._resolve_origin(self._card_combo.get())
+        payment_method = self._method_key()
+        if not payment_method:
+            self._show_error("Selecione a forma de pagamento.")
+            return
+        card_id, benefit_id, debit_card_id = self._resolve_payment_from(
+            payment_method, self._secondary_var.get())
+
+        payment_date = None
+        date_raw = self._date_entry.get().strip()
+        if date_raw:
+            try:
+                payment_date = datetime.strptime(date_raw, "%d/%m/%Y").date()
+            except ValueError:
+                self._show_error("Data inválida. Use o formato dd/mm/aaaa.")
+                self._date_entry.focus()
+                return
 
         # Saldo de VR/VA não pode ficar negativo — bloqueia (gastos reais, não previsões)
         if benefit_id is not None and not self._expectation_active:
@@ -568,21 +711,20 @@ class TransactionsTab(ctk.CTkFrame):
                 self._editing_id, self.month_id, desc, amount, category,
                 card_id=card_id, is_expectation=self._expectation_active,
                 benefit_id=benefit_id, debit_card_id=debit_card_id,
-                payment_method=payment_method)
+                payment_method=payment_method, payment_date=payment_date)
             self._cancel_edit()
         else:
             db.add_transaction(
                 self.month_id, self.tx_type, desc, amount, category,
                 card_id=card_id, is_expectation=self._expectation_active,
                 benefit_id=benefit_id, debit_card_id=debit_card_id,
-                payment_method=payment_method)
+                payment_method=payment_method, payment_date=payment_date)
             self._desc.delete(0, "end")
             self._amount.delete(0, "end")
+            self._date_entry.delete(0, "end")
             self._desc.focus()
 
-        if self._is_var_expense and hasattr(self, "_benefits_bar"):
-            self._benefits_bar.refresh()   # saldo mudou
-        if self._is_var_expense and hasattr(self, "_debit_bar"):
+        if hasattr(self, "_debit_bar"):
             self._debit_bar.refresh()
         self.refresh()
         self.on_change()
@@ -606,10 +748,18 @@ class TransactionsTab(ctk.CTkFrame):
         self._amount.insert(0, str(tx["amount"]))
         if self.is_expense:
             self._cat_var.set(tx["category"] or "Outros")
-        if self._is_var_expense and hasattr(self, "_card_combo"):
-            self._card_combo.set(
-                self._origin_label_for(tx.get("card_id"), tx.get("benefit_id"),
-                                       tx.get("debit_card_id"), tx.get("payment_method")))
+        method_label, secondary_label = self._payment_prefill(tx)
+        self._method_var.set(method_label)
+        self._refresh_secondary_combo()
+        if secondary_label:
+            self._secondary_var.set(secondary_label)
+        self._date_entry.delete(0, "end")
+        if tx.get("payment_date"):
+            try:
+                d = datetime.strptime(str(tx["payment_date"])[:10], "%Y-%m-%d")
+                self._date_entry.insert(0, format_date_br(d))
+            except ValueError:
+                pass
         self._form_title.configure(text="✏  Editando lançamento")
         self._add_btn.configure(text="✓ Salvar")
         self._cancel_btn.grid(row=1, column=0, sticky="ew", pady=(4, 0))
@@ -622,8 +772,9 @@ class TransactionsTab(ctk.CTkFrame):
         self._amount.delete(0, "end")
         if self.is_expense:
             self._cat_var.set("Outros")
-        if self._is_var_expense and hasattr(self, "_card_combo"):
-            self._card_combo.set("Nenhum")
+        self._method_var.set("")
+        self._refresh_secondary_combo()
+        self._date_entry.delete(0, "end")
         self._form_title.configure(text="Novo Lançamento")
         self._add_btn.configure(text="+ Adicionar")
         self._cancel_btn.grid_forget()
@@ -703,24 +854,19 @@ class TransactionsTab(ctk.CTkFrame):
             w["amount_lbl"].configure(fg_color=row_bg, text=format_currency(tx["amount"]), text_color=amt_col)
             w["cat_lbl"].configure(text=f" {tx['category'] or 'Outros'} ", text_color=amt_col)
 
-            # Badge da origem: cartão, débito, pix ou benefício (só em saida_variavel)
-            if self._is_var_expense and w["badge_lbl"] is not None:
-                b_info = self._benefit_info.get(tx.get("benefit_id"))
-                c_info = self._card_info.get(tx.get("card_id"))
-                d_info = self._debit_info.get(tx.get("debit_card_id"))
-                if b_info:
-                    w["badge_lbl"].configure(
-                        text=f"  {b_info['name']} · {b_info['type']} ",
-                        text_color=b_info["color"])
-                    w["badge_lbl"].pack(anchor="w", pady=(2, 0))
-                elif c_info:
-                    w["badge_lbl"].configure(text=f"  {c_info['name']} ", text_color=c_info["color"])
-                    w["badge_lbl"].pack(anchor="w", pady=(2, 0))
-                elif d_info:
-                    w["badge_lbl"].configure(text=f"  {d_info['name']} · débito ", text_color=d_info["color"])
-                    w["badge_lbl"].pack(anchor="w", pady=(2, 0))
-                elif tx.get("payment_method") == "pix":
-                    w["badge_lbl"].configure(text="  Pix ", text_color=T.VIOLET)
+            # Badge da forma de pagamento (+ data, se houver) — todas as abas
+            if w["badge_lbl"] is not None:
+                label, badge_color = self._payment_badge_info(tx)
+                pay_date = tx.get("payment_date")
+                if pay_date:
+                    try:
+                        d = datetime.strptime(str(pay_date)[:10], "%Y-%m-%d")
+                        date_str = format_date_br(d)
+                    except ValueError:
+                        date_str = str(pay_date)
+                    label = f"{label} · {date_str}" if label else date_str
+                if label:
+                    w["badge_lbl"].configure(text=f"  {label} ", text_color=badge_color)
                     w["badge_lbl"].pack(anchor="w", pady=(2, 0))
                 else:
                     w["badge_lbl"].pack_forget()
@@ -782,13 +928,11 @@ class TransactionsTab(ctk.CTkFrame):
             )
             exp_badge.pack(anchor="w", pady=(2, 0))
 
-        badge_lbl = None
-        if self._is_var_expense:
-            badge_lbl = ctk.CTkLabel(
-                desc_cell, text="",
-                font=F(10, "bold"), text_color=T.MUTED,
-                fg_color=T.CARD2, corner_radius=4,
-            )
+        badge_lbl = ctk.CTkLabel(
+            desc_cell, text="",
+            font=F(10, "bold"), text_color=T.MUTED,
+            fg_color=T.CARD2, corner_radius=4,
+        )
 
         cat_lbl = ctk.CTkLabel(
             row, text=f" {tx['category'] or 'Outros'} ",

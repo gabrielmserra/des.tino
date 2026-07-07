@@ -36,3 +36,14 @@ export const TYPE_LABELS: Record<string, string> = {
   saida_fixa: 'Saída Fixa',
   saida_variavel: 'Saída Variável',
 }
+
+export const PAYMENT_METHODS: Record<string, string> = {
+  dinheiro: 'Dinheiro',
+  pix: 'Pix',
+  debito: 'Débito',
+  credito: 'Crédito',
+  vr_va: 'VR/VA',
+  boleto: 'Boleto',
+  transferencia: 'Transferência',
+  outro: 'Outro',
+}

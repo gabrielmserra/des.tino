@@ -16,3 +16,11 @@ export function todayLabel(): string {
   const d = new Date()
   return `Hoje, ${d.getDate()} de ${MONTHS_PT[d.getMonth()].toLowerCase()} de ${d.getFullYear()}`
 }
+
+/** Formata uma data "YYYY-MM-DD" (coluna `date` do Postgres) como dd/mm/aaaa.
+ * Faz split manual em vez de `new Date(str)` pra não sofrer o shift de fuso
+ * horário (UTC-3 faria "2026-07-06" virar 05/07 se passasse por Date). */
+export function formatDate(isoDate: string): string {
+  const [y, m, d] = isoDate.split('-')
+  return `${d}/${m}/${y}`
+}
