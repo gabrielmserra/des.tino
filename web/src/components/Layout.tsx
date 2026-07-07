@@ -1,6 +1,16 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import {
+  LayoutDashboard,
+  ClipboardList,
+  Receipt,
+  CreditCard,
+  HandCoins,
+  Plus,
+  LogOut,
+  type LucideIcon,
+} from 'lucide-react'
 import { useMonths } from '../lib/month'
 import { useAuth } from '../lib/auth'
 import { useTxForm } from '../lib/txform'
@@ -28,14 +38,30 @@ function MonthSelector() {
   )
 }
 
-const tabStyle = ({ isActive }: { isActive: boolean }) => ({
-  color: isActive ? 'var(--primary)' : 'var(--muted)',
-  flex: 1,
-  textAlign: 'center' as const,
-  padding: '10px 0',
-  fontSize: 12,
-  fontWeight: 600,
-})
+function NavTab({
+  to,
+  end,
+  icon: Icon,
+  label,
+}: {
+  to: string
+  end?: boolean
+  icon: LucideIcon
+  label: string
+}) {
+  return (
+    <NavLink to={to} end={end} className="flex flex-1 flex-col items-center gap-1 py-2.5">
+      {({ isActive }) => (
+        <>
+          <Icon size={20} strokeWidth={2} color={isActive ? 'var(--primary)' : 'var(--muted)'} />
+          <span style={{ color: isActive ? 'var(--primary)' : 'var(--muted)', fontSize: 11, fontWeight: 600 }}>
+            {label}
+          </span>
+        </>
+      )}
+    </NavLink>
+  )
+}
 
 // Roda uma vez por sessão do site (igual ao app desktop na abertura): aplica
 // renovações de VR/VA pendentes e mostra um toast quando algo foi renovado.
@@ -103,10 +129,11 @@ export function Layout() {
           <MonthSelector />
           <button
             onClick={() => signOut()}
-            className="rounded-lg border px-2 py-2 text-xs"
+            aria-label="Sair"
+            className="flex items-center justify-center rounded-lg border p-2"
             style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
           >
-            Sair
+            <LogOut size={16} strokeWidth={2} />
           </button>
         </div>
       </header>
@@ -124,10 +151,10 @@ export function Layout() {
       <button
         onClick={openNew}
         aria-label="Novo lançamento"
-        className="fixed bottom-20 right-5 z-20 flex h-14 w-14 items-center justify-center rounded-full text-3xl font-light text-white shadow-lg"
+        className="fixed bottom-20 right-5 z-20 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg"
         style={{ background: 'var(--primary)' }}
       >
-        +
+        <Plus size={26} strokeWidth={2.5} />
       </button>
 
       {/* Formulário (modal) */}
@@ -138,21 +165,11 @@ export function Layout() {
         className="fixed inset-x-0 bottom-0 z-10 flex border-t"
         style={{ background: 'var(--card)', borderColor: 'var(--border)', paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        <NavLink to="/" end style={tabStyle}>
-          📊<br />Dashboard
-        </NavLink>
-        <NavLink to="/planejamento" style={tabStyle}>
-          📋<br />Plano
-        </NavLink>
-        <NavLink to="/lancamentos" style={tabStyle}>
-          📄<br />Lançamentos
-        </NavLink>
-        <NavLink to="/cartoes" style={tabStyle}>
-          💳<br />Cartões
-        </NavLink>
-        <NavLink to="/dividas" style={tabStyle}>
-          💸<br />Dívidas
-        </NavLink>
+        <NavTab to="/" end icon={LayoutDashboard} label="Dashboard" />
+        <NavTab to="/planejamento" icon={ClipboardList} label="Plano" />
+        <NavTab to="/lancamentos" icon={Receipt} label="Lançamentos" />
+        <NavTab to="/cartoes" icon={CreditCard} label="Cartões" />
+        <NavTab to="/dividas" icon={HandCoins} label="Dívidas" />
       </nav>
     </div>
   )

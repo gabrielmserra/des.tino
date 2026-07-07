@@ -11,6 +11,7 @@ import {
   deleteInstallment,
 } from '../lib/api'
 import { installmentStatus } from '../lib/debtStatus'
+import { Skeleton } from '../components/Skeleton'
 import { formatCurrency, MONTHS_PT } from '../lib/format'
 import { DebtForm } from '../components/DebtForm'
 import { EditDebtForm } from '../components/EditDebtForm'
@@ -184,9 +185,11 @@ export function Debts() {
       )}
 
       {loading ? (
-        <p className="py-8 text-center text-sm" style={{ color: 'var(--muted)' }}>
-          Carregando…
-        </p>
+        <div className="flex flex-col gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 w-full rounded-2xl" />
+          ))}
+        </div>
       ) : (
         <DebtsList
           debts={debts}

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useMonths } from '../lib/month'
 import { useTxForm } from '../lib/txform'
 import { fetchTransactions } from '../lib/api'
+import { Skeleton } from '../components/Skeleton'
 import { formatCurrency } from '../lib/format'
 import type { Transaction, TxType } from '../lib/types'
 
@@ -69,9 +70,11 @@ export function Transactions() {
       </div>
 
       {isLoading ? (
-        <p className="py-8 text-center text-sm" style={{ color: 'var(--muted)' }}>
-          Carregando…
-        </p>
+        <div className="flex flex-col gap-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-xl" />
+          ))}
+        </div>
       ) : txs.length === 0 ? (
         <p className="py-8 text-center text-sm" style={{ color: 'var(--muted)' }}>
           Nenhum lançamento neste filtro.

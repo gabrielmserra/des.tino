@@ -8,6 +8,7 @@ import {
   fetchTotalInvestments,
 } from '../lib/api'
 import { formatCurrency, todayLabel } from '../lib/format'
+import { DashboardSkeleton } from '../components/Skeleton'
 
 const PIE_COLORS = [
   '#E05252', '#F5A623', '#9B72F5', '#2EAF7D',
@@ -55,7 +56,7 @@ export function Dashboard() {
   const benefit = useQuery({ queryKey: ['benefitTotal'], queryFn: fetchBenefitTotal })
   const totalInv = useQuery({ queryKey: ['totalInv'], queryFn: fetchTotalInvestments })
 
-  if (loading) return <Centered>Carregando…</Centered>
+  if (loading) return <DashboardSkeleton />
   if (selectedId == null)
     return <Centered>Nenhum período encontrado. Crie um no app desktop.</Centered>
 

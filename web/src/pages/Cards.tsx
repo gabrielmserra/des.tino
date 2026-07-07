@@ -8,6 +8,7 @@ import {
   fetchBenefitsOverview,
 } from '../lib/api'
 import { formatCurrency } from '../lib/format'
+import { Skeleton } from '../components/Skeleton'
 import { CardForm } from '../components/CardForm'
 import { DebitCardForm } from '../components/DebitCardForm'
 import { BenefitForm } from '../components/BenefitForm'
@@ -111,9 +112,11 @@ export function Cards() {
       )}
 
       {loading ? (
-        <p className="py-8 text-center text-sm" style={{ color: 'var(--muted)' }}>
-          Carregando…
-        </p>
+        <div className="flex flex-col gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-32 w-full rounded-2xl" />
+          ))}
+        </div>
       ) : (
         <>
           <SectionTitle>💳 Crédito</SectionTitle>
