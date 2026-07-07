@@ -7,6 +7,7 @@ import {
   fetchPlanHistory,
   fetchMonthIncome,
   savePlan,
+  syncDebtsIntoPlan,
 } from '../lib/api'
 import { suggestAllocations, estimateIncome, INVESTMENT_CAP_PCT } from '../lib/planStrategy'
 import { PLAN_CATEGORIES } from '../lib/constants'
@@ -37,7 +38,7 @@ type ViewState =
   | { kind: 'loading' }
   | { kind: 'empty' }
   | { kind: 'review'; income: string; rows: ReviewRow[]; nHist: number }
-  | { kind: 'tracking'; plan: Plan; items: PlanItem[]; realized: Record<string, number> }
+  | { kind: 'tracking'; plan: Plan; items: PlanItem[]; realized: Record<string, number>; synced: boolean }
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
@@ -76,6 +77,12 @@ export function Planning() {
     if (selectedId == null) return
     setView({ kind: 'loading' })
     setError('')
+    let synced = false
+    try {
+      synced = await syncDebtsIntoPlan(selectedId)
+    } catch {
+      // segue mesmo se a sincronização falhar (ex: sem dívidas cadastradas)
+    }
     try {
       const plan = await fetchPlan(selectedId)
       if (!plan) {
@@ -86,7 +93,7 @@ export function Planning() {
         fetchPlanItems(plan.id),
         fetchPlanRealized(selectedId),
       ])
-      setView({ kind: 'tracking', plan, items, realized })
+      setView({ kind: 'tracking', plan, items, realized, synced })
     } catch (e) {
       setError('Erro ao carregar: ' + (e as Error).message)
       setView({ kind: 'empty' })
@@ -433,7 +440,7 @@ export function Planning() {
   }
 
   // ── Estado 3: acompanhamento (plano vs. realizado) ───────────────────
-  const { plan, items, realized } = view
+  const { plan, items, realized, synced } = view
   const closed = plan.status === 'fechado'
   const income = plan.income
   const plannedTotal = items.reduce((a, i) => a + i.planned_amount, 0)
@@ -459,6 +466,15 @@ export function Planning() {
           {closed ? 'fechado' : 'ativo'}
         </span>
       </div>
+
+      {synced && (
+        <div
+          className="mb-4 rounded-xl border p-3 text-xs font-semibold"
+          style={{ background: 'var(--card2)', borderColor: 'var(--accent)', color: 'var(--accent)' }}
+        >
+          🔄 O plano foi atualizado automaticamente com as dívidas deste mês.
+        </div>
+      )}
 
       <div className="mb-3 grid grid-cols-3 gap-2">
         <Kpi label="RENDA" value={formatCurrency(income)} color="var(--primary)" />

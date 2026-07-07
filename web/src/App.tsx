@@ -4,10 +4,13 @@ import { MonthProvider } from './lib/month'
 import { TxFormProvider } from './lib/txform'
 import { Layout } from './components/Layout'
 import { Login } from './pages/Login'
+import { ForgotPassword } from './pages/ForgotPassword'
+import { ResetPassword } from './pages/ResetPassword'
 import { Dashboard } from './pages/Dashboard'
 import { Transactions } from './pages/Transactions'
 import { Cards } from './pages/Cards'
 import { Planning } from './pages/Planning'
+import { Debts } from './pages/Debts'
 
 function Splash() {
   return (
@@ -29,6 +32,8 @@ export default function App() {
           path="/login"
           element={session ? <Navigate to="/" replace /> : <Login />}
         />
+        <Route path="/esqueci-senha" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         {session ? (
           <Route
             element={
@@ -44,6 +49,7 @@ export default function App() {
             <Route path="/cartoes" element={<Cards />} />
             <Route path="/beneficios" element={<Navigate to="/cartoes" replace />} />
             <Route path="/planejamento" element={<Planning />} />
+            <Route path="/dividas" element={<Debts />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         ) : (

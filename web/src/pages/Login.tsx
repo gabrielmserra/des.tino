@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 
 export function Login() {
@@ -83,6 +84,14 @@ export function Login() {
           >
             {loading ? 'Entrando…' : 'Entrar'}
           </button>
+
+          <Link
+            to="/esqueci-senha"
+            className="mt-3 block text-center text-sm"
+            style={{ color: 'var(--muted)' }}
+          >
+            Esqueci minha senha
+          </Link>
         </form>
 
         <p className="mt-4 text-center text-xs" style={{ color: 'var(--muted)' }}>

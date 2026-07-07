@@ -14,6 +14,10 @@ import type {
   PlanItemInput,
   DebitCard,
   DebitCardOverview,
+  Debt,
+  DebtInstallment,
+  DebtInstallmentInput,
+  DebtOverview,
 } from './types'
 
 export async function fetchMonths(): Promise<Month[]> {
@@ -398,4 +402,120 @@ export async function updateDebitCard(id: number, input: DebitCardInput): Promis
 export async function deleteDebitCard(id: number): Promise<void> {
   const { error } = await supabase.from('debit_cards').delete().eq('id', id)
   if (error) throw error
+}
+
+// ── Dívidas ───────────────────────────────────────────────────────────
+// Leituras diretas nas tabelas (sem regra de negócio). Escrita com efeito
+// colateral (recalcular total, gerar/apagar gasto, sincronizar plano) é
+// RPC — mesma fonte de verdade do desktop.
+export async function fetchDebts(): Promise<Debt[]> {
+  const { data, error } = await supabase
+    .from('debts')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function fetchAllInstallments(): Promise<DebtInstallment[]> {
+  const { data, error } = await supabase
+    .from('debt_installments')
+    .select('*')
+    .order('due_year')
+    .order('due_month')
+    .order('installment_number')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function fetchDebtOverview(): Promise<DebtOverview> {
+  const { data, error } = await supabase.rpc('get_debt_overview')
+  if (error) throw error
+  return data as DebtOverview
+}
+
+export async function createDebt(
+  description: string,
+  creditor: string,
+  category: string,
+  notes: string,
+  installments: DebtInstallmentInput[],
+): Promise<void> {
+  const total = installments.reduce((a, i) => a + i.amount, 0)
+  const { error } = await supabase.rpc('create_debt', {
+    p_description: description,
+    p_creditor: creditor || null,
+    p_total_amount: total,
+    p_category: category || 'Dívidas',
+    p_notes: notes || null,
+    p_installments: installments,
+  })
+  if (error) throw error
+}
+
+export async function updateDebt(
+  id: number,
+  input: { description: string; creditor: string; category: string; notes: string },
+): Promise<void> {
+  const { error } = await supabase
+    .from('debts')
+    .update({
+      description: input.description,
+      creditor: input.creditor || null,
+      category: input.category || 'Dívidas',
+      notes: input.notes || null,
+    })
+    .eq('id', id)
+  if (error) throw error
+}
+
+export async function rescheduleInstallment(instId: number, year: number, month: number): Promise<void> {
+  const { error } = await supabase
+    .from('debt_installments')
+    .update({ due_year: year, due_month: month })
+    .eq('id', instId)
+  if (error) throw error
+}
+
+export async function updateInstallmentAmount(instId: number, amount: number): Promise<void> {
+  const { error } = await supabase.rpc('update_installment_amount', {
+    p_inst_id: instId,
+    p_amount: amount,
+  })
+  if (error) throw error
+}
+
+export async function payInstallment(instId: number, launchExpense: boolean): Promise<void> {
+  const { error } = await supabase.rpc('pay_installment', {
+    p_inst_id: instId,
+    p_launch_expense: launchExpense,
+  })
+  if (error) throw error
+}
+
+export async function undoInstallmentPayment(instId: number): Promise<void> {
+  const { error } = await supabase.rpc('undo_installment_payment', { p_inst_id: instId })
+  if (error) throw error
+}
+
+export async function deleteInstallment(instId: number, deleteExpense: boolean): Promise<void> {
+  const { error } = await supabase.rpc('delete_installment', {
+    p_inst_id: instId,
+    p_delete_expense: deleteExpense,
+  })
+  if (error) throw error
+}
+
+export async function deleteDebt(debtId: number, deleteExpenses: boolean): Promise<void> {
+  const { error } = await supabase.rpc('delete_debt', {
+    p_debt_id: debtId,
+    p_delete_expenses: deleteExpenses,
+  })
+  if (error) throw error
+}
+
+export async function syncDebtsIntoPlan(monthId: number): Promise<boolean> {
+  const { data, error } = await supabase.rpc('sync_debts_into_plan', { p_month_id: monthId })
+  if (error) throw error
+  return Boolean(data)
 }

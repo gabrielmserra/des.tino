@@ -142,3 +142,45 @@ export type CardOverview = {
   days_until_due: number
   cycle_open: boolean
 }
+
+export type Debt = {
+  id: number
+  description: string
+  creditor: string | null
+  total_amount: number
+  category: string | null
+  notes: string | null
+  created_at: string
+}
+
+export type DebtInstallment = {
+  id: number
+  debt_id: number
+  installment_number: number
+  amount: number
+  due_year: number
+  due_month: number
+  paid_at: string | null
+  expense_id: number | null
+}
+
+export type InstallmentStatus = 'paga' | 'atrasada' | 'pendente'
+
+export type DebtInstallmentInput = {
+  number: number
+  amount: number
+  year: number
+  month: number
+}
+
+export type DebtFuture = {
+  year: number
+  month: number
+  total: number
+}
+
+export type DebtOverview = {
+  total_aberto: number
+  n_atrasadas: number
+  future: DebtFuture[]
+}

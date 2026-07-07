@@ -150,6 +150,9 @@ export function Layout() {
         <NavLink to="/cartoes" style={tabStyle}>
           💳<br />Cartões
         </NavLink>
+        <NavLink to="/dividas" style={tabStyle}>
+          💸<br />Dívidas
+        </NavLink>
       </nav>
     </div>
   )

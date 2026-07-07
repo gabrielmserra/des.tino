@@ -16,6 +16,9 @@ export const CATEGORIES = [
 // Categorias do planejamento: as mesmas + "Investimentos" antes de "Outros"
 export const PLAN_CATEGORIES = [...CATEGORIES.slice(0, -1), 'Investimentos', 'Outros']
 
+// Categorias de dívida: "Dívidas" (padrão) + as mesmas do app
+export const DEBT_CATEGORIES = ['Dívidas', ...CATEGORIES]
+
 export const TYPE_LABELS: Record<string, string> = {
   entrada_fixa: 'Entrada Fixa',
   entrada_variavel: 'Entrada Variável',
