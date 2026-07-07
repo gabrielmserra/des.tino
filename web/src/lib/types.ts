@@ -184,3 +184,31 @@ export type DebtOverview = {
   n_atrasadas: number
   future: DebtFuture[]
 }
+
+export type Investment = {
+  id: number
+  name: string
+  category: string
+  archived_at: string | null
+  created_at: string
+}
+
+export type MovementType = 'aporte_inicial' | 'aporte' | 'saque'
+
+export type InvestmentMovement = {
+  id: number
+  investment_id: number
+  month_id: number
+  movement_type: MovementType
+  amount: number
+  note: string | null
+  created_at: string
+}
+
+export type Goal = {
+  id: number
+  name: string
+  target_amount: number
+  saved_amount: number
+  created_at: string
+}

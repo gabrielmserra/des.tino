@@ -12,6 +12,9 @@ import { Transactions } from './pages/Transactions'
 import { Cards } from './pages/Cards'
 import { Planning } from './pages/Planning'
 import { Debts } from './pages/Debts'
+import { Investments } from './pages/Investments'
+import { Goals } from './pages/Goals'
+import { More } from './pages/More'
 
 function Splash() {
   return (
@@ -53,6 +56,9 @@ export default function App() {
             <Route path="/beneficios" element={<Navigate to="/cartoes" replace />} />
             <Route path="/planejamento" element={<Planning />} />
             <Route path="/dividas" element={<Debts />} />
+            <Route path="/investimentos" element={<Investments />} />
+            <Route path="/metas" element={<Goals />} />
+            <Route path="/mais" element={<More />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         ) : (

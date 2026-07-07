@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
 import { useMonths } from '../lib/month'
 import {
@@ -6,6 +7,7 @@ import {
   fetchExpensesByCategory,
   fetchBenefitTotal,
   fetchTotalInvestments,
+  fetchGoals,
 } from '../lib/api'
 import { formatCurrency, todayLabel } from '../lib/format'
 import { DashboardSkeleton } from '../components/Skeleton'
@@ -15,12 +17,9 @@ const PIE_COLORS = [
   '#22d3ee', '#4A9EFF', '#fb923c', '#e879f9',
 ]
 
-function Kpi({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <div
-      className="rounded-2xl border p-4"
-      style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
-    >
+function Kpi({ label, value, color, to }: { label: string; value: string; color: string; to?: string }) {
+  const content = (
+    <>
       <div className="h-1 w-8 rounded" style={{ background: color }} />
       <p className="mt-2 text-[10px] font-bold" style={{ color: 'var(--muted)' }}>
         {label}
@@ -28,7 +27,69 @@ function Kpi({ label, value, color }: { label: string; value: string; color: str
       <p className="mt-1 text-lg font-bold" style={{ color }}>
         {value}
       </p>
+    </>
+  )
+  const className = 'block rounded-2xl border p-4'
+  const style = { background: 'var(--card)', borderColor: 'var(--border)' }
+  return to ? (
+    <Link to={to} className={className} style={style}>
+      {content}
+    </Link>
+  ) : (
+    <div className={className} style={style}>
+      {content}
     </div>
+  )
+}
+
+function GoalsCard() {
+  const goalsQ = useQuery({ queryKey: ['goals'], queryFn: fetchGoals })
+  const goals = goalsQ.data ?? []
+  const done = goals.filter((g) => g.target_amount > 0 && g.saved_amount >= g.target_amount).length
+
+  return (
+    <Link
+      to="/metas"
+      className="mb-3 block rounded-2xl border p-4"
+      style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+    >
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-sm font-bold">🎯 Metas de Poupança</p>
+        {goals.length > 0 && (
+          <span className="text-xs" style={{ color: 'var(--muted)' }}>
+            {done}/{goals.length} concluída(s)
+          </span>
+        )}
+      </div>
+      {goals.length === 0 ? (
+        <p className="py-2 text-center text-sm" style={{ color: 'var(--muted)' }}>
+          Nenhuma meta criada. Toque para começar.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {goals.map((g) => {
+            const pct = g.target_amount > 0 ? Math.min(1, g.saved_amount / g.target_amount) : 0
+            const goalDone = pct >= 1 && g.target_amount > 0
+            return (
+              <div key={g.id}>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <span className="truncate text-xs font-semibold">{g.name}</span>
+                  <span className="shrink-0 text-[11px]" style={{ color: 'var(--muted)' }}>
+                    {formatCurrency(g.saved_amount)} / {formatCurrency(g.target_amount)}
+                  </span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--border)' }}>
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${pct * 100}%`, background: goalDone ? 'var(--primary)' : 'var(--accent)' }}
+                  />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </Link>
   )
 }
 
@@ -102,13 +163,16 @@ export function Dashboard() {
           value={benefit.data != null ? formatCurrency(benefit.data) : '…'}
           color="var(--accent)"
         />
-        <Kpi label="INVESTIMENTOS MÊS" value={val(s?.total_investimentos)} color="var(--violet)" />
+        <Kpi label="INVESTIMENTOS MÊS" value={val(s?.total_investimentos)} color="var(--violet)" to="/investimentos" />
         <Kpi
           label="INVESTIMENTOS TOTAIS"
           value={totalInv.data != null ? formatCurrency(totalInv.data) : '…'}
           color="var(--violet)"
+          to="/investimentos"
         />
       </div>
+
+      <GoalsCard />
 
       {/* Gráfico de categorias */}
       <div

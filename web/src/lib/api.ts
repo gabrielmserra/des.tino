@@ -18,6 +18,10 @@ import type {
   DebtInstallment,
   DebtInstallmentInput,
   DebtOverview,
+  Investment,
+  InvestmentMovement,
+  MovementType,
+  Goal,
 } from './types'
 
 export async function fetchMonths(): Promise<Month[]> {
@@ -539,4 +543,134 @@ export async function syncDebtsIntoPlan(monthId: number): Promise<boolean> {
   const { data, error } = await supabase.rpc('sync_debts_into_plan', { p_month_id: monthId })
   if (error) throw error
   return Boolean(data)
+}
+
+// ── Investimentos ─────────────────────────────────────────────────────
+// Leituras e edições simples (nome/categoria/valor/nota) são diretas na
+// tabela. Criar (2 inserts: investimento + aporte inicial) e excluir
+// (apaga movimentações antes do investimento) são RPC, pra garantir que
+// as duas escritas aconteçam juntas.
+export async function fetchInvestments(includeArchived = false): Promise<Investment[]> {
+  let query = supabase.from('investments').select('*').order('created_at', { ascending: true })
+  if (!includeArchived) query = query.is('archived_at', null)
+  const { data, error } = await query
+  if (error) throw error
+  return data ?? []
+}
+
+export async function fetchAllInvestmentMovements(): Promise<InvestmentMovement[]> {
+  const { data, error } = await supabase
+    .from('investment_movements')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function createInvestment(
+  name: string,
+  category: string,
+  monthId: number,
+  amount: number,
+  note: string,
+): Promise<number> {
+  const { data, error } = await supabase.rpc('create_investment', {
+    p_name: name,
+    p_category: category,
+    p_month_id: monthId,
+    p_amount: amount,
+    p_note: note || null,
+  })
+  if (error) throw error
+  return data as number
+}
+
+export async function addInvestmentMovement(
+  investmentId: number,
+  monthId: number,
+  movementType: MovementType,
+  amount: number,
+  note: string,
+): Promise<void> {
+  const { error } = await supabase.from('investment_movements').insert({
+    investment_id: investmentId,
+    month_id: monthId,
+    movement_type: movementType,
+    amount,
+    note: note || null,
+  })
+  if (error) throw error
+}
+
+export async function updateInvestment(id: number, name: string, category: string): Promise<void> {
+  const { error } = await supabase.from('investments').update({ name, category }).eq('id', id)
+  if (error) throw error
+}
+
+export async function updateInvestmentMovement(id: number, amount: number, note: string): Promise<void> {
+  const { error } = await supabase
+    .from('investment_movements')
+    .update({ amount, note: note || null })
+    .eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteInvestmentMovement(id: number): Promise<void> {
+  const { error } = await supabase.from('investment_movements').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function archiveInvestment(id: number): Promise<void> {
+  const { error } = await supabase
+    .from('investments')
+    .update({ archived_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteInvestment(id: number): Promise<void> {
+  const { error } = await supabase.rpc('delete_investment', { p_investment_id: id })
+  if (error) throw error
+}
+
+// ── Metas de poupança ─────────────────────────────────────────────────
+// Contribuir/sacar é RPC (soma atômica, nunca deixa saved_amount negativo).
+export async function fetchGoals(): Promise<Goal[]> {
+  const { data, error } = await supabase
+    .from('goals')
+    .select('*')
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function createGoal(name: string, targetAmount: number): Promise<void> {
+  const { error } = await supabase.from('goals').insert({
+    name,
+    target_amount: targetAmount,
+    saved_amount: 0,
+  })
+  if (error) throw error
+}
+
+export async function addGoalContribution(goalId: number, amount: number): Promise<number> {
+  const { data, error } = await supabase.rpc('add_goal_contribution', {
+    p_goal_id: goalId,
+    p_amount: amount,
+  })
+  if (error) throw error
+  return Number(data ?? 0)
+}
+
+export async function updateGoal(id: number, name: string, targetAmount: number): Promise<void> {
+  const { error } = await supabase
+    .from('goals')
+    .update({ name, target_amount: targetAmount })
+    .eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteGoal(id: number): Promise<void> {
+  const { error } = await supabase.from('goals').delete().eq('id', id)
+  if (error) throw error
 }

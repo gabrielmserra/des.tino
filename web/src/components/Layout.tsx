@@ -7,6 +7,7 @@ import {
   Receipt,
   CreditCard,
   HandCoins,
+  MoreHorizontal,
   Plus,
   LogOut,
   Palette,
@@ -216,6 +217,7 @@ export function Layout() {
         <NavTab to="/lancamentos" icon={Receipt} label="Lançamentos" />
         <NavTab to="/cartoes" icon={CreditCard} label="Cartões" />
         <NavTab to="/dividas" icon={HandCoins} label="Dívidas" />
+        <NavTab to="/mais" icon={MoreHorizontal} label="Mais" />
       </nav>
     </div>
   )
