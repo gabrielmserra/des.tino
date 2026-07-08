@@ -26,7 +26,7 @@ function safetyMessage(c: CardOverview): { text: string; color: string } {
   return { text: 'Situação tranquila', color: 'var(--primary)' }
 }
 
-type AddChoice = 'credito' | 'debito' | 'vrva' | null
+type AddChoice = 'credito' | 'vrva' | null
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -88,7 +88,6 @@ export function Cards() {
   const pickType = (choice: AddChoice) => {
     setAddChoice(false)
     if (choice === 'credito') setCreditForm('new')
-    else if (choice === 'debito') setDebitForm('new')
     else if (choice === 'vrva') setBenefitForm('new')
   }
 
@@ -304,13 +303,6 @@ export function Cards() {
                 style={{ borderColor: 'var(--border-l)', color: 'var(--text)' }}
               >
                 <span className="pl-3">💳 Cartão de crédito</span>
-              </button>
-              <button
-                onClick={() => pickType('debito')}
-                className="rounded-lg border py-3 text-left font-semibold"
-                style={{ borderColor: 'var(--border-l)', color: 'var(--text)' }}
-              >
-                <span className="pl-3">🏧 Cartão de débito</span>
               </button>
               <button
                 onClick={() => pickType('vrva')}

@@ -65,14 +65,6 @@ class DebitCardsBar(ctk.CTkFrame):
         )
         self._toggle_btn.grid(row=0, column=0, sticky="w")
 
-        ctk.CTkButton(
-            hdr, text="+ Débito", width=100, height=26, corner_radius=7,
-            fg_color=T.CARD2, hover_color=T.BORDER_L,
-            border_width=1, border_color=T.BORDER_L,
-            text_color=T.TEXT, font=F(11),
-            command=self._add_card,
-        ).grid(row=0, column=2, sticky="e")
-
     def _toggle(self) -> None:
         self._expanded = not self._expanded
         if self._expanded:
@@ -100,7 +92,7 @@ class DebitCardsBar(ctk.CTkFrame):
         if not cards:
             ctk.CTkLabel(
                 self._chips_frame,
-                text="Nenhum cartão de débito. Clique em '+ Débito' para adicionar.",
+                text="Nenhum cartão de débito cadastrado.",
                 font=F(12), text_color=T.MUTED,
             ).pack(pady=8, padx=8)
         else:
@@ -143,14 +135,6 @@ class DebitCardsBar(ctk.CTkFrame):
                      text_color=color, anchor="w", width=160).pack(anchor="w")
 
     # ------------------------------------------------------------------
-    def _add_card(self) -> None:
-        dlg = _DebitCardDialog(self.winfo_toplevel())
-        self.winfo_toplevel().wait_window(dlg)
-        if dlg.result:
-            r = dlg.result
-            db.create_debit_card(r["name"], r["color"])
-            self.refresh()
-
     def _edit_card(self, card: dict) -> None:
         dlg = _DebitCardDialog(self.winfo_toplevel(), card)
         self.winfo_toplevel().wait_window(dlg)
