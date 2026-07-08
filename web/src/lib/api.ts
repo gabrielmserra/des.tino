@@ -21,6 +21,7 @@ import type {
   InvestmentMovement,
   MovementType,
   Goal,
+  DashboardWidgetEntry,
 } from './types'
 
 export async function fetchMonths(): Promise<Month[]> {
@@ -51,6 +52,19 @@ export async function fetchTheme(): Promise<string> {
 
 export async function saveTheme(theme: string): Promise<void> {
   const { error } = await supabase.from('user_settings').upsert({ theme }, { onConflict: 'user_id' })
+  if (error) throw error
+}
+
+export async function fetchDashboardConfig(): Promise<DashboardWidgetEntry[] | null> {
+  const { data, error } = await supabase.from('user_settings').select('dashboard_widgets').maybeSingle()
+  if (error) throw error
+  return (data?.dashboard_widgets as DashboardWidgetEntry[] | null) ?? null
+}
+
+export async function saveDashboardConfig(config: DashboardWidgetEntry[]): Promise<void> {
+  const { error } = await supabase
+    .from('user_settings')
+    .upsert({ dashboard_widgets: config }, { onConflict: 'user_id' })
   if (error) throw error
 }
 
@@ -375,6 +389,16 @@ export async function fetchPlanRealized(monthId: number): Promise<Record<string,
 export function priorMonths(months: Month[], current: Month, n = 3): Month[] {
   const key = current.year * 100 + current.month
   return months.filter((m) => m.year * 100 + m.month < key).slice(0, n)
+}
+
+/** Resumo dos até n meses anteriores ao mês dado (mais recente primeiro), p/ o Guru Financeiro. */
+export async function fetchMonthSummaryHistory(
+  months: Month[],
+  current: Month,
+  n = 3,
+): Promise<MonthSummary[]> {
+  const prior = priorMonths(months, current, n)
+  return Promise.all(prior.map((m) => fetchMonthSummary(m.id)))
 }
 
 export async function fetchPlanHistory(

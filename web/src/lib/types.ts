@@ -5,6 +5,11 @@ export type Month = {
   month: number
 }
 
+export type DashboardWidgetEntry = {
+  id: string
+  enabled: boolean
+}
+
 export type TxType =
   | 'entrada_fixa'
   | 'entrada_variavel'

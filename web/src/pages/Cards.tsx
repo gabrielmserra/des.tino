@@ -12,7 +12,7 @@ import { CardForm } from '../components/CardForm'
 import { BenefitForm } from '../components/BenefitForm'
 import type { CardOverview, BenefitOverview } from '../lib/types'
 
-function safetyMessage(c: CardOverview): { text: string; color: string } {
+export function safetyMessage(c: CardOverview): { text: string; color: string } {
   const pctUsed = c.card_limit > 0 ? c.spent / c.card_limit : 0
   if (pctUsed >= 0.9) return { text: 'Limite quase esgotado', color: 'var(--red)' }
   if (c.days_until_due <= 3 && c.unpaid > 0)

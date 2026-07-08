@@ -1400,3 +1400,28 @@ def export_month_csv(month_id: int) -> str:
         prev  = "Sim" if r.get("is_expectation") else "Não"
         lines.append(f"{tipo},{desc},{cat},{valor},{data},{prev}")
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Configuração do Dashboard (widgets habilitados/ordem) — sincronizada com
+# o site via user_settings.dashboard_widgets. Ao contrário do tema, não
+# precisa de cache local: o Dashboard só existe depois do login.
+# ---------------------------------------------------------------------------
+
+def get_dashboard_widgets() -> Optional[list]:
+    """Lista ordenada de {"id": ..., "enabled": ...}, ou None se o usuário
+    nunca customizou (o chamador usa o catálogo padrão nesse caso)."""
+    resp = get_client().table("user_settings").select("dashboard_widgets").execute()
+    if not resp.data:
+        return None
+    return resp.data[0].get("dashboard_widgets")
+
+
+def save_dashboard_widgets(config: list) -> None:
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    existing = client.table("user_settings").select("user_id").eq("user_id", user_id).execute()
+    if existing.data:
+        client.table("user_settings").update({"dashboard_widgets": config}).eq("user_id", user_id).execute()
+    else:
+        client.table("user_settings").insert({"user_id": user_id, "dashboard_widgets": config}).execute()

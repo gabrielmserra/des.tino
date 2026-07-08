@@ -1,98 +1,37 @@
-import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
+import { useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { SlidersHorizontal } from 'lucide-react'
 import { useMonths } from '../lib/month'
-import {
-  fetchMonthSummary,
-  fetchExpensesByCategory,
-  fetchExpensesByPaymentMethod,
-  fetchBenefitTotal,
-  fetchTotalInvestments,
-  fetchGoals,
-} from '../lib/api'
-import { formatCurrency, todayLabel } from '../lib/format'
-import { PAYMENT_METHODS } from '../lib/constants'
+import { fetchDashboardConfig, saveDashboardConfig } from '../lib/api'
+import { todayLabel } from '../lib/format'
 import { DashboardSkeleton } from '../components/Skeleton'
+import { EditDashboardSheet } from '../components/EditDashboardSheet'
+import { DEFAULT_WIDGET_ORDER, widgetById, type WidgetDef } from '../lib/dashboardWidgets'
+import type { DashboardWidgetEntry } from '../lib/types'
 
-const PIE_COLORS = [
-  '#E05252', '#F5A623', '#9B72F5', '#2EAF7D',
-  '#22d3ee', '#4A9EFF', '#fb923c', '#e879f9',
-]
-
-function Kpi({ label, value, color, to }: { label: string; value: string; color: string; to?: string }) {
-  const content = (
-    <>
-      <div className="h-1 w-8 rounded" style={{ background: color }} />
-      <p className="mt-2 text-[10px] font-bold" style={{ color: 'var(--muted)' }}>
-        {label}
-      </p>
-      <p className="mt-1 text-lg font-bold" style={{ color }}>
-        {value}
-      </p>
-    </>
-  )
-  const className = 'block rounded-2xl border p-4'
-  const style = { background: 'var(--card)', borderColor: 'var(--border)' }
-  return to ? (
-    <Link to={to} className={className} style={style}>
-      {content}
-    </Link>
-  ) : (
-    <div className={className} style={style}>
-      {content}
-    </div>
-  )
+function resolveConfig(saved: DashboardWidgetEntry[] | null): DashboardWidgetEntry[] {
+  const valid = (saved ?? []).filter((e) => widgetById(e.id))
+  const known = new Set(valid.map((e) => e.id))
+  const missing = DEFAULT_WIDGET_ORDER.filter((id) => !known.has(id)).map((id) => ({ id, enabled: true }))
+  return [...valid, ...missing]
 }
 
-function GoalsCard() {
-  const goalsQ = useQuery({ queryKey: ['goals'], queryFn: fetchGoals })
-  const goals = goalsQ.data ?? []
-  const done = goals.filter((g) => g.target_amount > 0 && g.saved_amount >= g.target_amount).length
-
-  return (
-    <Link
-      to="/metas"
-      className="mb-3 block rounded-2xl border p-4"
-      style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
-    >
-      <div className="mb-2 flex items-center justify-between">
-        <p className="text-sm font-bold">🎯 Metas de Poupança</p>
-        {goals.length > 0 && (
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>
-            {done}/{goals.length} concluída(s)
-          </span>
-        )}
-      </div>
-      {goals.length === 0 ? (
-        <p className="py-2 text-center text-sm" style={{ color: 'var(--muted)' }}>
-          Nenhuma meta criada. Toque para começar.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-2.5">
-          {goals.map((g) => {
-            const pct = g.target_amount > 0 ? Math.min(1, g.saved_amount / g.target_amount) : 0
-            const goalDone = pct >= 1 && g.target_amount > 0
-            return (
-              <div key={g.id}>
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <span className="truncate text-xs font-semibold">{g.name}</span>
-                  <span className="shrink-0 text-[11px]" style={{ color: 'var(--muted)' }}>
-                    {formatCurrency(g.saved_amount)} / {formatCurrency(g.target_amount)}
-                  </span>
-                </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--border)' }}>
-                  <div
-                    className="h-full rounded-full"
-                    style={{ width: `${pct * 100}%`, background: goalDone ? 'var(--primary)' : 'var(--accent)' }}
-                  />
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </Link>
-  )
+function groupWidgets(defs: WidgetDef[]): (WidgetDef[] | WidgetDef)[] {
+  const groups: (WidgetDef[] | WidgetDef)[] = []
+  let compact: WidgetDef[] = []
+  for (const w of defs) {
+    if (w.size === 'compact') {
+      compact.push(w)
+    } else {
+      if (compact.length) {
+        groups.push(compact)
+        compact = []
+      }
+      groups.push(w)
+    }
+  }
+  if (compact.length) groups.push(compact)
+  return groups
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
@@ -104,176 +43,73 @@ function Centered({ children }: { children: React.ReactNode }) {
 }
 
 export function Dashboard() {
-  const { selectedId, selected, loading } = useMonths()
+  const { selected, loading } = useMonths()
+  const qc = useQueryClient()
+  const [showEdit, setShowEdit] = useState(false)
+  const [config, setConfig] = useState<DashboardWidgetEntry[] | null>(null)
 
-  const summary = useQuery({
-    queryKey: ['summary', selectedId],
-    queryFn: () => fetchMonthSummary(selectedId!),
-    enabled: selectedId != null,
-  })
-  const cats = useQuery({
-    queryKey: ['cats', selectedId],
-    queryFn: () => fetchExpensesByCategory(selectedId!),
-    enabled: selectedId != null,
-  })
-  const benefit = useQuery({ queryKey: ['benefitTotal'], queryFn: fetchBenefitTotal })
-  const totalInv = useQuery({ queryKey: ['totalInv'], queryFn: fetchTotalInvestments })
-  const byMethod = useQuery({
-    queryKey: ['expensesByMethod', selectedId],
-    queryFn: () => fetchExpensesByPaymentMethod(selectedId!),
-    enabled: selectedId != null,
-  })
+  const configQ = useQuery({ queryKey: ['dashboardConfig'], queryFn: fetchDashboardConfig })
 
-  if (loading) return <DashboardSkeleton />
-  if (selectedId == null)
-    return <Centered>Nenhum período encontrado. Crie um no app desktop.</Centered>
+  useEffect(() => {
+    if (configQ.data !== undefined) setConfig(resolveConfig(configQ.data))
+  }, [configQ.data])
 
-  const s = summary.data
-  const saldoColor = (s?.saldo ?? 0) >= 0 ? 'var(--primary)' : 'var(--red)'
-  const val = (n: number | undefined) => (s ? formatCurrency(n ?? 0) : '…')
+  const applyChange = (next: DashboardWidgetEntry[]) => {
+    setConfig(next)
+    saveDashboardConfig(next).then(() => qc.invalidateQueries({ queryKey: ['dashboardConfig'] }))
+  }
 
-  const pieData = (cats.data ?? []).map((c) => ({ name: c.category, value: c.total }))
-  const methodData = (byMethod.data ?? []).map((c) => ({
-    name: PAYMENT_METHODS[c.category] ?? c.category,
-    value: c.total,
-  }))
+  if (loading || config === null) return <DashboardSkeleton />
+  if (!selected) return <Centered>Nenhum período encontrado. Crie um no app desktop.</Centered>
+
+  const activeDefs = config
+    .filter((e) => e.enabled)
+    .map((e) => widgetById(e.id))
+    .filter((w): w is WidgetDef => !!w)
+  const groups = groupWidgets(activeDefs)
 
   return (
     <div className="p-4">
-      <div className="mb-4">
-        <h1 className="text-2xl font-bold">{selected?.name}</h1>
-        <p className="text-xs" style={{ color: 'var(--muted)' }}>
-          {todayLabel()}
-        </p>
-      </div>
-
-      {/* Saldo em destaque */}
-      <div
-        className="mb-3 rounded-2xl border p-5"
-        style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
-      >
-        <p className="text-[11px] font-bold" style={{ color: 'var(--muted)' }}>
-          SALDO DO MÊS
-        </p>
-        <p className="mt-1 text-3xl font-bold" style={{ color: saldoColor }}>
-          {val(s?.saldo)}
-        </p>
-        {s?.has_expectations && (
-          <p className="mt-1 text-xs" style={{ color: 'var(--accent)' }}>
-            📋 Projetado com previstos: {formatCurrency(s.saldo_projetado)}
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">{selected.name}</h1>
+          <p className="text-xs" style={{ color: 'var(--muted)' }}>
+            {todayLabel()}
           </p>
-        )}
+        </div>
+        <button
+          onClick={() => setShowEdit(true)}
+          aria-label="Editar Dashboard"
+          className="flex items-center justify-center rounded-lg border p-2"
+          style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
+        >
+          <SlidersHorizontal size={16} strokeWidth={2} />
+        </button>
       </div>
 
-      {/* Grade de KPIs */}
-      <div className="mb-3 grid grid-cols-2 gap-3">
-        <Kpi label="ENTRADAS" value={val(s?.total_entradas)} color="var(--primary)" />
-        <Kpi label="SAÍDAS" value={val(s?.total_saidas)} color="var(--red)" />
-        <Kpi
-          label="SALDO VR/VA"
-          value={benefit.data != null ? formatCurrency(benefit.data) : '…'}
-          color="var(--accent)"
-        />
-        <Kpi label="INVESTIMENTOS MÊS" value={val(s?.total_investimentos)} color="var(--violet)" to="/investimentos" />
-        <Kpi
-          label="INVESTIMENTOS TOTAIS"
-          value={totalInv.data != null ? formatCurrency(totalInv.data) : '…'}
-          color="var(--violet)"
-          to="/investimentos"
-        />
-      </div>
+      {groups.length === 0 ? (
+        <p className="py-8 text-center text-sm" style={{ color: 'var(--muted)' }}>
+          Nenhum card habilitado. Toque no ícone de editar para escolher o que mostrar.
+        </p>
+      ) : (
+        groups.map((g, i) =>
+          Array.isArray(g) ? (
+            <div key={i} className="mb-3 grid grid-cols-2 gap-3">
+              {g.map((w) => (
+                <w.Component key={w.id} />
+              ))}
+            </div>
+          ) : (
+            <div key={g.id} className="mb-3">
+              <g.Component />
+            </div>
+          ),
+        )
+      )}
 
-      <GoalsCard />
-
-      {/* Gráfico de categorias */}
-      <div
-        className="rounded-2xl border p-4"
-        style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
-      >
-        <p className="mb-2 text-sm font-bold">Despesas por categoria</p>
-        {pieData.length === 0 ? (
-          <p className="py-8 text-center text-sm" style={{ color: 'var(--muted)' }}>
-            Nenhuma despesa registrada.
-          </p>
-        ) : (
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie
-                data={pieData}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={90}
-                strokeWidth={2}
-                stroke="var(--card)"
-              >
-                {pieData.map((_, i) => (
-                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(v) => formatCurrency(Number(v))}
-                contentStyle={{
-                  background: 'var(--card2)',
-                  border: '1px solid var(--border-l)',
-                  borderRadius: 8,
-                  color: 'var(--text)',
-                }}
-              />
-              <Legend
-                wrapperStyle={{ fontSize: 11, color: 'var(--muted)' }}
-                formatter={(v: string) => <span style={{ color: 'var(--muted)' }}>{v}</span>}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      {/* Gráfico de forma de pagamento */}
-      <div
-        className="mt-3 rounded-2xl border p-4"
-        style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
-      >
-        <p className="mb-2 text-sm font-bold">Gastos por forma de pagamento</p>
-        {methodData.length === 0 ? (
-          <p className="py-8 text-center text-sm" style={{ color: 'var(--muted)' }}>
-            Nenhuma despesa registrada.
-          </p>
-        ) : (
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie
-                data={methodData}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={90}
-                strokeWidth={2}
-                stroke="var(--card)"
-              >
-                {methodData.map((_, i) => (
-                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(v) => formatCurrency(Number(v))}
-                contentStyle={{
-                  background: 'var(--card2)',
-                  border: '1px solid var(--border-l)',
-                  borderRadius: 8,
-                  color: 'var(--text)',
-                }}
-              />
-              <Legend
-                wrapperStyle={{ fontSize: 11, color: 'var(--muted)' }}
-                formatter={(v: string) => <span style={{ color: 'var(--muted)' }}>{v}</span>}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        )}
-      </div>
+      {showEdit && (
+        <EditDashboardSheet config={config} onChange={applyChange} onClose={() => setShowEdit(false)} />
+      )}
     </div>
   )
 }

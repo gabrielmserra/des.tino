@@ -1,4 +1,8 @@
-"""Dashboard: KPI cards + gráficos + barra de taxa de poupança."""
+"""Dashboard: KPI cards + gráficos + barra de taxa de poupança.
+
+Configurável: o usuário escolhe quais widgets aparecem e em que ordem (botão
+"Editar Dashboard"), config salva em user_settings.dashboard_widgets e
+sincronizada com o site/celular (mesma coluna, mesmo formato)."""
 import customtkinter as ctk
 from typing import Optional, Callable
 
@@ -6,6 +10,39 @@ import database as db
 import ui.theme as T
 from ui.theme import F
 from utils.helpers import format_currency, MONTHS_PT, PAYMENT_METHODS
+
+
+# ── Catálogo de widgets (mesmos ids/ordem padrão do site) ─────────────────
+WIDGET_CATALOG = [
+    {"id": "saldo_mes",                              "label": "Saldo do mês (destaque)",              "size": "full"},
+    {"id": "kpi_entradas",                           "label": "Entradas",                              "size": "compact"},
+    {"id": "kpi_saidas",                             "label": "Saídas",                                "size": "compact"},
+    {"id": "kpi_saldo_vrva",                         "label": "Saldo VR/VA",                           "size": "compact"},
+    {"id": "kpi_investimentos_mes",                  "label": "Investimentos do mês",                  "size": "compact"},
+    {"id": "kpi_investimentos_total",                "label": "Investimentos totais",                  "size": "compact"},
+    {"id": "chart_categoria",                        "label": "Despesas por categoria",                "size": "full"},
+    {"id": "chart_forma_pagamento",                  "label": "Gastos por forma de pagamento",         "size": "full"},
+    {"id": "chart_entradas_saidas_investimentos",    "label": "Entradas vs Saídas vs Investimentos",   "size": "full"},
+    {"id": "taxa_poupanca",                          "label": "Taxa de poupança",                      "size": "full"},
+    {"id": "metas",                                  "label": "Metas de poupança",                     "size": "full"},
+    {"id": "cartoes_situacao",                       "label": "Situação dos cartões",                  "size": "full"},
+    {"id": "guru_financeiro",                        "label": "Guru Financeiro (dicas)",               "size": "full"},
+]
+DEFAULT_WIDGET_ORDER = [w["id"] for w in WIDGET_CATALOG]
+
+
+def _widget_by_id(wid: str) -> Optional[dict]:
+    return next((w for w in WIDGET_CATALOG if w["id"] == wid), None)
+
+
+def resolve_widget_config(saved) -> list:
+    """Valida a config salva e acrescenta, no fim (habilitados), qualquer
+    widget novo do catálogo que o usuário ainda não tenha customizado."""
+    saved = saved or []
+    valid = [dict(e) for e in saved if _widget_by_id(e.get("id"))]
+    known = {e["id"] for e in valid}
+    missing = [{"id": wid, "enabled": True} for wid in DEFAULT_WIDGET_ORDER if wid not in known]
+    return valid + missing
 
 
 class Dashboard(ctk.CTkScrollableFrame):
@@ -24,46 +61,31 @@ class Dashboard(ctk.CTkScrollableFrame):
 
     # ------------------------------------------------------------------
     def _build(self) -> None:
+        self._card_lbls = {}
+        for attr in ("_saldo_proj_lbl", "_pie_host", "_bar_host", "_pm_host",
+                     "_savings_pct", "_savings_bar_bg", "_savings_bar_fill",
+                     "_savings_label", "_goals_frame", "_goals_count_lbl",
+                     "_credit_frame", "_tips_frame"):
+            if hasattr(self, attr):
+                delattr(self, attr)
+
         self.grid_columnconfigure(0, weight=1)
 
-        # KPI definitions (evaluated at build time = after apply_theme)
-        kpi = [
-            ("total_entradas",      "ENTRADAS",             T.GREEN),
-            ("total_saidas",        "SAÍDAS",               T.RED),
-            ("total_investimentos", "INVESTIMENTOS MÊS",    T.VIOLET),
-            ("investimentos_total", "INVESTIMENTOS TOTAIS", T.VIOLET),
-            ("saldo_beneficios",    "SALDO VR/VA",          T.GOLD),
-            ("saldo",               "SALDO",                T.BLUE),
-        ]
+        # ── Cabeçalho ────────────────────────────────────────────────
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", padx=28, pady=(24, 0))
+        header.grid_columnconfigure(0, weight=1)
+        ctk.CTkButton(
+            header, text="⚙  Editar Dashboard", command=self._open_edit_dialog,
+            height=32, corner_radius=8, fg_color=T.CARD, hover_color=T.CARD2,
+            border_width=1, border_color=T.BORDER_L, text_color=T.MUTED, font=F(12, "bold"),
+        ).grid(row=0, column=0, sticky="e")
 
-        # ── KPI section (cards + barra de saldo projetado) ────────────
-        kpi_section = ctk.CTkFrame(self, fg_color="transparent")
-        kpi_section.grid(row=0, column=0, sticky="ew", padx=28, pady=(24, 0))
-        kpi_section.grid_columnconfigure(0, weight=1)
-
-        kpi_row = ctk.CTkFrame(kpi_section, fg_color="transparent")
-        kpi_row.grid(row=0, column=0, sticky="ew")
-        for col in range(len(kpi)):
-            kpi_row.grid_columnconfigure(col, weight=1)
-
-        _inv_keys = {"total_investimentos", "investimentos_total"}
-        for col, (key, label, color) in enumerate(kpi):
-            card = self._make_kpi(kpi_row, label, color)
-            card.grid(row=0, column=col, padx=(0 if col == 0 else 7, 0), sticky="nsew")
-            self._card_lbls[key] = (card.val_lbl, color)
-            if key in _inv_keys and self._on_investments:
-                self._bind_click(card, self._on_investments)
-
-        self._proj_bar = ctk.CTkFrame(kpi_section, fg_color=T.CARD, corner_radius=10,
-                                      border_width=1, border_color=T.BORDER)
-        self._proj_lbl = ctk.CTkLabel(
-            self._proj_bar, text="",
-            font=F(12), text_color=T.GOLD, anchor="w",
-        )
-        self._proj_lbl.pack(side="left", padx=16, pady=10)
-
-        # Alerta de categorias estouradas no plano do mês (escondido por padrão)
-        self._plan_alert = ctk.CTkFrame(kpi_section, fg_color=T.RED_DIM, corner_radius=10,
+        # ── Alerta de plano estourado (fixo, fora do catálogo) ─────────
+        alerts_box = ctk.CTkFrame(self, fg_color="transparent")
+        alerts_box.grid(row=1, column=0, sticky="ew", padx=28)
+        alerts_box.grid_columnconfigure(0, weight=1)
+        self._plan_alert = ctk.CTkFrame(alerts_box, fg_color=T.RED_DIM, corner_radius=10,
                                         border_width=1, border_color=T.RED)
         self._plan_alert_lbl = ctk.CTkLabel(
             self._plan_alert, text="",
@@ -71,110 +93,170 @@ class Dashboard(ctk.CTkScrollableFrame):
         )
         self._plan_alert_lbl.pack(side="left", padx=16, pady=10)
 
-        # ── Guru Financeiro ───────────────────────────────────────────
-        tips_card = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14,
-                                 border_width=1, border_color=T.BORDER)
-        tips_card.grid(row=1, column=0, sticky="ew", padx=28, pady=(16, 0))
-        tips_card.grid_columnconfigure(0, weight=1)
+        # ── Widgets configuráveis ────────────────────────────────────
+        content = ctk.CTkFrame(self, fg_color="transparent")
+        content.grid(row=2, column=0, sticky="nsew", padx=28, pady=(16, 28))
+        content.grid_columnconfigure(0, weight=1)
 
-        header_row = ctk.CTkFrame(tips_card, fg_color="transparent")
-        header_row.grid(row=0, column=0, sticky="ew", padx=20, pady=(14, 6))
-        ctk.CTkLabel(header_row, text="🧠", font=F(15)).pack(side="left", padx=(0, 6))
-        ctk.CTkLabel(header_row, text="Guru Financeiro",
-                     font=F(13, "bold"), text_color=T.GREEN, anchor="w").pack(side="left")
-        ctk.CTkLabel(header_row, text="dicas personalizadas do mês",
-                     font=F(11), text_color=T.MUTED, anchor="w").pack(side="left", padx=(8, 0))
+        config = resolve_widget_config(db.get_dashboard_widgets())
+        row = 0
+        pending: list = []
 
-        self._tips_frame = ctk.CTkFrame(tips_card, fg_color="transparent")
-        self._tips_frame.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 14))
-        self._tips_frame.grid_columnconfigure((0, 1, 2), weight=1)
+        def flush_compacts():
+            nonlocal row
+            if not pending:
+                return
+            group = ctk.CTkFrame(content, fg_color="transparent")
+            group.grid(row=row, column=0, sticky="ew", pady=(0 if row == 0 else 12, 0))
+            group.grid_columnconfigure((0, 1), weight=1)
+            for i, wid in enumerate(pending):
+                card = self._WIDGET_BUILDERS[wid](self, group)
+                card.grid(row=i // 2, column=i % 2, sticky="nsew",
+                          padx=(0, 6) if i % 2 == 0 else (6, 0),
+                          pady=(0 if i < 2 else 8, 0))
+            pending.clear()
+            row += 1
 
-        # ── Charts ────────────────────────────────────────────────────
-        charts = ctk.CTkFrame(self, fg_color="transparent")
-        charts.grid(row=3, column=0, sticky="nsew", padx=28, pady=(16, 0))
-        charts.grid_columnconfigure((0, 1), weight=1)
+        for entry in config:
+            if not entry.get("enabled"):
+                continue
+            wdef = _widget_by_id(entry["id"])
+            if not wdef:
+                continue
+            if wdef["size"] == "compact":
+                pending.append(entry["id"])
+            else:
+                flush_compacts()
+                card = self._WIDGET_BUILDERS[entry["id"]](self, content)
+                card.grid(row=row, column=0, sticky="ew", pady=(0 if row == 0 else 12, 0))
+                row += 1
+        flush_compacts()
 
-        pie_card = ctk.CTkFrame(charts, fg_color=T.CARD, corner_radius=14,
-                                border_width=1, border_color=T.BORDER)
-        pie_card.grid(row=0, column=0, padx=(0, 7), sticky="nsew")
-        pie_card.grid_rowconfigure(1, weight=1)
-        pie_card.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(pie_card, text="Despesas por Categoria",
+        if row == 0:
+            ctk.CTkLabel(content, text="Nenhum card habilitado. "
+                         "Toque em \"Editar Dashboard\" para escolher o que mostrar.",
+                         font=F(12), text_color=T.MUTED).grid(row=0, column=0, pady=24)
+
+    # ------------------------------------------------------------------
+    def _open_edit_dialog(self) -> None:
+        config = resolve_widget_config(db.get_dashboard_widgets())
+        EditDashboardDialog(self.winfo_toplevel(), config, on_change=self._on_config_change)
+
+    def _on_config_change(self, config: list) -> None:
+        self._rebuild()
+
+    def _rebuild(self) -> None:
+        for w in self.winfo_children():
+            w.destroy()
+        self._build()
+        self.refresh()
+
+    # ── Construtores de widget individuais ──────────────────────────────
+    def _build_widget_saldo_mes(self, parent) -> ctk.CTkFrame:
+        card = ctk.CTkFrame(parent, fg_color=T.CARD, corner_radius=14,
+                            border_width=1, border_color=T.BORDER)
+        card.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(card, text="SALDO DO MÊS", font=F(11, "bold"),
+                     text_color=T.MUTED, anchor="w").grid(
+            row=0, column=0, sticky="w", padx=24, pady=(18, 0))
+        lbl = ctk.CTkLabel(card, text="R$ 0,00", font=F(28, "bold"),
+                           text_color=T.BLUE, anchor="w")
+        lbl.grid(row=1, column=0, sticky="w", padx=24, pady=(2, 4))
+        self._card_lbls["saldo"] = (lbl, T.BLUE)
+        self._saldo_proj_lbl = ctk.CTkLabel(card, text="", font=F(12),
+                                            text_color=T.GOLD, anchor="w")
+        self._saldo_proj_lbl.grid(row=2, column=0, sticky="w", padx=24, pady=(0, 18))
+        return card
+
+    def _make_kpi_widget(self, parent, key: str, label: str, color: str,
+                         bind_investments: bool = False) -> ctk.CTkFrame:
+        card = self._make_kpi(parent, label, color)
+        self._card_lbls[key] = (card.val_lbl, color)
+        if bind_investments and self._on_investments:
+            self._bind_click(card, self._on_investments)
+        return card
+
+    def _build_widget_kpi_entradas(self, parent) -> ctk.CTkFrame:
+        return self._make_kpi_widget(parent, "total_entradas", "ENTRADAS", T.GREEN)
+
+    def _build_widget_kpi_saidas(self, parent) -> ctk.CTkFrame:
+        return self._make_kpi_widget(parent, "total_saidas", "SAÍDAS", T.RED)
+
+    def _build_widget_kpi_saldo_vrva(self, parent) -> ctk.CTkFrame:
+        return self._make_kpi_widget(parent, "saldo_beneficios", "SALDO VR/VA", T.GOLD)
+
+    def _build_widget_kpi_investimentos_mes(self, parent) -> ctk.CTkFrame:
+        return self._make_kpi_widget(parent, "total_investimentos", "INVESTIMENTOS MÊS",
+                                     T.VIOLET, bind_investments=True)
+
+    def _build_widget_kpi_investimentos_total(self, parent) -> ctk.CTkFrame:
+        return self._make_kpi_widget(parent, "investimentos_total", "INVESTIMENTOS TOTAIS",
+                                     T.VIOLET, bind_investments=True)
+
+    def _build_widget_chart_categoria(self, parent) -> ctk.CTkFrame:
+        card = ctk.CTkFrame(parent, fg_color=T.CARD, corner_radius=14,
+                            border_width=1, border_color=T.BORDER)
+        card.grid_rowconfigure(1, weight=1)
+        card.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(card, text="Despesas por Categoria",
                      font=F(13, "bold"), text_color=T.TEXT, anchor="w").grid(
             row=0, column=0, padx=20, pady=(16, 8), sticky="w")
-        self._pie_host = ctk.CTkFrame(pie_card, fg_color="transparent")
+        self._pie_host = ctk.CTkFrame(card, fg_color="transparent")
         self._pie_host.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 12))
+        return card
 
-        bar_card = ctk.CTkFrame(charts, fg_color=T.CARD, corner_radius=14,
-                                border_width=1, border_color=T.BORDER)
-        bar_card.grid(row=0, column=1, padx=(7, 0), sticky="nsew")
-        bar_card.grid_rowconfigure(1, weight=1)
-        bar_card.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(bar_card, text="Entradas vs Saídas vs Investimentos",
+    def _build_widget_chart_forma_pagamento(self, parent) -> ctk.CTkFrame:
+        card = ctk.CTkFrame(parent, fg_color=T.CARD, corner_radius=14,
+                            border_width=1, border_color=T.BORDER)
+        card.grid_rowconfigure(1, weight=1)
+        card.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(card, text="Gastos por Forma de Pagamento",
                      font=F(13, "bold"), text_color=T.TEXT, anchor="w").grid(
             row=0, column=0, padx=20, pady=(16, 8), sticky="w")
-        self._bar_host = ctk.CTkFrame(bar_card, fg_color="transparent")
-        self._bar_host.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 12))
-
-        # ── Gastos por forma de pagamento (linha cheia, abaixo dos 2 gráficos) ──
-        pm_card = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14,
-                               border_width=1, border_color=T.BORDER)
-        pm_card.grid(row=4, column=0, sticky="ew", padx=28, pady=(16, 0))
-        pm_card.grid_rowconfigure(1, weight=1)
-        pm_card.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(pm_card, text="Gastos por Forma de Pagamento",
-                     font=F(13, "bold"), text_color=T.TEXT, anchor="w").grid(
-            row=0, column=0, padx=20, pady=(16, 8), sticky="w")
-        self._pm_host = ctk.CTkFrame(pm_card, fg_color="transparent", height=280)
+        self._pm_host = ctk.CTkFrame(card, fg_color="transparent", height=280)
         self._pm_host.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 12))
+        return card
 
-        # ── Savings bar ───────────────────────────────────────────────
-        self._savings_card = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14,
-                                          border_width=1, border_color=T.BORDER)
-        self._savings_card.grid(row=5, column=0, sticky="ew", padx=28, pady=(16, 0))
-        self._savings_card.grid_columnconfigure(2, weight=1)
+    def _build_widget_chart_entradas_saidas_investimentos(self, parent) -> ctk.CTkFrame:
+        card = ctk.CTkFrame(parent, fg_color=T.CARD, corner_radius=14,
+                            border_width=1, border_color=T.BORDER)
+        card.grid_rowconfigure(1, weight=1)
+        card.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(card, text="Entradas vs Saídas vs Investimentos",
+                     font=F(13, "bold"), text_color=T.TEXT, anchor="w").grid(
+            row=0, column=0, padx=20, pady=(16, 8), sticky="w")
+        self._bar_host = ctk.CTkFrame(card, fg_color="transparent")
+        self._bar_host.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 12))
+        return card
 
-        ctk.CTkLabel(self._savings_card, text="Taxa de poupança:",
+    def _build_widget_taxa_poupanca(self, parent) -> ctk.CTkFrame:
+        card = ctk.CTkFrame(parent, fg_color=T.CARD, corner_radius=14,
+                            border_width=1, border_color=T.BORDER)
+        card.grid_columnconfigure(2, weight=1)
+        ctk.CTkLabel(card, text="Taxa de poupança:",
                      font=F(12), text_color=T.MUTED).grid(
             row=0, column=0, padx=(22, 6), pady=16)
         self._savings_pct = ctk.CTkLabel(
-            self._savings_card, text="0,0%", font=F(13, "bold"), text_color=T.GREEN)
+            card, text="0,0%", font=F(13, "bold"), text_color=T.GREEN)
         self._savings_pct.grid(row=0, column=1, padx=(0, 10))
         self._savings_bar_bg = ctk.CTkFrame(
-            self._savings_card, height=6, fg_color=T.CARD2, corner_radius=3)
+            card, height=6, fg_color=T.CARD2, corner_radius=3)
         self._savings_bar_bg.grid(row=0, column=2, sticky="ew", padx=(0, 12))
         self._savings_bar_bg.grid_propagate(False)
         self._savings_bar_fill = ctk.CTkFrame(
             self._savings_bar_bg, height=6, fg_color=T.BLUE, corner_radius=3)
         self._savings_bar_fill.place(x=0, y=0, relheight=1, relwidth=0.0)
         self._savings_label = ctk.CTkLabel(
-            self._savings_card, text="", font=F(12), text_color=T.MUTED)
+            card, text="", font=F(12), text_color=T.MUTED)
         self._savings_label.grid(row=0, column=3, padx=(4, 22))
+        return card
 
-        # ── Situação dos Cartões ──────────────────────────────────────
-        credit_outer = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14,
-                                    border_width=1, border_color=T.BORDER)
-        credit_outer.grid(row=2, column=0, sticky="ew", padx=28, pady=(16, 0))
-        credit_outer.grid_columnconfigure(0, weight=1)
+    def _build_widget_metas(self, parent) -> ctk.CTkFrame:
+        card = ctk.CTkFrame(parent, fg_color=T.CARD, corner_radius=14,
+                            border_width=1, border_color=T.BORDER)
+        card.grid_columnconfigure(0, weight=1)
 
-        credit_hdr = ctk.CTkFrame(credit_outer, fg_color="transparent")
-        credit_hdr.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 6))
-        ctk.CTkLabel(credit_hdr, text="💳", font=F(15)).pack(side="left", padx=(0, 6))
-        ctk.CTkLabel(credit_hdr, text="Situação dos Cartões",
-                     font=F(13, "bold"), text_color=T.TEXT, anchor="w").pack(side="left")
-        ctk.CTkLabel(credit_hdr, text="limite, gastos e alertas do ciclo atual",
-                     font=F(11), text_color=T.MUTED, anchor="w").pack(side="left", padx=(8, 0))
-
-        self._credit_frame = ctk.CTkFrame(credit_outer, fg_color="transparent")
-        self._credit_frame.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 16))
-
-        # ── Metas de poupança ─────────────────────────────────────────
-        goals_card = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14,
-                                  border_width=1, border_color=T.BORDER)
-        goals_card.grid(row=6, column=0, sticky="ew", padx=28, pady=(16, 28))
-        goals_card.grid_columnconfigure(0, weight=1)
-
-        hdr = ctk.CTkFrame(goals_card, fg_color="transparent")
+        hdr = ctk.CTkFrame(card, fg_color="transparent")
         hdr.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 8))
         hdr.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(hdr, text="🎯  Metas de Poupança",
@@ -184,9 +266,45 @@ class Dashboard(ctk.CTkScrollableFrame):
             hdr, text="", font=F(11), text_color=T.MUTED, anchor="e")
         self._goals_count_lbl.grid(row=0, column=1, sticky="e")
 
-        self._goals_frame = ctk.CTkFrame(goals_card, fg_color="transparent")
+        self._goals_frame = ctk.CTkFrame(card, fg_color="transparent")
         self._goals_frame.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 16))
         self._goals_frame.grid_columnconfigure(0, weight=1)
+        return card
+
+    def _build_widget_cartoes_situacao(self, parent) -> ctk.CTkFrame:
+        card = ctk.CTkFrame(parent, fg_color=T.CARD, corner_radius=14,
+                            border_width=1, border_color=T.BORDER)
+        card.grid_columnconfigure(0, weight=1)
+
+        hdr = ctk.CTkFrame(card, fg_color="transparent")
+        hdr.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 6))
+        ctk.CTkLabel(hdr, text="💳", font=F(15)).pack(side="left", padx=(0, 6))
+        ctk.CTkLabel(hdr, text="Situação dos Cartões",
+                     font=F(13, "bold"), text_color=T.TEXT, anchor="w").pack(side="left")
+        ctk.CTkLabel(hdr, text="limite, gastos e alertas do ciclo atual",
+                     font=F(11), text_color=T.MUTED, anchor="w").pack(side="left", padx=(8, 0))
+
+        self._credit_frame = ctk.CTkFrame(card, fg_color="transparent")
+        self._credit_frame.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 16))
+        return card
+
+    def _build_widget_guru_financeiro(self, parent) -> ctk.CTkFrame:
+        card = ctk.CTkFrame(parent, fg_color=T.CARD, corner_radius=14,
+                            border_width=1, border_color=T.BORDER)
+        card.grid_columnconfigure(0, weight=1)
+
+        header_row = ctk.CTkFrame(card, fg_color="transparent")
+        header_row.grid(row=0, column=0, sticky="ew", padx=20, pady=(14, 6))
+        ctk.CTkLabel(header_row, text="🧠", font=F(15)).pack(side="left", padx=(0, 6))
+        ctk.CTkLabel(header_row, text="Guru Financeiro",
+                     font=F(13, "bold"), text_color=T.GREEN, anchor="w").pack(side="left")
+        ctk.CTkLabel(header_row, text="dicas personalizadas do mês",
+                     font=F(11), text_color=T.MUTED, anchor="w").pack(side="left", padx=(8, 0))
+
+        self._tips_frame = ctk.CTkFrame(card, fg_color="transparent")
+        self._tips_frame.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 14))
+        self._tips_frame.grid_columnconfigure((0, 1, 2), weight=1)
+        return card
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -230,31 +348,36 @@ class Dashboard(ctk.CTkScrollableFrame):
             color = (T.GREEN if val >= 0 else T.RED) if key == "saldo" else default_color
             lbl.configure(text=format_currency(val), text_color=color)
 
-        self._draw_savings(s)
-        self._draw_tips(s)
+        if hasattr(self, "_savings_pct"):
+            self._draw_savings(s)
+        if hasattr(self, "_tips_frame"):
+            self._draw_tips(s)
 
-        # Barra de saldo projetado (Modo Expectativa)
-        if s.get("has_expectations"):
-            n    = int(s.get("n_expectations", 0))
-            proj = s.get("saldo_projetado", 0.0)
-            proj_color = T.GREEN if proj >= 0 else T.RED
-            label_n = f"{n} lançamento{'s' if n != 1 else ''} previsto{'s' if n != 1 else ''}"
-            self._proj_lbl.configure(
-                text=f"📋  Saldo projetado com {label_n}: {format_currency(proj)}",
-                text_color=proj_color,
-            )
-            self._proj_bar.grid(row=1, column=0, sticky="ew", pady=(10, 0))
-        else:
-            self._proj_bar.grid_remove()
+        # Saldo projetado (Modo Expectativa) — dentro do widget "Saldo do mês"
+        if hasattr(self, "_saldo_proj_lbl"):
+            if s.get("has_expectations"):
+                n    = int(s.get("n_expectations", 0))
+                proj = s.get("saldo_projetado", 0.0)
+                proj_color = T.GREEN if proj >= 0 else T.RED
+                label_n = f"{n} lançamento{'s' if n != 1 else ''} previsto{'s' if n != 1 else ''}"
+                self._saldo_proj_lbl.configure(
+                    text=f"📋 Projetado com {label_n}: {format_currency(proj)}",
+                    text_color=proj_color,
+                )
+            else:
+                self._saldo_proj_lbl.configure(text="")
 
         def _background():
-            pie_data  = db.get_expenses_by_category(self.month_id)
-            pie_fig   = self._build_pie_figure(pie_data)
-            bar_fig   = self._build_bar_figure(s)
-            pm_data   = db.get_expenses_by_payment_method(self.month_id)
-            pm_fig    = self._build_pie_figure(
-                [{"category": PAYMENT_METHODS.get(r["payment_method"], r["payment_method"]),
-                  "total": r["total"]} for r in pm_data])
+            pie_data = db.get_expenses_by_category(self.month_id)
+            pie_fig  = self._build_pie_figure(pie_data) if hasattr(self, "_pie_host") else None
+            bar_fig  = self._build_bar_figure(s) if hasattr(self, "_bar_host") else None
+            if hasattr(self, "_pm_host"):
+                pm_data = db.get_expenses_by_payment_method(self.month_id)
+                pm_fig  = self._build_pie_figure(
+                    [{"category": PAYMENT_METHODS.get(r["payment_method"], r["payment_method"]),
+                      "total": r["total"]} for r in pm_data])
+            else:
+                pm_fig = None
             try:
                 total_inv = db.get_total_investments()
             except Exception:
@@ -303,16 +426,22 @@ class Dashboard(ctk.CTkScrollableFrame):
                 plan, plan_items, plan_realized = None, [], {}
             self.after(0, lambda p=plan, it=plan_items, pr=plan_realized:
                        self._update_plan_alert(p, it, pr))
-            self.after(0, lambda: self._embed_pie(pie_fig))
-            self.after(0, lambda: self._embed_bar(bar_fig))
-            self.after(0, lambda: self._embed_pm(pm_fig))
-            self.after(0, lambda: self._draw_goals(goals))
-            self.after(0, lambda cp=card_payments: self._draw_credit_panel(cards, s, cp))
+            if pie_fig is not None:
+                self.after(0, lambda: self._embed_pie(pie_fig))
+            if bar_fig is not None:
+                self.after(0, lambda: self._embed_bar(bar_fig))
+            if pm_fig is not None:
+                self.after(0, lambda: self._embed_pm(pm_fig))
+            if hasattr(self, "_goals_frame"):
+                self.after(0, lambda: self._draw_goals(goals))
+            if hasattr(self, "_credit_frame"):
+                self.after(0, lambda cp=card_payments: self._draw_credit_panel(cards, s, cp))
             self.after(0, lambda t=total_inv: self._update_total_inv(t))
             self.after(0, lambda t=benefit_total: self._update_benefit_balance(t))
-            self.after(0, lambda g=goals, c=pie_data, h=history,
-                       iv=investments, ti=total_inv, uc=total_unpaid_cards:
-                       self._draw_tips(s, g, c, h, iv, ti, uc))
+            if hasattr(self, "_tips_frame"):
+                self.after(0, lambda g=goals, c=pie_data, h=history,
+                           iv=investments, ti=total_inv, uc=total_unpaid_cards:
+                           self._draw_tips(s, g, c, h, iv, ti, uc))
 
         threading.Thread(target=_background, daemon=True).start()
 
@@ -332,7 +461,7 @@ class Dashboard(ctk.CTkScrollableFrame):
                 names = ", ".join(burst[:3]) + ("…" if len(burst) > 3 else "")
                 self._plan_alert_lbl.configure(
                     text=f"⚠  Plano do mês estourado em: {names} — veja a aba Planejamento")
-                self._plan_alert.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+                self._plan_alert.grid(row=0, column=0, sticky="ew", pady=(14, 0))
             else:
                 self._plan_alert.grid_remove()
         except Exception:
@@ -393,6 +522,9 @@ class Dashboard(ctk.CTkScrollableFrame):
         """Embute a Figure do pie no Tkinter — roda no main thread."""
         import matplotlib.pyplot as plt
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+        if not hasattr(self, "_pie_host"):
+            plt.close(fig)
+            return
         try:
             for w in self._pie_host.winfo_children():
                 w.destroy()
@@ -408,6 +540,9 @@ class Dashboard(ctk.CTkScrollableFrame):
         """Embute a Figure de forma de pagamento no Tkinter — roda no main thread."""
         import matplotlib.pyplot as plt
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+        if not hasattr(self, "_pm_host"):
+            plt.close(fig)
+            return
         try:
             for w in self._pm_host.winfo_children():
                 w.destroy()
@@ -462,6 +597,9 @@ class Dashboard(ctk.CTkScrollableFrame):
         """Embute a Figure do bar chart no Tkinter — roda no main thread."""
         import matplotlib.pyplot as plt
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+        if not hasattr(self, "_bar_host"):
+            plt.close(fig)
+            return
         try:
             for w in self._bar_host.winfo_children():
                 w.destroy()
@@ -475,6 +613,8 @@ class Dashboard(ctk.CTkScrollableFrame):
 
     # ------------------------------------------------------------------
     def _draw_goals(self, goals: list) -> None:
+        if not hasattr(self, "_goals_frame"):
+            return
         for w in self._goals_frame.winfo_children():
             w.destroy()
 
@@ -520,6 +660,8 @@ class Dashboard(ctk.CTkScrollableFrame):
     def _draw_tips(self, s: dict, goals: list = None, categories: list = None,
                    history: list = None, investments: list = None,
                    total_inv: float = 0.0, unpaid_cards: float = 0.0) -> None:
+        if not hasattr(self, "_tips_frame"):
+            return
         for w in self._tips_frame.winfo_children():
             w.destroy()
 
@@ -551,6 +693,8 @@ class Dashboard(ctk.CTkScrollableFrame):
     # ------------------------------------------------------------------
     def _draw_credit_panel(self, cards: list, s: dict,
                            card_payments: list = None) -> None:
+        if not hasattr(self, "_credit_frame"):
+            return
         from ui.credit_cards import _all_card_spendings, _days_until
 
         for w in self._credit_frame.winfo_children():
@@ -681,6 +825,8 @@ class Dashboard(ctk.CTkScrollableFrame):
 
     # ------------------------------------------------------------------
     def _draw_savings(self, s: dict) -> None:
+        if not hasattr(self, "_savings_pct"):
+            return
         entradas = s.get("total_entradas", 0)
         saldo    = s.get("saldo", 0)
         if entradas > 0:
@@ -695,6 +841,165 @@ class Dashboard(ctk.CTkScrollableFrame):
         self._savings_bar_fill.place_configure(relwidth=pct)
         self._savings_label.configure(
             text=f"{format_currency(saldo)} de {format_currency(entradas)}")
+
+    # Dispatch id do catálogo → construtor (definido após os métodos acima)
+    _WIDGET_BUILDERS = {
+        "saldo_mes":                           _build_widget_saldo_mes,
+        "kpi_entradas":                        _build_widget_kpi_entradas,
+        "kpi_saidas":                          _build_widget_kpi_saidas,
+        "kpi_saldo_vrva":                      _build_widget_kpi_saldo_vrva,
+        "kpi_investimentos_mes":               _build_widget_kpi_investimentos_mes,
+        "kpi_investimentos_total":             _build_widget_kpi_investimentos_total,
+        "chart_categoria":                     _build_widget_chart_categoria,
+        "chart_forma_pagamento":               _build_widget_chart_forma_pagamento,
+        "chart_entradas_saidas_investimentos": _build_widget_chart_entradas_saidas_investimentos,
+        "taxa_poupanca":                       _build_widget_taxa_poupanca,
+        "metas":                               _build_widget_metas,
+        "cartoes_situacao":                    _build_widget_cartoes_situacao,
+        "guru_financeiro":                     _build_widget_guru_financeiro,
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────
+class EditDashboardDialog(ctk.CTkToplevel):
+    """Liga/desliga e reordena os widgets do Dashboard — mesmo padrão visual
+    do ThemePickerDialog. Autosave a cada mudança (via db.save_dashboard_widgets),
+    a mesma coluna user_settings.dashboard_widgets usada pelo site/celular."""
+
+    def __init__(self, parent, config: list, on_change: Optional[Callable] = None):
+        super().__init__(parent)
+        self.title("Editar Dashboard")
+        self.resizable(False, False)
+        self.grab_set()
+        self.configure(fg_color=T.CARD)
+        self._config    = [dict(e) for e in config]
+        self._on_change = on_change
+        self._build()
+        self._center(parent)
+        self.lift()
+        self.focus()
+        self.after(100, self._set_icon)
+
+    def _set_icon(self) -> None:
+        try:
+            import sys, os
+            if getattr(sys, "frozen", False):
+                path = os.path.join(sys._MEIPASS, "assets", "app.ico")
+            else:
+                path = os.path.join(os.path.dirname(__file__), "..", "assets", "app.ico")
+            self.iconbitmap(os.path.abspath(path))
+        except Exception:
+            pass
+
+    def _center(self, parent) -> None:
+        self.update_idletasks()
+        w, h = 460, 560
+        px = parent.winfo_x() + (parent.winfo_width()  - w) // 2
+        py = parent.winfo_y() + (parent.winfo_height() - h) // 2
+        self.geometry(f"{w}x{h}+{px}+{py}")
+
+    def _build(self) -> None:
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(2, weight=1)
+
+        ctk.CTkLabel(self, text="Editar Dashboard",
+                     font=F(16, "bold"), text_color=T.TEXT).grid(
+            row=0, column=0, pady=(24, 4))
+        ctk.CTkLabel(self, text="Escolha quais cards aparecem e em que ordem.\n"
+                     "A escolha é salva automaticamente.",
+                     font=F(12), text_color=T.MUTED, justify="center").grid(
+            row=1, column=0, pady=(0, 14))
+
+        self._list = ctk.CTkScrollableFrame(
+            self, fg_color="transparent",
+            scrollbar_button_color=T.BORDER,
+            scrollbar_button_hover_color=T.MUTED,
+        )
+        self._list.grid(row=2, column=0, sticky="nsew", padx=20)
+        self._list.grid_columnconfigure(0, weight=1)
+
+        self._render_rows()
+
+        ctk.CTkButton(
+            self, text="Fechar", command=self.destroy,
+            height=36, width=120, corner_radius=8,
+            fg_color=T.CARD2, hover_color=T.BORDER_L,
+            border_width=1, border_color=T.BORDER_L,
+            text_color=T.MUTED, font=F(13),
+        ).grid(row=3, column=0, pady=(14, 22))
+
+    def _render_rows(self) -> None:
+        for w in self._list.winfo_children():
+            w.destroy()
+
+        for i, entry in enumerate(self._config):
+            wdef = _widget_by_id(entry["id"])
+            if not wdef:
+                continue
+            row = ctk.CTkFrame(self._list, fg_color=T.CARD2, corner_radius=10,
+                               border_width=1, border_color=T.BORDER_L)
+            row.grid(row=i, column=0, sticky="ew", pady=4)
+            row.grid_columnconfigure(1, weight=1)
+
+            arrows = ctk.CTkFrame(row, fg_color="transparent")
+            arrows.grid(row=0, column=0, padx=(6, 4), pady=6)
+            up = ctk.CTkButton(
+                arrows, text="▲", width=22, height=18, corner_radius=4,
+                fg_color="transparent", hover_color=T.BORDER_L,
+                text_color=T.MUTED, font=F(10),
+                command=lambda idx=i: self._move(idx, -1),
+            )
+            up.pack()
+            if i == 0:
+                up.configure(state="disabled")
+            down = ctk.CTkButton(
+                arrows, text="▼", width=22, height=18, corner_radius=4,
+                fg_color="transparent", hover_color=T.BORDER_L,
+                text_color=T.MUTED, font=F(10),
+                command=lambda idx=i: self._move(idx, 1),
+            )
+            down.pack(pady=(2, 0))
+            if i == len(self._config) - 1:
+                down.configure(state="disabled")
+
+            enabled = entry.get("enabled", True)
+            ctk.CTkLabel(row, text=wdef["label"],
+                         font=F(12, "bold" if enabled else "normal"),
+                         text_color=T.TEXT if enabled else T.MUTED, anchor="w").grid(
+                row=0, column=1, sticky="w", padx=(0, 8))
+
+            sw = ctk.CTkSwitch(
+                row, text="", width=40,
+                progress_color=T.BLUE, button_color="#ffffff",
+                fg_color=T.BORDER_L,
+                command=lambda idx=i: self._toggle(idx),
+            )
+            sw.grid(row=0, column=2, padx=(0, 10), pady=6)
+            if enabled:
+                sw.select()
+            else:
+                sw.deselect()
+
+    def _toggle(self, idx: int) -> None:
+        self._config[idx]["enabled"] = not self._config[idx].get("enabled", True)
+        self._save()
+        self._render_rows()
+
+    def _move(self, idx: int, delta: int) -> None:
+        target = idx + delta
+        if target < 0 or target >= len(self._config):
+            return
+        self._config[idx], self._config[target] = self._config[target], self._config[idx]
+        self._save()
+        self._render_rows()
+
+    def _save(self) -> None:
+        try:
+            db.save_dashboard_widgets(self._config)
+        except Exception:
+            pass
+        if self._on_change:
+            self._on_change(self._config)
 
 
 # ──────────────────────────────────────────────────────────────────────
