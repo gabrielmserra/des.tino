@@ -82,7 +82,11 @@ class Dashboard(ctk.CTkScrollableFrame):
         ).grid(row=0, column=0, sticky="e")
 
         # ── Alerta de plano estourado (fixo, fora do catálogo) ─────────
-        alerts_box = ctk.CTkFrame(self, fg_color="transparent")
+        # height=1: fica vazio na maior parte do tempo (só aparece se o plano
+        # do mês estourar) — sem isso o CTkFrame usa a altura padrão do
+        # construtor (200px) mesmo sem nenhum filho "gridado", sobrando um
+        # espaço morto acima dos widgets.
+        alerts_box = ctk.CTkFrame(self, fg_color="transparent", height=1)
         alerts_box.grid(row=1, column=0, sticky="ew", padx=28)
         alerts_box.grid_columnconfigure(0, weight=1)
         self._plan_alert = ctk.CTkFrame(alerts_box, fg_color=T.RED_DIM, corner_radius=10,
