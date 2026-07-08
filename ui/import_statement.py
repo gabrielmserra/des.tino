@@ -227,9 +227,10 @@ class ImportTab(ctk.CTkFrame):
             row, text="  •  ".join(info_bits), font=F(11), text_color=info_color, anchor="w",
         ).grid(row=1, column=1, sticky="ew", padx=(0, 8), pady=(0, 8))
 
-        cand.cat_var = ctk.StringVar(value=r.suggested_category)
+        default_cat = "Receita" if r.direction == "entrada" else r.suggested_category
+        cand.cat_var = ctk.StringVar(value=default_cat)
         ctk.CTkComboBox(
-            row, values=sorted(set(CATEGORIES + ["Investimentos"])), variable=cand.cat_var,
+            row, values=sorted(set(CATEGORIES + ["Investimentos", "Receita"])), variable=cand.cat_var,
             width=150, fg_color=T.CARD, border_color=T.BORDER_L, text_color=T.TEXT,
             button_color=T.BORDER_L, dropdown_fg_color=T.CARD, dropdown_text_color=T.TEXT,
             corner_radius=6,

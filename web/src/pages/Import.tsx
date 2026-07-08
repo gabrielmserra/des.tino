@@ -81,7 +81,7 @@ export function Import() {
         monthId,
         monthName: name,
         dupLabel,
-        category: r.suggestedCategory,
+        category: r.direction === 'entrada' ? 'Receita' : r.suggestedCategory,
         paymentMethod: r.suggestedPaymentMethod,
         description: r.description,
       })
@@ -253,7 +253,7 @@ export function Import() {
                     className="flex-1 rounded border px-2 py-1.5 text-xs outline-none"
                     style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
                   >
-                    {[...CATEGORIES, 'Investimentos'].map((cat) => (
+                    {[...CATEGORIES, 'Investimentos', 'Receita'].map((cat) => (
                       <option key={cat} value={cat}>
                         {cat}
                       </option>
