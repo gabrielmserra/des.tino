@@ -55,17 +55,20 @@ class TransactionsTab(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
 
         if self._is_var_expense:
-            self.grid_rowconfigure(4, weight=1)
+            self.grid_rowconfigure(3, weight=1)
             self._build_card_bar(row=0)
             self._build_benefits_bar(row=1)
-            self._build_debit_bar(row=2)
-            self._build_form(row=3)
-            self._build_table(row=4)
+            self._build_form(row=2)
+            self._build_table(row=3)
+            # Não há mais uma barra de cartões de débito (removida) — mas o
+            # combo de "forma de pagamento" ainda precisa da lista, pro
+            # seletor secundário quando o método é débito.
+            self._load_debit_sources_async()
         else:
             self.grid_rowconfigure(1, weight=1)
             self._build_form(row=0)
             self._build_table(row=1)
-            # Nas outras abas não há as barras de preset (cartão/débito/VR-VA),
+            # Nas outras abas não há as barras de preset (cartão/VR-VA),
             # mas o combo de "forma de pagamento" precisa das mesmas listas
             # pra popular o seletor secundário (crédito/débito/VR-VA).
             self._load_payment_sources_async()
@@ -84,6 +87,12 @@ class TransactionsTab(ctk.CTkFrame):
         self._on_cards_changed(cards)
         self._on_debit_changed(debits)
         self._on_benefits_changed(benefits)
+
+    def _load_debit_sources_async(self) -> None:
+        def _fetch():
+            debits = db.get_debit_cards()
+            self.after(0, lambda: self._on_debit_changed(debits))
+        threading.Thread(target=_fetch, daemon=True).start()
 
     # ------------------------------------------------------------------
     def _build_card_bar(self, row: int = 0) -> None:
@@ -109,18 +118,6 @@ class TransactionsTab(ctk.CTkFrame):
         bar.pack(fill="x", padx=16, pady=14)
         self._benefits_bar  = bar
         self._benefits_wrap = wrap
-
-    def _build_debit_bar(self, row: int = 2) -> None:
-        from ui.debit_cards import DebitCardsBar
-        wrap = ctk.CTkFrame(
-            self, fg_color=T.CARD, corner_radius=12,
-            border_width=1, border_color=T.BORDER,
-        )
-        wrap.grid(row=row, column=0, sticky="ew", padx=28, pady=(10, 0))
-        bar = DebitCardsBar(wrap, month_id=self.month_id, on_debit_changed=self._on_debit_changed)
-        bar.pack(fill="x", padx=16, pady=14)
-        self._debit_bar  = bar
-        self._debit_wrap = wrap
 
     def _on_cards_changed(self, cards: List[dict]) -> None:
         self._cards_list  = cards
@@ -626,8 +623,6 @@ class TransactionsTab(ctk.CTkFrame):
         self._q_desc.focus()
         if hasattr(self, "_benefits_bar"):
             self._benefits_bar.refresh()
-        if hasattr(self, "_debit_bar"):
-            self._debit_bar.refresh()
         self.refresh()
         self.on_change()
 
@@ -636,7 +631,7 @@ class TransactionsTab(ctk.CTkFrame):
         """Recolhe formulário e barras de origem para a lista ocupar a tela toda.
         Uma barra de adição rápida aparece para ainda permitir novos lançamentos."""
         self._expanded_list = not self._expanded_list
-        for attr in ("_card_wrap", "_benefits_wrap", "_debit_wrap", "_form_frame"):
+        for attr in ("_card_wrap", "_benefits_wrap", "_form_frame"):
             w = getattr(self, attr, None)
             if w is None:
                 continue
@@ -724,8 +719,6 @@ class TransactionsTab(ctk.CTkFrame):
             self._date_entry.delete(0, "end")
             self._desc.focus()
 
-        if hasattr(self, "_debit_bar"):
-            self._debit_bar.refresh()
         self.refresh()
         self.on_change()
 
@@ -992,8 +985,6 @@ class TransactionsTab(ctk.CTkFrame):
         db.delete_transaction(tid, self.month_id)
         if self._is_var_expense and hasattr(self, "_benefits_bar"):
             self._benefits_bar.refresh()   # estorno do saldo
-        if self._is_var_expense and hasattr(self, "_debit_bar"):
-            self._debit_bar.refresh()
         self.refresh()
         self.on_change()
 

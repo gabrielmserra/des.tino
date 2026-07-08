@@ -562,27 +562,10 @@ def settle_card_bill(card_id: int, month_id: int, closing_day: int,
 # a transação já debita o saldo na hora, igual a "Nenhuma origem".
 
 def get_debit_cards() -> List[dict]:
+    """Usado só pelo seletor de forma de pagamento (não há mais UI pra
+    cadastrar cartão de débito novo — só lista os que já existem)."""
     resp = get_client().table("debit_cards").select("*").order("created_at").execute()
     return resp.data or []
-
-
-def create_debit_card(name: str, color: str) -> Optional[dict]:
-    client  = get_client()
-    user_id = client.auth.get_user().user.id
-    resp = client.table("debit_cards").insert({
-        "name": name, "color": color, "user_id": user_id,
-    }).execute()
-    return resp.data[0] if resp.data else None
-
-
-def update_debit_card(debit_card_id: int, name: str, color: str) -> None:
-    get_client().table("debit_cards").update({
-        "name": name, "color": color,
-    }).eq("id", debit_card_id).execute()
-
-
-def delete_debit_card(debit_card_id: int) -> None:
-    get_client().table("debit_cards").delete().eq("id", debit_card_id).execute()
 
 
 def clear_cache() -> None:

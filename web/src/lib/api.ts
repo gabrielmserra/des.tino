@@ -13,7 +13,6 @@ import type {
   PlanItem,
   PlanItemInput,
   DebitCard,
-  DebitCardOverview,
   Debt,
   DebtInstallment,
   DebtInstallmentInput,
@@ -414,13 +413,8 @@ export async function savePlan(
 }
 
 // ── Cartões de débito (exclusivo web/mobile) ─────────────────────────
-// Entidade simples (só nome/cor) — sem fatura/limite/vencimento, por
-// isso CRUD direto na tabela. O gasto do mês é RPC (soma simples).
-export type DebitCardInput = {
-  name: string
-  color: string
-}
-
+// Não há mais UI pra cadastrar/editar/excluir cartão de débito — só
+// listar os que já existem, pro seletor de forma de pagamento.
 export async function fetchDebitCardsBasic(): Promise<DebitCard[]> {
   const { data, error } = await supabase
     .from('debit_cards')
@@ -428,29 +422,6 @@ export async function fetchDebitCardsBasic(): Promise<DebitCard[]> {
     .order('created_at')
   if (error) throw error
   return data ?? []
-}
-
-export async function fetchDebitCardsOverview(monthId: number): Promise<DebitCardOverview[]> {
-  const { data, error } = await supabase.rpc('get_debit_cards_overview', {
-    p_month_id: monthId,
-  })
-  if (error) throw error
-  return (data ?? []) as DebitCardOverview[]
-}
-
-export async function createDebitCard(input: DebitCardInput): Promise<void> {
-  const { error } = await supabase.from('debit_cards').insert(input)
-  if (error) throw error
-}
-
-export async function updateDebitCard(id: number, input: DebitCardInput): Promise<void> {
-  const { error } = await supabase.from('debit_cards').update(input).eq('id', id)
-  if (error) throw error
-}
-
-export async function deleteDebitCard(id: number): Promise<void> {
-  const { error } = await supabase.from('debit_cards').delete().eq('id', id)
-  if (error) throw error
 }
 
 // ── Dívidas ───────────────────────────────────────────────────────────

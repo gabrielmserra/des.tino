@@ -4,15 +4,13 @@ import { useMonths } from '../lib/month'
 import {
   fetchCardsOverview,
   payCardBill,
-  fetchDebitCardsOverview,
   fetchBenefitsOverview,
 } from '../lib/api'
 import { formatCurrency } from '../lib/format'
 import { Skeleton } from '../components/Skeleton'
 import { CardForm } from '../components/CardForm'
-import { DebitCardForm } from '../components/DebitCardForm'
 import { BenefitForm } from '../components/BenefitForm'
-import type { CardOverview, DebitCardOverview, BenefitOverview } from '../lib/types'
+import type { CardOverview, BenefitOverview } from '../lib/types'
 
 function safetyMessage(c: CardOverview): { text: string; color: string } {
   const pctUsed = c.card_limit > 0 ? c.spent / c.card_limit : 0
@@ -42,7 +40,6 @@ export function Cards() {
 
   const [addChoice, setAddChoice] = useState(false)
   const [creditForm, setCreditForm] = useState<CardOverview | 'new' | null>(null)
-  const [debitForm, setDebitForm] = useState<DebitCardOverview | 'new' | null>(null)
   const [benefitForm, setBenefitForm] = useState<BenefitOverview | 'new' | null>(null)
 
   const [payBusy, setPayBusy] = useState<number | null>(null)
@@ -53,17 +50,11 @@ export function Cards() {
     queryFn: () => fetchCardsOverview(selectedId!),
     enabled: selectedId != null,
   })
-  const debitQ = useQuery({
-    queryKey: ['debitCardsOverview', selectedId],
-    queryFn: () => fetchDebitCardsOverview(selectedId!),
-    enabled: selectedId != null,
-  })
   const benefitQ = useQuery({ queryKey: ['benefitsOverview'], queryFn: fetchBenefitsOverview })
 
   const creditCards = creditQ.data ?? []
-  const debitCards = debitQ.data ?? []
   const benefits = benefitQ.data ?? []
-  const loading = creditQ.isLoading || debitQ.isLoading || benefitQ.isLoading
+  const loading = creditQ.isLoading || benefitQ.isLoading
 
   const pay = async (c: CardOverview) => {
     if (!selectedId) return
@@ -204,36 +195,6 @@ export function Cards() {
             </div>
           )}
 
-          <SectionTitle>🏧 Débito</SectionTitle>
-          {debitCards.length === 0 ? (
-            <p className="text-sm" style={{ color: 'var(--muted)' }}>
-              Nenhum cartão de débito.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {debitCards.map((d) => (
-                <div
-                  key={d.id}
-                  className="flex items-center justify-between rounded-xl border p-3"
-                  style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: d.color }} />
-                    <span className="font-semibold">{d.name}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-bold" style={{ color: d.color }}>
-                      {formatCurrency(d.spent)}
-                    </span>
-                    <button onClick={() => setDebitForm(d)} className="text-sm" style={{ color: 'var(--muted)' }}>
-                      Editar
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
           <SectionTitle>🍽️ Vale Refeição / Alimentação</SectionTitle>
           {benefits.length === 0 ? (
             <p className="text-sm" style={{ color: 'var(--muted)' }}>
@@ -325,9 +286,6 @@ export function Cards() {
 
       {creditForm !== null && (
         <CardForm card={creditForm === 'new' ? null : creditForm} onClose={() => setCreditForm(null)} />
-      )}
-      {debitForm !== null && (
-        <DebitCardForm card={debitForm === 'new' ? null : debitForm} onClose={() => setDebitForm(null)} />
       )}
       {benefitForm !== null && (
         <BenefitForm benefit={benefitForm === 'new' ? null : benefitForm} onClose={() => setBenefitForm(null)} />

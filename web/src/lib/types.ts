@@ -75,13 +75,6 @@ export type DebitCard = {
   color: string
 }
 
-export type DebitCardOverview = {
-  id: number
-  name: string
-  color: string
-  spent: number
-}
-
 export type Plan = {
   id: number
   month_id: number
