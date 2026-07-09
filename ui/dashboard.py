@@ -170,11 +170,14 @@ class Dashboard(ctk.CTkScrollableFrame):
             row=0, column=0, sticky="w", padx=24, pady=(18, 0))
         lbl = ctk.CTkLabel(card, text="R$ 0,00", font=F(28, "bold"),
                            text_color=T.BLUE, anchor="w")
-        lbl.grid(row=1, column=0, sticky="w", padx=24, pady=(2, 4))
+        lbl.grid(row=1, column=0, sticky="w", padx=24, pady=(2, 18))
         self._card_lbls["saldo"] = (lbl, T.BLUE)
+        # Linha de saldo projetado: só ocupa espaço quando há previstos no
+        # mês (grid/grid_remove em refresh()) — sem isso o card reservava
+        # ~58px pra uma linha vazia, deixando o card grande demais sem
+        # conteúdo pra preencher.
         self._saldo_proj_lbl = ctk.CTkLabel(card, text="", font=F(12),
                                             text_color=T.GOLD, anchor="w")
-        self._saldo_proj_lbl.grid(row=2, column=0, sticky="w", padx=24, pady=(0, 18))
         return card
 
     def _make_kpi_widget(self, parent, key: str, label: str, color: str,
@@ -423,8 +426,10 @@ class Dashboard(ctk.CTkScrollableFrame):
         if hasattr(self, "_tips_frame"):
             self._draw_tips(s)
 
-        # Saldo projetado (Modo Expectativa) — dentro do widget "Saldo do mês"
+        # Saldo projetado (Modo Expectativa) — dentro do widget "Saldo do mês".
+        # Só ocupa espaço na grade quando há previstos no mês.
         if hasattr(self, "_saldo_proj_lbl"):
+            saldo_lbl = self._card_lbls.get("saldo")
             if s.get("has_expectations"):
                 n    = int(s.get("n_expectations", 0))
                 proj = s.get("saldo_projetado", 0.0)
@@ -434,8 +439,13 @@ class Dashboard(ctk.CTkScrollableFrame):
                     text=f"📋 Projetado com {label_n}: {format_currency(proj)}",
                     text_color=proj_color,
                 )
+                self._saldo_proj_lbl.grid(row=2, column=0, sticky="w", padx=24, pady=(0, 18))
+                if saldo_lbl:
+                    saldo_lbl[0].grid_configure(pady=(2, 4))
             else:
-                self._saldo_proj_lbl.configure(text="")
+                self._saldo_proj_lbl.grid_remove()
+                if saldo_lbl:
+                    saldo_lbl[0].grid_configure(pady=(2, 18))
 
         def _background():
             pie_data = db.get_expenses_by_category(self.month_id)
