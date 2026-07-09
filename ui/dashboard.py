@@ -910,6 +910,7 @@ class EditDashboardDialog(ctk.CTkToplevel):
                      font=F(16, "bold"), text_color=T.TEXT).grid(
             row=0, column=0, pady=(24, 4))
         ctk.CTkLabel(self, text="Escolha quais cards aparecem e em que ordem.\n"
+                     "Cards lado a lado aparecem juntos no dashboard.\n"
                      "A escolha é salva automaticamente.",
                      font=F(12), text_color=T.MUTED, justify="center").grid(
             row=1, column=0, pady=(0, 14))
@@ -932,57 +933,104 @@ class EditDashboardDialog(ctk.CTkToplevel):
             text_color=T.MUTED, font=F(13),
         ).grid(row=3, column=0, pady=(14, 22))
 
-    def _render_rows(self) -> None:
-        for w in self._list.winfo_children():
-            w.destroy()
+    def _build_preview_rows(self) -> list:
+        """Linhas de prévia: espelha o agrupamento real do Dashboard —
+        compactos habilitados e consecutivos formam um bloco de 2 colunas;
+        desabilitados não entram na conta do agrupamento, mas continuam
+        com sua própria linha pra dar pra reordenar/religar."""
+        rows: list = []
+        pending: list = []
+
+        def flush():
+            if pending:
+                rows.append(("group", list(pending)))
+                pending.clear()
 
         for i, entry in enumerate(self._config):
             wdef = _widget_by_id(entry["id"])
             if not wdef:
                 continue
-            row = ctk.CTkFrame(self._list, fg_color=T.CARD2, corner_radius=10,
-                               border_width=1, border_color=T.BORDER_L)
-            row.grid(row=i, column=0, sticky="ew", pady=4)
-            row.grid_columnconfigure(1, weight=1)
-
-            arrows = ctk.CTkFrame(row, fg_color="transparent")
-            arrows.grid(row=0, column=0, padx=(6, 4), pady=6)
-            up = ctk.CTkButton(
-                arrows, text="▲", width=22, height=18, corner_radius=4,
-                fg_color="transparent", hover_color=T.BORDER_L,
-                text_color=T.MUTED, font=F(10),
-                command=lambda idx=i: self._move(idx, -1),
-            )
-            up.pack()
-            if i == 0:
-                up.configure(state="disabled")
-            down = ctk.CTkButton(
-                arrows, text="▼", width=22, height=18, corner_radius=4,
-                fg_color="transparent", hover_color=T.BORDER_L,
-                text_color=T.MUTED, font=F(10),
-                command=lambda idx=i: self._move(idx, 1),
-            )
-            down.pack(pady=(2, 0))
-            if i == len(self._config) - 1:
-                down.configure(state="disabled")
-
-            enabled = entry.get("enabled", True)
-            ctk.CTkLabel(row, text=wdef["label"],
-                         font=F(12, "bold" if enabled else "normal"),
-                         text_color=T.TEXT if enabled else T.MUTED, anchor="w").grid(
-                row=0, column=1, sticky="w", padx=(0, 8))
-
-            sw = ctk.CTkSwitch(
-                row, text="", width=40,
-                progress_color=T.BLUE, button_color="#ffffff",
-                fg_color=T.BORDER_L,
-                command=lambda idx=i: self._toggle(idx),
-            )
-            sw.grid(row=0, column=2, padx=(0, 10), pady=6)
-            if enabled:
-                sw.select()
+            if not entry.get("enabled", True):
+                # Desabilitado não quebra o bloco de compactos ao redor —
+                # o _build() real também simplesmente pula (continue) sem
+                # dar flush, então dois compactos "vizinhos" apesar de um
+                # desabilitado no meio continuam se juntando entre si.
+                rows.append(("single", i))
+                continue
+            if wdef["size"] == "compact":
+                pending.append(i)
             else:
-                sw.deselect()
+                flush()
+                rows.append(("single", i))
+        flush()
+        return rows
+
+    def _make_row(self, parent, idx: int) -> ctk.CTkFrame:
+        entry   = self._config[idx]
+        wdef    = _widget_by_id(entry["id"])
+        row = ctk.CTkFrame(parent, fg_color=T.CARD2, corner_radius=10,
+                           border_width=1, border_color=T.BORDER_L)
+        row.grid_columnconfigure(1, weight=1)
+
+        arrows = ctk.CTkFrame(row, fg_color="transparent")
+        arrows.grid(row=0, column=0, padx=(6, 4), pady=6)
+        up = ctk.CTkButton(
+            arrows, text="▲", width=22, height=18, corner_radius=4,
+            fg_color="transparent", hover_color=T.BORDER_L,
+            text_color=T.MUTED, font=F(10),
+            command=lambda: self._move(idx, -1),
+        )
+        up.pack()
+        if idx == 0:
+            up.configure(state="disabled")
+        down = ctk.CTkButton(
+            arrows, text="▼", width=22, height=18, corner_radius=4,
+            fg_color="transparent", hover_color=T.BORDER_L,
+            text_color=T.MUTED, font=F(10),
+            command=lambda: self._move(idx, 1),
+        )
+        down.pack(pady=(2, 0))
+        if idx == len(self._config) - 1:
+            down.configure(state="disabled")
+
+        enabled = entry.get("enabled", True)
+        ctk.CTkLabel(row, text=wdef["label"],
+                     font=F(12, "bold" if enabled else "normal"),
+                     text_color=T.TEXT if enabled else T.MUTED, anchor="w").grid(
+            row=0, column=1, sticky="w", padx=(0, 8))
+
+        sw = ctk.CTkSwitch(
+            row, text="", width=40,
+            progress_color=T.BLUE, button_color="#ffffff",
+            fg_color=T.BORDER_L,
+            command=lambda: self._toggle(idx),
+        )
+        sw.grid(row=0, column=2, padx=(0, 10), pady=6)
+        if enabled:
+            sw.select()
+        else:
+            sw.deselect()
+        return row
+
+    def _render_rows(self) -> None:
+        for w in self._list.winfo_children():
+            w.destroy()
+
+        r = 0
+        for kind, data in self._build_preview_rows():
+            if kind == "single":
+                self._make_row(self._list, data).grid(
+                    row=r, column=0, sticky="ew", pady=4)
+            else:
+                group = ctk.CTkFrame(self._list, fg_color="transparent")
+                group.grid(row=r, column=0, sticky="ew", pady=4)
+                group.grid_columnconfigure((0, 1), weight=1)
+                for j, idx in enumerate(data):
+                    self._make_row(group, idx).grid(
+                        row=j // 2, column=j % 2, sticky="nsew",
+                        padx=(0, 4) if j % 2 == 0 else (4, 0),
+                        pady=(0 if j < 2 else 6, 0))
+            r += 1
 
     def _toggle(self, idx: int) -> None:
         self._config[idx]["enabled"] = not self._config[idx].get("enabled", True)
