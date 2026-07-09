@@ -162,9 +162,17 @@ class Dashboard(ctk.CTkScrollableFrame):
 
     # ── Construtores de widget individuais ──────────────────────────────
     def _build_widget_saldo_mes(self, parent) -> ctk.CTkFrame:
-        card = ctk.CTkFrame(parent, fg_color=T.CARD, corner_radius=14,
-                            border_width=1, border_color=T.BORDER)
+        # Card ancorado à esquerda, largura fixa (não estica pela linha
+        # toda) — bate mais com a proporção "KPI grande" do que um card
+        # de largura total com pouco conteúdo dentro.
+        wrapper = ctk.CTkFrame(parent, fg_color="transparent")
+        wrapper.grid_columnconfigure(0, weight=0)
+
+        card = ctk.CTkFrame(wrapper, fg_color=T.CARD, corner_radius=14,
+                            border_width=1, border_color=T.BORDER, width=480)
+        card.grid(row=0, column=0, sticky="w")
         card.grid_columnconfigure(0, weight=1)
+
         ctk.CTkLabel(card, text="SALDO DO MÊS", font=F(11, "bold"),
                      text_color=T.MUTED, anchor="w").grid(
             row=0, column=0, sticky="w", padx=24, pady=(18, 0))
@@ -177,8 +185,9 @@ class Dashboard(ctk.CTkScrollableFrame):
         # ~58px pra uma linha vazia, deixando o card grande demais sem
         # conteúdo pra preencher.
         self._saldo_proj_lbl = ctk.CTkLabel(card, text="", font=F(12),
-                                            text_color=T.GOLD, anchor="w")
-        return card
+                                            text_color=T.GOLD, anchor="w",
+                                            wraplength=430, justify="left")
+        return wrapper
 
     def _make_kpi_widget(self, parent, key: str, label: str, color: str,
                          bind_investments: bool = False) -> ctk.CTkFrame:
