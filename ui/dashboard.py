@@ -1154,7 +1154,11 @@ class EditDashboardDialog(ctk.CTkToplevel):
 
     def _center(self, parent) -> None:
         self.update_idletasks()
-        w, h = 460, 560
+        # Largura maior que o ThemePickerDialog: os cards compactos aparecem
+        # em pares lado a lado (prévia do agrupamento real do Dashboard) e
+        # rótulos longos como "Investimentos do mês" não cabem em 2 colunas
+        # dentro de 460px — o switch ficava cortado fora da janela.
+        w, h = 640, 580
         px = parent.winfo_x() + (parent.winfo_width()  - w) // 2
         py = parent.winfo_y() + (parent.winfo_height() - h) // 2
         self.geometry(f"{w}x{h}+{px}+{py}")
