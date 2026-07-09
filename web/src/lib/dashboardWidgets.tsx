@@ -2,13 +2,14 @@ import { useState, type ComponentType } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import {
-  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis,
-  ResponsiveContainer, Tooltip, Legend, LabelList,
+  PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis,
+  ResponsiveContainer, Tooltip, Legend, LabelList, ReferenceLine,
 } from 'recharts'
 import { useMonths } from './month'
 import {
   fetchMonthSummary,
   fetchMonthSummaryHistory,
+  fetchMonthSeries,
   fetchExpensesByCategory,
   fetchExpensesByPaymentMethod,
   fetchBenefitTotal,
@@ -16,12 +17,28 @@ import {
   fetchGoals,
   fetchInvestments,
   fetchCardsOverview,
+  fetchTransactions,
   payCardBill,
+  type MonthSeriesPoint,
 } from './api'
-import { formatCurrency } from './format'
+import { formatCurrency, MONTHS_PT } from './format'
 import { PAYMENT_METHODS } from './constants'
 import { buildTips } from './tips'
 import { safetyMessage } from '../pages/Cards'
+import type { Month } from './types'
+
+function monthShortLabel(m: Month): string {
+  return `${MONTHS_PT[m.month - 1].slice(0, 3)}/${String(m.year).slice(2)}`
+}
+
+function useMonthSeries(n = 6) {
+  const { months, selected, selectedId } = useMonths()
+  return useQuery({
+    queryKey: ['monthSeries', selectedId, n],
+    queryFn: () => fetchMonthSeries(months, selected!, n),
+    enabled: selectedId != null && !!selected,
+  })
+}
 
 export const PIE_COLORS = [
   '#E05252', '#F5A623', '#9B72F5', '#2EAF7D',
@@ -456,6 +473,193 @@ function GuruFinanceiroWidget() {
   )
 }
 
+// ── Evolução do saldo (últimos 6 meses) ────────────────────────────────
+function SaldoEvolucaoWidget() {
+  const seriesQ = useMonthSeries(6)
+  const points = (seriesQ.data ?? []).map((p: MonthSeriesPoint) => ({
+    name: monthShortLabel(p.month),
+    value: p.summary.saldo,
+  }))
+  const hasData = points.length > 1 && points.some((p) => p.value !== 0)
+
+  return (
+    <div className="rounded-2xl border p-4" style={CARD_STYLE}>
+      <p className="mb-2 text-sm font-bold">Evolução do saldo</p>
+      {!hasData ? (
+        <p className="py-8 text-center text-sm" style={{ color: 'var(--muted)' }}>
+          Sem meses suficientes ainda para mostrar a evolução.
+        </p>
+      ) : (
+        <ResponsiveContainer width="100%" height={220}>
+          <LineChart data={points} margin={{ top: 20, right: 8, left: 8, bottom: 0 }}>
+            <XAxis dataKey="name" tick={{ fill: 'var(--muted)', fontSize: 11 }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} />
+            <YAxis hide />
+            <Tooltip
+              formatter={(v) => formatCurrency(Number(v))}
+              contentStyle={{ background: 'var(--card2)', border: '1px solid var(--border-l)', borderRadius: 8, color: 'var(--text)' }}
+            />
+            <ReferenceLine y={0} stroke="var(--border)" />
+            <Line type="monotone" dataKey="value" stroke="var(--primary)" strokeWidth={2.5}
+                  dot={{ r: 4, fill: 'var(--primary)' }} activeDot={{ r: 6 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  )
+}
+
+// ── Gastos por categoria ao longo do tempo (últimos 6 meses) ───────────
+function useCategorySeries(n = 6) {
+  const { months, selected, selectedId } = useMonths()
+  return useQuery({
+    queryKey: ['categorySeries', selectedId, n],
+    queryFn: async () => {
+      const series = await fetchMonthSeries(months, selected!, n)
+      const perMonth = await Promise.all(series.map((s) => fetchExpensesByCategory(s.month.id)))
+      return series.map((s, i) => ({ month: s.month, categories: perMonth[i] }))
+    },
+    enabled: selectedId != null && !!selected,
+  })
+}
+
+function ChartGastosCategoriaEvolucaoWidget() {
+  const seriesQ = useCategorySeries(6)
+  const rows = seriesQ.data ?? []
+
+  const totalByCat = new Map<string, number>()
+  for (const r of rows) for (const c of r.categories) totalByCat.set(c.category, (totalByCat.get(c.category) ?? 0) + c.total)
+  const topCats = [...totalByCat.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([c]) => c)
+  const hasOutras = rows.some((r) => r.categories.some((c) => !topCats.includes(c.category)))
+  const keys = hasOutras ? [...topCats, 'Outras'] : topCats
+
+  const data = rows.map((r) => {
+    const entry: Record<string, string | number> = { name: monthShortLabel(r.month) }
+    let outras = 0
+    for (const c of r.categories) {
+      if (topCats.includes(c.category)) entry[c.category] = (Number(entry[c.category]) || 0) + c.total
+      else outras += c.total
+    }
+    if (hasOutras) entry['Outras'] = outras
+    return entry
+  })
+  const hasData = data.some((d) => keys.some((k) => Number(d[k] ?? 0) > 0))
+
+  return (
+    <div className="rounded-2xl border p-4" style={CARD_STYLE}>
+      <p className="mb-2 text-sm font-bold">Gastos por categoria ao longo do tempo</p>
+      {!hasData ? (
+        <p className="py-8 text-center text-sm" style={{ color: 'var(--muted)' }}>
+          Nenhuma despesa registrada nos últimos meses.
+        </p>
+      ) : (
+        <ResponsiveContainer width="100%" height={260}>
+          <BarChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+            <XAxis dataKey="name" tick={{ fill: 'var(--muted)', fontSize: 11 }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} />
+            <YAxis hide />
+            <Tooltip
+              formatter={(v) => formatCurrency(Number(v))}
+              contentStyle={{ background: 'var(--card2)', border: '1px solid var(--border-l)', borderRadius: 8, color: 'var(--text)' }}
+            />
+            <Legend wrapperStyle={{ fontSize: 11, color: 'var(--muted)' }}
+                    formatter={(v: string) => <span style={{ color: 'var(--muted)' }}>{v}</span>} />
+            {keys.map((k, i) => (
+              <Bar key={k} dataKey={k} stackId="a" fill={PIE_COLORS[i % PIE_COLORS.length]}
+                   radius={i === keys.length - 1 ? [6, 6, 0, 0] : [0, 0, 0, 0]} />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  )
+}
+
+// ── Maiores gastos do mês ───────────────────────────────────────────────
+function MaioresGastosWidget() {
+  const { selectedId } = useMonths()
+  const txQ = useQuery({
+    queryKey: ['transactions', selectedId],
+    queryFn: () => fetchTransactions(selectedId!),
+    enabled: selectedId != null,
+  })
+  const top = (txQ.data ?? [])
+    .filter((t) => (t.type === 'saida_fixa' || t.type === 'saida_variavel') && !t.is_expectation)
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 5)
+
+  return (
+    <div className="rounded-2xl border p-4" style={CARD_STYLE}>
+      <p className="mb-2 text-sm font-bold">Maiores gastos do mês</p>
+      {top.length === 0 ? (
+        <p className="py-8 text-center text-sm" style={{ color: 'var(--muted)' }}>
+          Nenhum gasto registrado ainda.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {top.map((t, i) => (
+            <div key={t.id} className="flex items-center justify-between gap-2 rounded-xl px-3 py-2"
+                 style={{ background: 'var(--card2)' }}>
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="shrink-0 text-xs font-bold" style={{ color: 'var(--muted)' }}>{i + 1}º</span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{t.description}</p>
+                  <p className="truncate text-[11px]" style={{ color: 'var(--muted)' }}>{t.category ?? 'Outros'}</p>
+                </div>
+              </div>
+              <span className="shrink-0 text-sm font-bold" style={{ color: 'var(--red)' }}>
+                {formatCurrency(t.amount)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Evolução do patrimônio investido (últimos 6 meses) ──────────────────
+function PatrimonioEvolucaoWidget() {
+  const seriesQ = useMonthSeries(6)
+  const totalInvQ = useQuery({ queryKey: ['totalInv'], queryFn: fetchTotalInvestments })
+
+  const series = seriesQ.data ?? []
+  const ready = series.length > 0 && totalInvQ.data != null
+
+  // patrimônio(mês k) = total atual − soma dos aportes líquidos dos meses
+  // posteriores a k (reconstrução retroativa a partir do total de hoje).
+  let running = totalInvQ.data ?? 0
+  const points: { name: string; value: number }[] = []
+  for (let i = series.length - 1; i >= 0; i--) {
+    const { month, summary } = series[i]
+    points.unshift({ name: monthShortLabel(month), value: running })
+    running -= summary.total_investimentos
+  }
+  const hasData = ready && points.length > 1
+
+  return (
+    <div className="rounded-2xl border p-4" style={CARD_STYLE}>
+      <p className="mb-2 text-sm font-bold">Evolução do patrimônio investido</p>
+      {!hasData ? (
+        <p className="py-8 text-center text-sm" style={{ color: 'var(--muted)' }}>
+          Sem meses suficientes ainda para mostrar a evolução.
+        </p>
+      ) : (
+        <ResponsiveContainer width="100%" height={220}>
+          <LineChart data={points} margin={{ top: 20, right: 8, left: 8, bottom: 0 }}>
+            <XAxis dataKey="name" tick={{ fill: 'var(--muted)', fontSize: 11 }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} />
+            <YAxis hide />
+            <Tooltip
+              formatter={(v) => formatCurrency(Number(v))}
+              contentStyle={{ background: 'var(--card2)', border: '1px solid var(--border-l)', borderRadius: 8, color: 'var(--text)' }}
+            />
+            <Line type="monotone" dataKey="value" stroke="var(--violet)" strokeWidth={2.5}
+                  dot={{ r: 4, fill: 'var(--violet)' }} activeDot={{ r: 6 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  )
+}
+
 // ── Registro ─────────────────────────────────────────────────────────
 export type WidgetSize = 'compact' | 'full'
 
@@ -480,6 +684,10 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { id: 'metas', label: 'Metas de poupança', size: 'full', Component: MetasWidget },
   { id: 'cartoes_situacao', label: 'Situação dos cartões', size: 'full', Component: CartoesSituacaoWidget },
   { id: 'guru_financeiro', label: 'Guru Financeiro (dicas)', size: 'full', Component: GuruFinanceiroWidget },
+  { id: 'saldo_evolucao', label: 'Evolução do saldo (6 meses)', size: 'full', Component: SaldoEvolucaoWidget },
+  { id: 'gastos_categoria_evolucao', label: 'Gastos por categoria ao longo do tempo', size: 'full', Component: ChartGastosCategoriaEvolucaoWidget },
+  { id: 'maiores_gastos', label: 'Maiores gastos do mês', size: 'full', Component: MaioresGastosWidget },
+  { id: 'patrimonio_evolucao', label: 'Evolução do patrimônio investido', size: 'full', Component: PatrimonioEvolucaoWidget },
 ]
 
 export const DEFAULT_WIDGET_ORDER: string[] = WIDGET_REGISTRY.map((w) => w.id)

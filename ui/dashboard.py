@@ -27,6 +27,10 @@ WIDGET_CATALOG = [
     {"id": "metas",                                  "label": "Metas de poupança",                     "size": "full"},
     {"id": "cartoes_situacao",                       "label": "Situação dos cartões",                  "size": "full"},
     {"id": "guru_financeiro",                        "label": "Guru Financeiro (dicas)",               "size": "full"},
+    {"id": "saldo_evolucao",                         "label": "Evolução do saldo (6 meses)",           "size": "full"},
+    {"id": "gastos_categoria_evolucao",              "label": "Gastos por categoria ao longo do tempo", "size": "full"},
+    {"id": "maiores_gastos",                         "label": "Maiores gastos do mês",                 "size": "full"},
+    {"id": "patrimonio_evolucao",                    "label": "Evolução do patrimônio investido",      "size": "full"},
 ]
 DEFAULT_WIDGET_ORDER = [w["id"] for w in WIDGET_CATALOG]
 
@@ -65,7 +69,8 @@ class Dashboard(ctk.CTkScrollableFrame):
         for attr in ("_saldo_proj_lbl", "_pie_host", "_bar_host", "_pm_host",
                      "_savings_pct", "_savings_bar_bg", "_savings_bar_fill",
                      "_savings_label", "_goals_frame", "_goals_count_lbl",
-                     "_credit_frame", "_tips_frame"):
+                     "_credit_frame", "_tips_frame", "_saldo_evo_host",
+                     "_cat_evo_host", "_patrimonio_evo_host", "_top_expenses_frame"):
             if hasattr(self, attr):
                 delattr(self, attr)
 
@@ -310,6 +315,54 @@ class Dashboard(ctk.CTkScrollableFrame):
         self._tips_frame.grid_columnconfigure((0, 1, 2), weight=1)
         return card
 
+    def _build_widget_saldo_evolucao(self, parent) -> ctk.CTkFrame:
+        card = ctk.CTkFrame(parent, fg_color=T.CARD, corner_radius=14,
+                            border_width=1, border_color=T.BORDER)
+        card.grid_rowconfigure(1, weight=1)
+        card.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(card, text="Evolução do Saldo (6 meses)",
+                     font=F(13, "bold"), text_color=T.TEXT, anchor="w").grid(
+            row=0, column=0, padx=20, pady=(16, 8), sticky="w")
+        self._saldo_evo_host = ctk.CTkFrame(card, fg_color="transparent")
+        self._saldo_evo_host.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 12))
+        return card
+
+    def _build_widget_gastos_categoria_evolucao(self, parent) -> ctk.CTkFrame:
+        card = ctk.CTkFrame(parent, fg_color=T.CARD, corner_radius=14,
+                            border_width=1, border_color=T.BORDER)
+        card.grid_rowconfigure(1, weight=1)
+        card.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(card, text="Gastos por Categoria ao Longo do Tempo",
+                     font=F(13, "bold"), text_color=T.TEXT, anchor="w").grid(
+            row=0, column=0, padx=20, pady=(16, 8), sticky="w")
+        self._cat_evo_host = ctk.CTkFrame(card, fg_color="transparent")
+        self._cat_evo_host.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 12))
+        return card
+
+    def _build_widget_maiores_gastos(self, parent) -> ctk.CTkFrame:
+        card = ctk.CTkFrame(parent, fg_color=T.CARD, corner_radius=14,
+                            border_width=1, border_color=T.BORDER)
+        card.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(card, text="Maiores Gastos do Mês",
+                     font=F(13, "bold"), text_color=T.TEXT, anchor="w").grid(
+            row=0, column=0, padx=20, pady=(16, 8), sticky="w")
+        self._top_expenses_frame = ctk.CTkFrame(card, fg_color="transparent")
+        self._top_expenses_frame.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 16))
+        self._top_expenses_frame.grid_columnconfigure(0, weight=1)
+        return card
+
+    def _build_widget_patrimonio_evolucao(self, parent) -> ctk.CTkFrame:
+        card = ctk.CTkFrame(parent, fg_color=T.CARD, corner_radius=14,
+                            border_width=1, border_color=T.BORDER)
+        card.grid_rowconfigure(1, weight=1)
+        card.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(card, text="Evolução do Patrimônio Investido",
+                     font=F(13, "bold"), text_color=T.TEXT, anchor="w").grid(
+            row=0, column=0, padx=20, pady=(16, 8), sticky="w")
+        self._patrimonio_evo_host = ctk.CTkFrame(card, fg_color="transparent")
+        self._patrimonio_evo_host.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 12))
+        return card
+
     # ------------------------------------------------------------------
     @staticmethod
     def _make_kpi(parent, label: str, color: str) -> ctk.CTkFrame:
@@ -340,6 +393,19 @@ class Dashboard(ctk.CTkScrollableFrame):
         _apply(widget)
 
     # ------------------------------------------------------------------
+    def _month_series(self, n: int = 6) -> list:
+        """Até n meses terminando no mês atual (mais antigo → mais novo),
+        cada item como (month_dict, summary_dict). Só chamar em background
+        thread — faz chamadas de rede."""
+        all_months = db.get_months()
+        cur_idx = next((i for i, m in enumerate(all_months) if m["id"] == self.month_id), 0)
+        window = list(reversed(all_months[cur_idx: cur_idx + n]))
+        return [(m, db.get_month_summary(m["id"])) for m in window]
+
+    @staticmethod
+    def _month_short_label(m: dict) -> str:
+        return f"{MONTHS_PT[m['month'] - 1][:3]}/{str(m['year'])[2:]}"
+
     def refresh(self) -> None:
         import threading
         s = db.get_month_summary(self.month_id)
@@ -428,6 +494,63 @@ class Dashboard(ctk.CTkScrollableFrame):
                 plan_realized = db.get_plan_realized(self.month_id) if plan else {}
             except Exception:
                 plan, plan_items, plan_realized = None, [], {}
+
+            saldo_evo_fig = cat_evo_fig = patrimonio_evo_fig = None
+            if (hasattr(self, "_saldo_evo_host") or hasattr(self, "_cat_evo_host")
+                    or hasattr(self, "_patrimonio_evo_host")):
+                try:
+                    series = self._month_series(6)
+                except Exception:
+                    series = []
+                if len(series) > 1:
+                    labels = [self._month_short_label(m) for m, _ in series]
+                    if hasattr(self, "_saldo_evo_host"):
+                        values = [sm.get("saldo", 0.0) for _, sm in series]
+                        saldo_evo_fig = self._build_line_figure(labels, values, T.BLUE)
+                    if hasattr(self, "_cat_evo_host"):
+                        try:
+                            cats_per_month = [db.get_expenses_by_category(m["id"]) for m, _ in series]
+                            total_by_cat: dict = {}
+                            for cats in cats_per_month:
+                                for c in cats:
+                                    total_by_cat[c["category"]] = (
+                                        total_by_cat.get(c["category"], 0.0) + float(c["total"] or 0))
+                            top_cats = [c for c, _ in sorted(total_by_cat.items(), key=lambda kv: -kv[1])[:4]]
+                            has_outras = any(c["category"] not in top_cats
+                                             for cats in cats_per_month for c in cats)
+                            keys = top_cats + (["Outras"] if has_outras else [])
+                            series_data = {k: [] for k in keys}
+                            for cats in cats_per_month:
+                                by_cat = {c["category"]: float(c["total"] or 0) for c in cats}
+                                outras = sum(v for c, v in by_cat.items() if c not in top_cats)
+                                for k in top_cats:
+                                    series_data[k].append(by_cat.get(k, 0.0))
+                                if has_outras:
+                                    series_data["Outras"].append(outras)
+                            if keys and any(any(v > 0 for v in vals) for vals in series_data.values()):
+                                cat_evo_fig = self._build_stacked_bar_figure(labels, series_data)
+                        except Exception:
+                            cat_evo_fig = None
+                    if hasattr(self, "_patrimonio_evo_host"):
+                        try:
+                            running = db.get_total_investments()
+                            pts_rev = []
+                            for m, sm in reversed(series):
+                                pts_rev.append((self._month_short_label(m), running))
+                                running -= sm.get("total_investimentos", 0.0)
+                            pts = list(reversed(pts_rev))
+                            patrimonio_evo_fig = self._build_line_figure(
+                                [p[0] for p in pts], [p[1] for p in pts], T.VIOLET)
+                        except Exception:
+                            patrimonio_evo_fig = None
+
+            top_expenses = None
+            if hasattr(self, "_top_expenses_frame"):
+                try:
+                    top_expenses = db.get_transactions(self.month_id)
+                except Exception:
+                    top_expenses = []
+
             self.after(0, lambda p=plan, it=plan_items, pr=plan_realized:
                        self._update_plan_alert(p, it, pr))
             if pie_fig is not None:
@@ -446,6 +569,14 @@ class Dashboard(ctk.CTkScrollableFrame):
                 self.after(0, lambda g=goals, c=pie_data, h=history,
                            iv=investments, ti=total_inv, uc=total_unpaid_cards:
                            self._draw_tips(s, g, c, h, iv, ti, uc))
+            if saldo_evo_fig is not None:
+                self.after(0, lambda: self._embed_host("_saldo_evo_host", saldo_evo_fig))
+            if cat_evo_fig is not None:
+                self.after(0, lambda: self._embed_host("_cat_evo_host", cat_evo_fig))
+            if patrimonio_evo_fig is not None:
+                self.after(0, lambda: self._embed_host("_patrimonio_evo_host", patrimonio_evo_fig))
+            if top_expenses is not None:
+                self.after(0, lambda tx=top_expenses: self._draw_top_expenses(tx))
 
         threading.Thread(target=_background, daemon=True).start()
 
@@ -614,6 +745,128 @@ class Dashboard(ctk.CTkScrollableFrame):
             pass
         finally:
             plt.close(fig)
+
+    # ------------------------------------------------------------------
+    def _build_line_figure(self, labels: list, values: list, color: str):
+        """Constrói a Figure de linha (evolução ao longo dos meses) fora do main thread."""
+        import matplotlib
+        matplotlib.use("TkAgg")
+        from matplotlib.figure import Figure
+
+        fig = Figure(figsize=(5.2, 3.0), facecolor=T.CARD)
+        ax  = fig.add_subplot(111)
+        ax.set_facecolor(T.CARD)
+
+        ax.plot(labels, values, color=color, linewidth=2.5, marker="o", markersize=5,
+                markerfacecolor=color, markeredgecolor=T.CARD, markeredgewidth=1.2, zorder=3)
+        ax.axhline(0, color=T.BORDER, linewidth=0.8, zorder=1)
+
+        for x, v in zip(labels, values):
+            ax.annotate(format_currency(v), (x, v), textcoords="offset points",
+                        xytext=(0, 9), ha="center", color=T.TEXT, fontsize=8, fontweight="bold")
+
+        vmax, vmin = max(values), min(values)
+        pad = max(abs(vmax), abs(vmin), 1.0) * 0.28
+        ax.set_ylim(vmin - pad, vmax + pad)
+
+        ax.set_yticks([])
+        for spine in ("top", "right", "left"):
+            ax.spines[spine].set_visible(False)
+        ax.spines["bottom"].set_color(T.BORDER)
+        ax.tick_params(colors=T.MUTED, length=0)
+        for lbl in ax.get_xticklabels():
+            lbl.set_color(T.MUTED); lbl.set_fontsize(10)
+
+        fig.tight_layout(pad=0.8)
+        return fig
+
+    def _build_stacked_bar_figure(self, labels: list, series: dict):
+        """Constrói a Figure de barras empilhadas (gastos por categoria ao
+        longo do tempo) fora do main thread. series: {categoria: [valores]}."""
+        import matplotlib
+        matplotlib.use("TkAgg")
+        from matplotlib.figure import Figure
+
+        colors = [T.RED, T.GOLD, T.VIOLET, T.BLUE, "#22d3ee"]
+        fig = Figure(figsize=(5.2, 3.4), facecolor=T.CARD)
+        ax  = fig.add_subplot(111)
+        ax.set_facecolor(T.CARD)
+
+        bottoms = [0.0] * len(labels)
+        for i, (cat, values) in enumerate(series.items()):
+            ax.bar(labels, values, bottom=bottoms, color=colors[i % len(colors)],
+                   width=0.55, edgecolor="none", label=cat, zorder=2)
+            bottoms = [b + v for b, v in zip(bottoms, values)]
+
+        ax.set_yticks([])
+        ax.yaxis.grid(True, color=T.BORDER, linewidth=0.5, zorder=0)
+        for spine in ("top", "right", "left"):
+            ax.spines[spine].set_visible(False)
+        ax.spines["bottom"].set_color(T.BORDER)
+        ax.tick_params(colors=T.MUTED, length=0)
+        for lbl in ax.get_xticklabels():
+            lbl.set_color(T.MUTED); lbl.set_fontsize(10)
+
+        ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), ncol=min(len(series), 3),
+                  fontsize=7.5, facecolor=T.CARD, labelcolor=T.MUTED, edgecolor="none")
+
+        fig.tight_layout(pad=1.0)
+        return fig
+
+    def _embed_host(self, host_attr: str, fig) -> None:
+        """Embute uma Figure num host genérico (widgets de evolução) — roda no main thread."""
+        import matplotlib.pyplot as plt
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+        if not hasattr(self, host_attr):
+            plt.close(fig)
+            return
+        host = getattr(self, host_attr)
+        try:
+            for w in host.winfo_children():
+                w.destroy()
+            canvas = FigureCanvasTkAgg(fig, master=host)
+            canvas.draw()
+            canvas.get_tk_widget().pack(fill="both", expand=True)
+        except Exception:
+            pass
+        finally:
+            plt.close(fig)
+
+    def _draw_top_expenses(self, transactions: list) -> None:
+        if not hasattr(self, "_top_expenses_frame"):
+            return
+        for w in self._top_expenses_frame.winfo_children():
+            w.destroy()
+
+        top = sorted(
+            [t for t in transactions
+             if t["type"] in ("saida_fixa", "saida_variavel") and not t.get("is_expectation")],
+            key=lambda t: float(t["amount"] or 0), reverse=True,
+        )[:5]
+
+        if not top:
+            ctk.CTkLabel(self._top_expenses_frame, text="Nenhum gasto registrado ainda.",
+                         font=F(12), text_color=T.MUTED, anchor="w").pack(anchor="w")
+            return
+
+        for i, t in enumerate(top):
+            row = ctk.CTkFrame(self._top_expenses_frame, fg_color=T.CARD2, corner_radius=8)
+            row.pack(fill="x", pady=(0 if i == 0 else 6, 0))
+            row.grid_columnconfigure(1, weight=1)
+
+            ctk.CTkLabel(row, text=f"{i + 1}º", font=F(11, "bold"), text_color=T.MUTED,
+                         width=26).grid(row=0, column=0, padx=(12, 4), pady=10, sticky="w")
+
+            text_box = ctk.CTkFrame(row, fg_color="transparent")
+            text_box.grid(row=0, column=1, sticky="w", pady=10)
+            ctk.CTkLabel(text_box, text=t["description"], font=F(12, "bold"),
+                         text_color=T.TEXT, anchor="w").pack(anchor="w")
+            ctk.CTkLabel(text_box, text=t.get("category") or "Outros",
+                         font=F(10), text_color=T.MUTED, anchor="w").pack(anchor="w")
+
+            ctk.CTkLabel(row, text=format_currency(float(t["amount"] or 0)),
+                         font=F(12, "bold"), text_color=T.RED).grid(
+                row=0, column=2, padx=(4, 12), pady=10, sticky="e")
 
     # ------------------------------------------------------------------
     def _draw_goals(self, goals: list) -> None:
@@ -861,6 +1114,10 @@ class Dashboard(ctk.CTkScrollableFrame):
         "metas":                               _build_widget_metas,
         "cartoes_situacao":                    _build_widget_cartoes_situacao,
         "guru_financeiro":                     _build_widget_guru_financeiro,
+        "saldo_evolucao":                      _build_widget_saldo_evolucao,
+        "gastos_categoria_evolucao":           _build_widget_gastos_categoria_evolucao,
+        "maiores_gastos":                      _build_widget_maiores_gastos,
+        "patrimonio_evolucao":                 _build_widget_patrimonio_evolucao,
     }
 
 

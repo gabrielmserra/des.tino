@@ -391,6 +391,20 @@ export function priorMonths(months: Month[], current: Month, n = 3): Month[] {
   return months.filter((m) => m.year * 100 + m.month < key).slice(0, n)
 }
 
+export type MonthSeriesPoint = { month: Month; summary: MonthSummary }
+
+/** Série de até n meses terminando no mês atual (mais antigo → mais novo), p/ gráficos de evolução. */
+export async function fetchMonthSeries(
+  months: Month[],
+  current: Month,
+  n = 6,
+): Promise<MonthSeriesPoint[]> {
+  const prior = priorMonths(months, current, n - 1)
+  const ordered = [...prior].reverse().concat(current)
+  const summaries = await Promise.all(ordered.map((m) => fetchMonthSummary(m.id)))
+  return ordered.map((m, i) => ({ month: m, summary: summaries[i] }))
+}
+
 /** Resumo dos até n meses anteriores ao mês dado (mais recente primeiro), p/ o Guru Financeiro. */
 export async function fetchMonthSummaryHistory(
   months: Month[],
