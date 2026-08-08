@@ -61,3 +61,33 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Widgets do Dashboard entrando/saindo do modo de edição (adicionar/remover) */
+@keyframes widget-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.widget-enter {
+  animation: widget-enter 280ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes widget-exit {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+}
+.widget-exit {
+  animation: widget-exit 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  pointer-events: none;
+}
