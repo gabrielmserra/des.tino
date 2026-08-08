@@ -13,7 +13,7 @@ type MonthContextValue = {
   months: Month[]
   selected: Month | null
   selectedId: number | null
-  setSelectedId: (id: number) => void
+  setSelectedId: (id: number | null) => void
   loading: boolean
 }
 
@@ -25,7 +25,10 @@ export function MonthProvider({ children }: { children: ReactNode }) {
   const [selectedId, setSelectedId] = useState<number | null>(null)
 
   useEffect(() => {
-    if (selectedId == null && months.length > 0) {
+    // Também se auto-corrige se o mês selecionado foi excluído (deixou de
+    // existir na lista) — cai pro primeiro mês restante automaticamente.
+    const stillExists = selectedId != null && months.some((m) => m.id === selectedId)
+    if (!stillExists && months.length > 0) {
       setSelectedId(months[0].id)
     }
   }, [months, selectedId])

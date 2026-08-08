@@ -9,6 +9,7 @@ import {
   HandCoins,
   MoreHorizontal,
   Plus,
+  Pencil,
   LogOut,
   Palette,
   type LucideIcon,
@@ -19,12 +20,13 @@ import { useTxForm } from '../lib/txform'
 import { useTheme } from '../lib/theme'
 import { TxForm } from './TxForm'
 import { AddMonthDialog } from './AddMonthDialog'
+import { EditMonthDialog } from './EditMonthDialog'
 import { ThemeDialog } from './ThemeDialog'
 import { applyAllDueRenewals } from '../lib/api'
 import { formatCurrency } from '../lib/format'
 import type { RenewalSummary } from '../lib/types'
 
-function MonthSelector({ onAdd }: { onAdd: () => void }) {
+function MonthSelector({ onAdd, onEdit }: { onAdd: () => void; onEdit: () => void }) {
   const { months, selectedId, setSelectedId } = useMonths()
 
   return (
@@ -42,6 +44,16 @@ function MonthSelector({ onAdd }: { onAdd: () => void }) {
             </option>
           ))}
         </select>
+      )}
+      {months.length > 0 && (
+        <button
+          onClick={onEdit}
+          aria-label="Editar período"
+          className="flex items-center justify-center rounded-lg border p-2"
+          style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
+        >
+          <Pencil size={16} strokeWidth={2} />
+        </button>
       )}
       <button
         onClick={onAdd}
@@ -130,12 +142,13 @@ export function Layout() {
   const { signOut } = useAuth()
   const { openNew } = useTxForm()
   const { theme, setTheme } = useTheme()
-  const { months, setSelectedId } = useMonths()
+  const { months, selected, setSelectedId } = useMonths()
   const qc = useQueryClient()
   const renewalSummary = useRenewalCheck()
   const [showToast, setShowToast] = useState(true)
   const [showTheme, setShowTheme] = useState(false)
   const [showAddMonth, setShowAddMonth] = useState(false)
+  const [showEditMonth, setShowEditMonth] = useState(false)
 
   return (
     <div className="flex min-h-full flex-col">
@@ -148,7 +161,7 @@ export function Layout() {
           des<span style={{ color: 'var(--primary)' }}>.</span>tino
         </span>
         <div className="flex items-center gap-2">
-          <MonthSelector onAdd={() => setShowAddMonth(true)} />
+          <MonthSelector onAdd={() => setShowAddMonth(true)} onEdit={() => setShowEditMonth(true)} />
           <button
             onClick={() => setShowTheme(true)}
             aria-label="Escolher tema"
@@ -183,6 +196,22 @@ export function Layout() {
 
       {showTheme && (
         <ThemeDialog current={theme} onClose={() => setShowTheme(false)} onSelect={setTheme} />
+      )}
+
+      {showEditMonth && selected && (
+        <EditMonthDialog
+          current={selected}
+          months={months}
+          onClose={() => setShowEditMonth(false)}
+          onRenamed={async () => {
+            await qc.invalidateQueries({ queryKey: ['months'] })
+            setShowEditMonth(false)
+          }}
+          onDeleted={async () => {
+            await qc.invalidateQueries({ queryKey: ['months'] })
+            setShowEditMonth(false)
+          }}
+        />
       )}
 
       {renewalSummary && renewalSummary.length > 0 && showToast && (

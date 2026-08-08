@@ -44,6 +44,16 @@ export async function createMonth(name: string, year: number, month: number): Pr
   return data as number
 }
 
+export async function renameMonth(id: number, name: string, year: number, month: number): Promise<void> {
+  const { error } = await supabase.from('months').update({ name, year, month }).eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteMonth(id: number): Promise<void> {
+  const { error } = await supabase.from('months').delete().eq('id', id)
+  if (error) throw error
+}
+
 export async function fetchTheme(): Promise<string> {
   const { data, error } = await supabase.from('user_settings').select('theme').maybeSingle()
   if (error) throw error
