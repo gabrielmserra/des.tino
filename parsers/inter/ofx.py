@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import List
 
 from parsers.base import NormalizedRow, guess_category, looks_like_investment
-from parsers.inter.common import clean_description, decode_bytes, parse_brl_amount
+from parsers.inter.common import clean_description, decode_bytes, guess_payment_method, parse_brl_amount
 
 _TRN_RE = re.compile(r"<STMTTRN>(.*?)</STMTTRN>", re.IGNORECASE | re.DOTALL)
 _TAG_RE = re.compile(r"<(\w+)>([^<\r\n]*)")
@@ -56,7 +56,7 @@ class InterOfxParser:
                 amount=amount,
                 direction=direction,
                 suggested_category="Investimentos" if is_inv else guess_category(desc),
-                suggested_payment_method="outro",
+                suggested_payment_method=guess_payment_method(memo),
                 is_investment_like=is_inv,
                 raw=block.strip(),
             ))

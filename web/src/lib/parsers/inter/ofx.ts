@@ -4,7 +4,7 @@
 // Mesma lógica de parsers/inter/ofx.py (desktop).
 import type { BankParser, NormalizedRow } from '../types'
 import { guessCategory, looksLikeInvestment } from '../base'
-import { cleanDescription, decodeBytes, parseBrlAmount } from '../common'
+import { cleanDescription, decodeBytes, guessPaymentMethod, parseBrlAmount } from '../common'
 
 const TRN_RE = /<STMTTRN>([\s\S]*?)<\/STMTTRN>/gi
 const TAG_RE = /<(\w+)>([^<\r\n]*)/g
@@ -59,7 +59,7 @@ export class InterOfxParser implements BankParser {
         amount,
         direction,
         suggestedCategory: isInv ? 'Investimentos' : guessCategory(desc),
-        suggestedPaymentMethod: 'outro',
+        suggestedPaymentMethod: guessPaymentMethod(memo),
         isInvestmentLike: isInv,
         raw: block.trim(),
       })

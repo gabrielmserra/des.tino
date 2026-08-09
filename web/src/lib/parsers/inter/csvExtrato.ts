@@ -61,7 +61,10 @@ export class InterCsvExtratoParser implements BankParser {
         amount,
         direction,
         suggestedCategory: isInv ? 'Investimentos' : guessCategory(desc),
-        suggestedPaymentMethod: guessPaymentMethod(historico),
+        // Combina Histórico + Descrição: dependendo do lançamento, a
+        // palavra-chave da forma de pagamento pode estar em qualquer um
+        // dos dois campos.
+        suggestedPaymentMethod: guessPaymentMethod(`${historico} ${desc}`),
         isInvestmentLike: isInv,
         raw: ln,
       })

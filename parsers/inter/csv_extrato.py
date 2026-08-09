@@ -67,7 +67,10 @@ class InterCsvExtratoParser:
                 amount=amount,
                 direction=direction,
                 suggested_category="Investimentos" if is_inv else guess_category(desc),
-                suggested_payment_method=guess_payment_method(historico),
+                # Combina Histórico + Descrição: dependendo do lançamento, a
+                # palavra-chave da forma de pagamento ("Compra no débito",
+                # "Pix enviado"...) pode estar em qualquer um dos dois campos.
+                suggested_payment_method=guess_payment_method(f"{historico} {desc}"),
                 is_investment_like=is_inv,
                 raw=ln,
             ))

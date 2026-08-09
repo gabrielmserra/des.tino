@@ -89,7 +89,9 @@ export function parseText(text: string): NormalizedRow[] {
       amount,
       direction,
       suggestedCategory: isInv ? 'Investimentos' : guessCategory(desc),
-      suggestedPaymentMethod: guessPaymentMethod(tipo),
+      // Combina Tipo + detalhe: a palavra-chave da forma de pagamento pode
+      // estar em qualquer um dos dois campos, dependendo do banco.
+      suggestedPaymentMethod: guessPaymentMethod(`${tipo} ${desc}`),
       isInvestmentLike: isInv,
       raw: full,
     })

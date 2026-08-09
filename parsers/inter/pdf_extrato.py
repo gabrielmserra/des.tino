@@ -77,7 +77,9 @@ def parse_text(text: str) -> List[NormalizedRow]:
             amount=amount,
             direction=direction,
             suggested_category="Investimentos" if is_inv else guess_category(desc),
-            suggested_payment_method=guess_payment_method(tipo),
+            # Combina Tipo + detalhe: a palavra-chave da forma de pagamento
+            # pode estar em qualquer um dos dois campos, dependendo do banco.
+            suggested_payment_method=guess_payment_method(f"{tipo} {desc}"),
             is_investment_like=is_inv,
             raw=full,
         ))
