@@ -198,7 +198,10 @@ class ImportTab(ctk.CTkFrame):
 
     def _make_row(self, cand: _Candidate) -> None:
         r = cand.row
-        default_include = not (r.is_investment_like or cand.dup_label)
+        # Aporte/resgate também vem marcado por padrão — a importação só lê
+        # entradas/saídas/saldo, nunca mexe na aba Investimentos por conta
+        # própria, então não há risco de contar em dobro.
+        default_include = not cand.dup_label
 
         row = ctk.CTkFrame(self._rows_list, fg_color=T.CARD2, corner_radius=10)
         row.pack(fill="x", pady=(0, 6), padx=6)

@@ -77,7 +77,10 @@ export function Import() {
       }
       cands.push({
         ...r,
-        include: !(r.isInvestmentLike || dupLabel),
+        // Aporte/resgate também vem marcado por padrão — a importação só lê
+        // entradas/saídas/saldo, nunca mexe na aba Investimentos por conta
+        // própria, então não há risco de contar em dobro.
+        include: !dupLabel,
         monthId,
         monthName: name,
         dupLabel,

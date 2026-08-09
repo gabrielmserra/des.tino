@@ -3,7 +3,7 @@ Funções utilitárias reutilizáveis.
 """
 
 APP_NAME    = "des.tino"
-APP_VERSION = "3.1.0"
+APP_VERSION = "3.2.0"
 
 MONTHS_PT = [
     "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",

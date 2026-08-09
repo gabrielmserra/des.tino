@@ -276,11 +276,13 @@ def get_month_summary(month_id: int) -> Dict[str, float]:
     total_entradas      = real["entrada_fixa"] + real["entrada_variavel"]
     total_saidas        = real["saida_fixa"]   + real["saida_variavel"] + bill_total
     total_investimentos = get_month_investment_net(month_id)
-    saldo = total_entradas - total_saidas - total_investimentos
+    # Investimentos não descontam o saldo — ficam só como informativo
+    # (aportar pela aba Investimentos não é a mesma coisa que gastar).
+    saldo = total_entradas - total_saidas
 
     proj_entradas   = total_entradas + proj_extra["entrada_fixa"] + proj_extra["entrada_variavel"]
     proj_saidas     = total_saidas   + proj_extra["saida_fixa"]   + proj_extra["saida_variavel"]
-    saldo_projetado = proj_entradas - proj_saidas - total_investimentos
+    saldo_projetado = proj_entradas - proj_saidas
 
     return {
         **real,
