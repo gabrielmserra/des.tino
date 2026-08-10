@@ -4,7 +4,7 @@
 // Mesma lógica de parsers/inter/ofx.py (desktop).
 import type { BankParser, NormalizedRow } from '../types'
 import { guessCategory, looksLikeInvestment } from '../base'
-import { cleanDescription, decodeBytes, guessPaymentMethod, parseBrlAmount } from '../common'
+import { cleanDescription, decodeBytes, guessPaymentMethod } from '../common'
 
 const TRN_RE = /<STMTTRN>([\s\S]*?)<\/STMTTRN>/gi
 const TAG_RE = /<(\w+)>([^<\r\n]*)/g
@@ -46,7 +46,11 @@ export class InterOfxParser implements BankParser {
       const isoDate = parseOfxDate(dtposted)
       if (!isoDate) continue
 
-      let amount = parseBrlAmount(trnamt.replace(',', '.'))
+      // TRNAMT do OFX já vem em formato numérico padrão (ponto decimal,
+      // ex: "-48.33") — NÃO é formato BR ("48,33"), então não passa por
+      // parseBrlAmount (que assume ponto = separador de milhar e apagaria
+      // o decimal de verdade, virando 48.33 em 4833).
+      let amount = parseFloat(trnamt.replace(',', '.')) || 0
       const direction = amount < 0 ? 'saida' : 'entrada'
       amount = Math.abs(amount)
 

@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import List
 
 from parsers.base import NormalizedRow, guess_category, looks_like_investment
-from parsers.inter.common import clean_description, decode_bytes, guess_payment_method, parse_brl_amount
+from parsers.inter.common import clean_description, decode_bytes, guess_payment_method
 
 _TRN_RE = re.compile(r"<STMTTRN>(.*?)</STMTTRN>", re.IGNORECASE | re.DOTALL)
 _TAG_RE = re.compile(r"<(\w+)>([^<\r\n]*)")
@@ -43,7 +43,14 @@ class InterOfxParser:
                 d = _parse_ofx_date(dtposted)
             except ValueError:
                 continue
-            amount = parse_brl_amount(trnamt.replace(",", "."))
+            # TRNAMT do OFX já vem em formato numérico padrão (ponto decimal,
+            # ex: "-48.33") — NÃO é formato BR ("48,33"), então não passa por
+            # parse_brl_amount (que assume ponto = separador de milhar e
+            # apagaria o decimal de verdade, virando 48.33 em 4833.0).
+            try:
+                amount = float(trnamt.replace(",", "."))
+            except ValueError:
+                amount = 0.0
             direction = "saida" if amount < 0 else "entrada"
             amount = abs(amount)
 
