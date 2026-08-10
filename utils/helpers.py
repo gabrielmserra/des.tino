@@ -3,7 +3,7 @@ Funções utilitárias reutilizáveis.
 """
 
 APP_NAME    = "des.tino"
-APP_VERSION = "3.2.0"
+APP_VERSION = "3.3.0"
 
 MONTHS_PT = [
     "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -22,11 +22,12 @@ CATEGORIES = [
     "Cuidados Pessoais",
     "Viagem",
     "Pets",
+    "Investimentos",
     "Outros",
 ]
 
-# Categorias do planejamento mensal: gastos + aporte em investimentos
-PLAN_CATEGORIES = CATEGORIES[:-1] + ["Investimentos", "Outros"]
+# Categorias do planejamento mensal — mesma lista (já inclui Investimentos)
+PLAN_CATEGORIES = CATEGORIES
 
 TRANSACTION_TYPES = {
     "entrada_fixa":     "Entradas Fixas",

@@ -10,11 +10,12 @@ export const CATEGORIES = [
   'Cuidados Pessoais',
   'Viagem',
   'Pets',
+  'Investimentos',
   'Outros',
 ]
 
-// Categorias do planejamento: as mesmas + "Investimentos" antes de "Outros"
-export const PLAN_CATEGORIES = [...CATEGORIES.slice(0, -1), 'Investimentos', 'Outros']
+// Categorias do planejamento mensal — mesma lista (já inclui Investimentos)
+export const PLAN_CATEGORIES = CATEGORIES
 
 // Categorias de dívida: "Dívidas" (padrão) + as mesmas do app
 export const DEBT_CATEGORIES = ['Dívidas', ...CATEGORIES]

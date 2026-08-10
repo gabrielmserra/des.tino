@@ -27,6 +27,7 @@ const CATEGORY_KEYWORDS: [string, string[]][] = [
   ["Vestuário", ["roupa", "sapato", "tênis", "tenis", "camisa", "calça", "calca", "vestido", "blusa", "jaqueta", "meia"]],
   ["Cuidados Pessoais", ["cabeleireiro", "salão", "salao", "barbeiro", "barbearia", "manicure", "cosmético", "cosmetico", "skincare", "perfume", "maquiagem", "depilação", "depilacao"]],
   ["Pets", ["pet", "ração", "racao", "veterinário", "veterinario", "petshop", "cachorro", "gato", "tosa"]],
+  ["Investimentos", ["investimento", "aporte", "cdb", "lci", "lca", "tesouro", "tesouro direto", "ação", "acao", "ações", "acoes", "fii", "fiis", "cripto", "criptomoeda", "bitcoin", "previdência", "previdencia"]],
 ];
 
 const UNIDADES: Record<string, number> = {
