@@ -18,7 +18,7 @@ const MONTHS_PT = [
 const CATEGORY_KEYWORDS: [string, string[]][] = [
   ["Assinaturas", ["netflix", "spotify", "disney", "hbo", "prime video", "amazon prime", "youtube premium", "assinatura", "icloud", "chatgpt", "streaming", "globoplay", "paramount"]],
   ["Viagem", ["viagem", "hotel", "airbnb", "pousada", "hospedagem", "passagem aérea", "passagem aerea", "resort", "milhas"]],
-  ["Alimentação", ["mercado", "supermercado", "comida", "almoço", "almoco", "janta", "jantar", "lanche", "restaurante", "ifood", "padaria", "açougue", "acougue", "feira", "café", "cafe", "pizza", "hambúrguer", "hamburguer", "burguer", "sorvete", "doce", "rappi", "todeschini", "blumenauense", "casa luce"]],
+  ["Alimentação", ["mercado", "supermercado", "comida", "almoço", "almoco", "janta", "jantar", "lanche", "restaurante", "ifood", "padaria", "açougue", "acougue", "feira", "café", "cafe", "pizza", "hambúrguer", "hamburguer", "burguer", "sorvete", "doce", "rappi", "todeschini", "blumenauense", "casa luce", "grsa volvo"]],
   ["Transporte", ["uber", "99", "gasolina", "combustível", "combustivel", "álcool", "alcool", "ônibus", "onibus", "metrô", "metro", "estacionamento", "pedágio", "pedagio", "passagem", "mecânico", "mecanico", "oficina", "brt", "bilhete", "etanol"]],
   ["Saúde", ["farmácia", "farmacia", "remédio", "remedio", "médico", "medico", "dentista", "consulta", "exame", "hospital", "academia", "fisioterapia", "psicólogo", "psicologo", "terapia", "vacina"]],
   ["Moradia", ["aluguel", "condomínio", "condominio", "luz", "energia", "água", "agua", "gás", "gas", "iptu", "internet", "faxina", "diarista", "reforma", "eletrodoméstico", "eletrodomestico"]],
