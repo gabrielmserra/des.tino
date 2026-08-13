@@ -3,7 +3,7 @@ Funções utilitárias reutilizáveis.
 """
 
 APP_NAME    = "des.tino"
-APP_VERSION = "3.3.2"
+APP_VERSION = "3.4.0"
 
 MONTHS_PT = [
     "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -87,6 +87,17 @@ def format_currency(value: float) -> str:
     if value < 0:
         return f"- R$ {formatted}"
     return f"R$ {formatted}"
+
+
+def billing_month(year: int, month: int, day: int) -> tuple:
+    """Lançamentos a partir do dia 24 contam pro mês seguinte na importação
+    de extrato — alinhado com a data em que o usuário recebe o salário."""
+    if day >= 24:
+        month += 1
+        if month > 12:
+            month = 1
+            year += 1
+    return year, month
 
 
 def month_name_from_num(month_num: int, year: int) -> str:

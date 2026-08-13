@@ -151,12 +151,14 @@ class ImportTab(ctk.CTkFrame):
 
     # ------------------------------------------------------------------
     def _load_candidates(self, rows: List[NormalizedRow]) -> None:
-        # Agrupa por (ano, mês) e garante que cada mês exista.
+        from utils.helpers import month_name_from_num, billing_month
+
+        # Agrupa por (ano, mês) de cobrança e garante que cada mês exista.
+        # Lançamentos a partir do dia 24 contam pro mês seguinte.
         existing_months = {m["name"]: m for m in db.get_months()}
-        needed = sorted({(r.date.year, r.date.month) for r in rows})
+        needed = sorted({billing_month(r.date.year, r.date.month, r.date.day) for r in rows})
         created_any = False
         for year, month in needed:
-            from utils.helpers import month_name_from_num
             name = month_name_from_num(month, year)
             if name not in existing_months:
                 m = db._ensure_month(year, month)
@@ -170,8 +172,8 @@ class ImportTab(ctk.CTkFrame):
 
         self._candidates = []
         for r in rows:
-            from utils.helpers import month_name_from_num
-            name  = month_name_from_num(r.date.month, r.date.year)
+            by_year, by_month = billing_month(r.date.year, r.date.month, r.date.day)
+            name  = month_name_from_num(by_month, by_year)
             month = existing_months.get(name)
             cand  = _Candidate(r)
             cand.month_id   = month["id"] if month else None

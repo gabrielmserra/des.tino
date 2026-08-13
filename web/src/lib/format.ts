@@ -12,6 +12,19 @@ export function formatCurrency(value: number): string {
   return v < 0 ? `- R$ ${s}` : `R$ ${s}`
 }
 
+/** Lançamentos a partir do dia 24 contam pro mês seguinte na importação de
+ * extrato — alinhado com a data em que o usuário recebe o salário. */
+export function billingMonth(year: number, month: number, day: number): { year: number; month: number } {
+  if (day >= 24) {
+    month += 1
+    if (month > 12) {
+      month = 1
+      year += 1
+    }
+  }
+  return { year, month }
+}
+
 export function todayLabel(): string {
   const d = new Date()
   return `Hoje, ${d.getDate()} de ${MONTHS_PT[d.getMonth()].toLowerCase()} de ${d.getFullYear()}`

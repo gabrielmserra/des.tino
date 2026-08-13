@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { detectParser } from '../lib/parsers/registry'
 import type { NormalizedRow } from '../lib/parsers/types'
 import { ensureMonth, importTransactionsBulk, fetchMonths, fetchTransactions } from '../lib/api'
-import { formatCurrency, formatDate, MONTHS_PT } from '../lib/format'
+import { formatCurrency, formatDate, MONTHS_PT, billingMonth } from '../lib/format'
 import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants'
 import type { Transaction } from '../lib/types'
 
@@ -48,7 +48,16 @@ export function Import() {
     const months = await fetchMonths()
     const byName = new Map(months.map((m) => [m.name, m]))
     const needed = Array.from(
-      new Set(rows.map((r) => `${r.date.slice(0, 4)}-${r.date.slice(5, 7)}`)),
+      new Set(
+        rows.map((r) => {
+          const { year, month } = billingMonth(
+            Number(r.date.slice(0, 4)),
+            Number(r.date.slice(5, 7)),
+            Number(r.date.slice(8, 10)),
+          )
+          return `${year}-${String(month).padStart(2, '0')}`
+        }),
+      ),
     )
     let createdAny = false
     for (const key of needed) {
@@ -65,8 +74,11 @@ export function Import() {
     const txCache = new Map<number, Transaction[]>()
     const cands: Candidate[] = []
     for (const r of rows) {
-      const y = Number(r.date.slice(0, 4))
-      const m = Number(r.date.slice(5, 7))
+      const { year: y, month: m } = billingMonth(
+        Number(r.date.slice(0, 4)),
+        Number(r.date.slice(5, 7)),
+        Number(r.date.slice(8, 10)),
+      )
       const name = `${MONTHS_PT[m - 1]} ${y}`
       const month = byName.get(name)
       const monthId = month ? month.id : null
