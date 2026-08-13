@@ -1427,3 +1427,27 @@ def save_dashboard_widgets(config: list) -> None:
         client.table("user_settings").update({"dashboard_widgets": config}).eq("user_id", user_id).execute()
     else:
         client.table("user_settings").insert({"user_id": user_id, "dashboard_widgets": config}).execute()
+
+
+# ---------------------------------------------------------------------------
+# Dia de corte da importação de extrato (config do usuário — mesma tabela
+# user_settings, sincronizada com o site). Lançamentos a partir desse dia do
+# mês contam pro mês seguinte. Padrão 24 se o usuário nunca configurou.
+# ---------------------------------------------------------------------------
+
+def get_import_cutoff_day() -> int:
+    from utils.helpers import DEFAULT_IMPORT_CUTOFF_DAY
+    resp = get_client().table("user_settings").select("import_cutoff_day").execute()
+    if not resp.data or resp.data[0].get("import_cutoff_day") is None:
+        return DEFAULT_IMPORT_CUTOFF_DAY
+    return resp.data[0]["import_cutoff_day"]
+
+
+def save_import_cutoff_day(day: int) -> None:
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    existing = client.table("user_settings").select("user_id").eq("user_id", user_id).execute()
+    if existing.data:
+        client.table("user_settings").update({"import_cutoff_day": day}).eq("user_id", user_id).execute()
+    else:
+        client.table("user_settings").insert({"user_id": user_id, "import_cutoff_day": day}).execute()

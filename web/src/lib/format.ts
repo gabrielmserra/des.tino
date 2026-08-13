@@ -12,10 +12,24 @@ export function formatCurrency(value: number): string {
   return v < 0 ? `- R$ ${s}` : `R$ ${s}`
 }
 
-/** Lançamentos a partir do dia 24 contam pro mês seguinte na importação de
- * extrato — alinhado com a data em que o usuário recebe o salário. */
-export function billingMonth(year: number, month: number, day: number): { year: number; month: number } {
-  if (day >= 24) {
+export const DEFAULT_IMPORT_CUTOFF_DAY = 1
+
+/** Lançamentos a partir do dia de corte (configurável pelo usuário nas
+ * Configurações) contam pro mês seguinte na importação de extrato —
+ * alinhado com a data em que o usuário recebe o salário. Dia de corte 1
+ * (padrão) significa "sem deslocamento": o mês calendário já é o próprio
+ * mês de cobrança. Se o dia de corte for maior que o número de dias do
+ * mês (ex: 31 num mês de 30 dias), usa o último dia do mês. */
+export function billingMonth(
+  year: number,
+  month: number,
+  day: number,
+  cutoffDay: number = DEFAULT_IMPORT_CUTOFF_DAY,
+): { year: number; month: number } {
+  if (cutoffDay <= 1) return { year, month }
+  const daysInMonth = new Date(year, month, 0).getDate()
+  const effectiveCutoff = Math.min(cutoffDay, daysInMonth)
+  if (day >= effectiveCutoff) {
     month += 1
     if (month > 12) {
       month = 1

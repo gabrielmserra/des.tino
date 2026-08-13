@@ -16,6 +16,7 @@ import { Debts } from './pages/Debts'
 import { Investments } from './pages/Investments'
 import { Goals } from './pages/Goals'
 import { More } from './pages/More'
+import { Settings } from './pages/Settings'
 
 // Carregado sob demanda: só quem usa a importação baixa o pdfjs-dist (~440kB)
 const Import = lazy(() => import('./pages/Import').then((m) => ({ default: m.Import })))
@@ -71,6 +72,7 @@ export default function App() {
               }
             />
             <Route path="/mais" element={<More />} />
+            <Route path="/configuracoes" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         ) : (

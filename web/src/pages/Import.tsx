@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { detectParser } from '../lib/parsers/registry'
 import type { NormalizedRow } from '../lib/parsers/types'
-import { ensureMonth, importTransactionsBulk, fetchMonths, fetchTransactions } from '../lib/api'
+import { ensureMonth, importTransactionsBulk, fetchMonths, fetchTransactions, fetchImportCutoffDay } from '../lib/api'
 import { formatCurrency, formatDate, MONTHS_PT, billingMonth } from '../lib/format'
 import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants'
 import type { Transaction } from '../lib/types'
@@ -45,6 +45,7 @@ export function Import() {
     setCandidates((prev) => prev.map((p, pi) => (pi === i ? { ...p, ...changes } : p)))
 
   const loadCandidates = async (rows: NormalizedRow[]) => {
+    const cutoffDay = await fetchImportCutoffDay()
     const months = await fetchMonths()
     const byName = new Map(months.map((m) => [m.name, m]))
     const needed = Array.from(
@@ -54,6 +55,7 @@ export function Import() {
             Number(r.date.slice(0, 4)),
             Number(r.date.slice(5, 7)),
             Number(r.date.slice(8, 10)),
+            cutoffDay,
           )
           return `${year}-${String(month).padStart(2, '0')}`
         }),
@@ -78,6 +80,7 @@ export function Import() {
         Number(r.date.slice(0, 4)),
         Number(r.date.slice(5, 7)),
         Number(r.date.slice(8, 10)),
+        cutoffDay,
       )
       const name = `${MONTHS_PT[m - 1]} ${y}`
       const month = byName.get(name)

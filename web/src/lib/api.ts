@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { DEFAULT_IMPORT_CUTOFF_DAY } from './format'
 import type {
   Month,
   MonthSummary,
@@ -75,6 +76,19 @@ export async function saveDashboardConfig(config: DashboardWidgetEntry[]): Promi
   const { error } = await supabase
     .from('user_settings')
     .upsert({ dashboard_widgets: config }, { onConflict: 'user_id' })
+  if (error) throw error
+}
+
+export async function fetchImportCutoffDay(): Promise<number> {
+  const { data, error } = await supabase.from('user_settings').select('import_cutoff_day').maybeSingle()
+  if (error) throw error
+  return data?.import_cutoff_day ?? DEFAULT_IMPORT_CUTOFF_DAY
+}
+
+export async function saveImportCutoffDay(day: number): Promise<void> {
+  const { error } = await supabase
+    .from('user_settings')
+    .upsert({ import_cutoff_day: day }, { onConflict: 'user_id' })
   if (error) throw error
 }
 

@@ -154,9 +154,11 @@ class ImportTab(ctk.CTkFrame):
         from utils.helpers import month_name_from_num, billing_month
 
         # Agrupa por (ano, mês) de cobrança e garante que cada mês exista.
-        # Lançamentos a partir do dia 24 contam pro mês seguinte.
+        # Lançamentos a partir do dia de corte (configurável em Configurações,
+        # 24 por padrão) contam pro mês seguinte.
+        cutoff_day = db.get_import_cutoff_day()
         existing_months = {m["name"]: m for m in db.get_months()}
-        needed = sorted({billing_month(r.date.year, r.date.month, r.date.day) for r in rows})
+        needed = sorted({billing_month(r.date.year, r.date.month, r.date.day, cutoff_day) for r in rows})
         created_any = False
         for year, month in needed:
             name = month_name_from_num(month, year)
@@ -172,7 +174,7 @@ class ImportTab(ctk.CTkFrame):
 
         self._candidates = []
         for r in rows:
-            by_year, by_month = billing_month(r.date.year, r.date.month, r.date.day)
+            by_year, by_month = billing_month(r.date.year, r.date.month, r.date.day, cutoff_day)
             name  = month_name_from_num(by_month, by_year)
             month = existing_months.get(name)
             cand  = _Candidate(r)

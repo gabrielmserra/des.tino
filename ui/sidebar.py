@@ -141,6 +141,15 @@ class Sidebar(ctk.CTkFrame):
             text_color=T.MUTED, font=F(12),
         ).grid(row=1, column=0, sticky="ew")
 
+        ctk.CTkButton(
+            footer, text="⚙️  Configurações",
+            command=self._open_settings,
+            height=30, corner_radius=8,
+            fg_color="transparent", hover_color=T.CARD2,
+            border_width=1, border_color=T.BORDER_L,
+            text_color=T.MUTED, font=F(12),
+        ).grid(row=2, column=0, sticky="ew", pady=(4, 0))
+
         # Separador
         ctk.CTkFrame(self, height=1, fg_color=T.BORDER).grid(row=6, column=0, sticky="ew")
 
@@ -178,6 +187,10 @@ class Sidebar(ctk.CTkFrame):
     def _open_theme_picker(self) -> None:
         from ui.theme_picker import ThemePickerDialog
         ThemePickerDialog(self.winfo_toplevel(), on_select=self.on_theme)
+
+    def _open_settings(self) -> None:
+        from ui.settings_dialog import SettingsDialog
+        SettingsDialog(self.winfo_toplevel())
 
     # ------------------------------------------------------------------
     def update_months(self, months) -> None:
