@@ -13,6 +13,7 @@ import { todayLabel } from '../lib/format'
 import { DashboardSkeleton } from '../components/Skeleton'
 import { EditableWidgetCard } from '../components/EditableWidgetCard'
 import { AddWidgetPicker } from '../components/AddWidgetPicker'
+import { AddMonthDialog } from '../components/AddMonthDialog'
 import { DEFAULT_WIDGET_ORDER, WIDGET_REGISTRY, widgetById, type WidgetDef } from '../lib/dashboardWidgets'
 import type { DashboardWidgetEntry } from '../lib/types'
 
@@ -36,17 +37,18 @@ function resolveConfig(saved: DashboardWidgetEntry[] | null): DashboardWidgetEnt
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-full items-center justify-center p-8 text-center">
-      <p style={{ color: 'var(--muted)' }}>{children}</p>
+    <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
+      {children}
     </div>
   )
 }
 
 export function Dashboard() {
-  const { selected, loading } = useMonths()
+  const { months, selected, setSelectedId, loading } = useMonths()
   const qc = useQueryClient()
   const [editMode, setEditMode] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
+  const [showAddMonth, setShowAddMonth] = useState(false)
   const [config, setConfig] = useState<DashboardWidgetEntry[] | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [activeSize, setActiveSize] = useState<{ width: number; height: number } | null>(null)
@@ -70,7 +72,32 @@ export function Dashboard() {
   )
 
   if (loading || config === null) return <DashboardSkeleton />
-  if (!selected) return <Centered>Nenhum período encontrado. Crie um no app desktop.</Centered>
+  if (!selected)
+    return (
+      <>
+        <Centered>
+          <p style={{ color: 'var(--muted)' }}>Nenhum período encontrado.</p>
+          <button
+            onClick={() => setShowAddMonth(true)}
+            className="rounded-lg px-5 py-3 text-sm font-bold text-white"
+            style={{ background: 'var(--primary)' }}
+          >
+            + Criar período
+          </button>
+        </Centered>
+        {showAddMonth && (
+          <AddMonthDialog
+            months={months}
+            onClose={() => setShowAddMonth(false)}
+            onCreated={async (id) => {
+              await qc.invalidateQueries({ queryKey: ['months'] })
+              setSelectedId(id)
+              setShowAddMonth(false)
+            }}
+          />
+        )}
+      </>
+    )
 
   const enabledEntries = config.filter((e) => e.enabled && widgetById(e.id))
   const activeDefs = enabledEntries.map((e) => widgetById(e.id) as WidgetDef)
