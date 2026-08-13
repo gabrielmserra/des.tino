@@ -84,16 +84,23 @@ export function Kpi({ label, value, color, to }: { label: string; value: string;
 function SaldoMesWidget() {
   const summary = useSummary()
   const s = summary.data
-  const saldoColor = (s?.saldo ?? 0) >= 0 ? 'var(--primary)' : 'var(--red)'
+  const saldoColor = (s?.saldo_acumulado ?? 0) >= 0 ? 'var(--primary)' : 'var(--red)'
+  const deltaColor = (s?.saldo ?? 0) >= 0 ? 'var(--primary)' : 'var(--red)'
   const val = (n: number | undefined) => (s ? formatCurrency(n ?? 0) : '…')
   return (
     <div className="rounded-2xl border p-5" style={CARD_STYLE}>
       <p className="text-[11px] font-bold" style={{ color: 'var(--muted)' }}>
-        SALDO DO MÊS
+        SALDO ACUMULADO
       </p>
       <p className="mt-1 text-3xl font-bold" style={{ color: saldoColor }}>
-        {val(s?.saldo)}
+        {val(s?.saldo_acumulado)}
       </p>
+      {s && (
+        <p className="mt-1 text-xs font-semibold" style={{ color: deltaColor }}>
+          {s.saldo >= 0 ? '+' : ''}
+          {formatCurrency(s.saldo)} esse mês
+        </p>
+      )}
       {s?.has_expectations && (
         <p className="mt-1 text-xs" style={{ color: 'var(--accent)' }}>
           📋 Projetado com previstos: {formatCurrency(s.saldo_projetado)}
@@ -671,7 +678,7 @@ export type WidgetDef = {
 }
 
 export const WIDGET_REGISTRY: WidgetDef[] = [
-  { id: 'saldo_mes', label: 'Saldo do mês (destaque)', size: 'full', Component: SaldoMesWidget },
+  { id: 'saldo_mes', label: 'Saldo acumulado (destaque)', size: 'full', Component: SaldoMesWidget },
   { id: 'kpi_entradas', label: 'Entradas', size: 'compact', Component: KpiEntradasWidget },
   { id: 'kpi_saidas', label: 'Saídas', size: 'compact', Component: KpiSaidasWidget },
   { id: 'kpi_saldo_vrva', label: 'Saldo VR/VA', size: 'compact', Component: KpiSaldoVrVaWidget },

@@ -14,7 +14,7 @@ from utils.helpers import format_currency, MONTHS_PT, PAYMENT_METHODS
 
 # ── Catálogo de widgets (mesmos ids/ordem padrão do site) ─────────────────
 WIDGET_CATALOG = [
-    {"id": "saldo_mes",                              "label": "Saldo do mês (destaque)",              "size": "full"},
+    {"id": "saldo_mes",                              "label": "Saldo acumulado (destaque)",            "size": "full"},
     {"id": "kpi_entradas",                           "label": "Entradas",                              "size": "compact"},
     {"id": "kpi_saidas",                             "label": "Saídas",                                "size": "compact"},
     {"id": "kpi_saldo_vrva",                         "label": "Saldo VR/VA",                           "size": "compact"},
@@ -66,7 +66,7 @@ class Dashboard(ctk.CTkScrollableFrame):
     # ------------------------------------------------------------------
     def _build(self) -> None:
         self._card_lbls = {}
-        for attr in ("_saldo_proj_lbl", "_pie_host", "_bar_host", "_pm_host",
+        for attr in ("_saldo_proj_lbl", "_saldo_delta_lbl", "_pie_host", "_bar_host", "_pm_host",
                      "_savings_pct", "_savings_bar_bg", "_savings_bar_fill",
                      "_savings_label", "_goals_frame", "_goals_count_lbl",
                      "_credit_frame", "_tips_frame", "_saldo_evo_host",
@@ -173,13 +173,16 @@ class Dashboard(ctk.CTkScrollableFrame):
         card.grid(row=0, column=0, sticky="w")
         card.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(card, text="SALDO DO MÊS", font=F(11, "bold"),
+        ctk.CTkLabel(card, text="SALDO ACUMULADO", font=F(11, "bold"),
                      text_color=T.MUTED, anchor="w").grid(
             row=0, column=0, sticky="w", padx=24, pady=(18, 0))
         lbl = ctk.CTkLabel(card, text="R$ 0,00", font=F(28, "bold"),
                            text_color=T.BLUE, anchor="w")
-        lbl.grid(row=1, column=0, sticky="w", padx=24, pady=(2, 18))
-        self._card_lbls["saldo"] = (lbl, T.BLUE)
+        lbl.grid(row=1, column=0, sticky="w", padx=24, pady=(2, 0))
+        self._card_lbls["saldo_acumulado"] = (lbl, T.BLUE)
+        self._saldo_delta_lbl = ctk.CTkLabel(card, text="", font=F(12, "bold"),
+                                             text_color=T.GREEN, anchor="w")
+        self._saldo_delta_lbl.grid(row=2, column=0, sticky="w", padx=24, pady=(0, 4))
         # Linha de saldo projetado: só ocupa espaço quando há previstos no
         # mês (grid/grid_remove em refresh()) — sem isso o card reservava
         # ~58px pra uma linha vazia, deixando o card grande demais sem
@@ -427,7 +430,7 @@ class Dashboard(ctk.CTkScrollableFrame):
                 lbl.configure(text="...", text_color=default_color)
                 continue
             val   = s.get(key, 0.0)
-            color = (T.GREEN if val >= 0 else T.RED) if key == "saldo" else default_color
+            color = (T.GREEN if val >= 0 else T.RED) if key == "saldo_acumulado" else default_color
             lbl.configure(text=format_currency(val), text_color=color)
 
         if hasattr(self, "_savings_pct"):
@@ -435,10 +438,18 @@ class Dashboard(ctk.CTkScrollableFrame):
         if hasattr(self, "_tips_frame"):
             self._draw_tips(s)
 
+        # Variação do mês (delta) — pequena, abaixo do saldo acumulado.
+        if hasattr(self, "_saldo_delta_lbl"):
+            delta = s.get("saldo", 0.0)
+            sign  = "+" if delta >= 0 else ""
+            self._saldo_delta_lbl.configure(
+                text=f"{sign}{format_currency(delta)} esse mês",
+                text_color=T.GREEN if delta >= 0 else T.RED,
+            )
+
         # Saldo projetado (Modo Expectativa) — dentro do widget "Saldo do mês".
         # Só ocupa espaço na grade quando há previstos no mês.
         if hasattr(self, "_saldo_proj_lbl"):
-            saldo_lbl = self._card_lbls.get("saldo")
             if s.get("has_expectations"):
                 n    = int(s.get("n_expectations", 0))
                 proj = s.get("saldo_projetado", 0.0)
@@ -448,13 +459,13 @@ class Dashboard(ctk.CTkScrollableFrame):
                     text=f"📋 Projetado com {label_n}: {format_currency(proj)}",
                     text_color=proj_color,
                 )
-                self._saldo_proj_lbl.grid(row=2, column=0, sticky="w", padx=24, pady=(0, 18))
-                if saldo_lbl:
-                    saldo_lbl[0].grid_configure(pady=(2, 4))
+                self._saldo_proj_lbl.grid(row=3, column=0, sticky="w", padx=24, pady=(0, 18))
+                if hasattr(self, "_saldo_delta_lbl"):
+                    self._saldo_delta_lbl.grid_configure(pady=(0, 4))
             else:
                 self._saldo_proj_lbl.grid_remove()
-                if saldo_lbl:
-                    saldo_lbl[0].grid_configure(pady=(2, 18))
+                if hasattr(self, "_saldo_delta_lbl"):
+                    self._saldo_delta_lbl.grid_configure(pady=(0, 18))
 
         def _background():
             pie_data = db.get_expenses_by_category(self.month_id)

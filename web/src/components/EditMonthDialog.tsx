@@ -1,8 +1,15 @@
 import { useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { MONTHS_PT } from '../lib/format'
-import { renameMonth, deleteMonth } from '../lib/api'
+import { renameMonth, deleteMonth, setMonthOpeningBalance } from '../lib/api'
 import type { Month } from '../lib/types'
+
+function parseAmount(raw: string): number | null {
+  const s = raw.trim().replace(/\./g, '').replace(',', '.')
+  if (!s) return null
+  const n = parseFloat(s)
+  return isNaN(n) ? null : n
+}
 
 function Sheet({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
@@ -33,6 +40,9 @@ type Props = {
 export function EditMonthDialog({ current, months, onClose, onRenamed, onDeleted }: Props) {
   const [monthIdx, setMonthIdx] = useState(current.month - 1)
   const [year, setYear] = useState(current.year)
+  const [openingBalance, setOpeningBalance] = useState(
+    current.opening_balance != null ? String(current.opening_balance).replace('.', ',') : '',
+  )
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const years = Array.from({ length: 21 }, (_, i) => 2020 + i)
@@ -48,6 +58,7 @@ export function EditMonthDialog({ current, months, onClose, onRenamed, onDeleted
     setBusy(true)
     try {
       await renameMonth(current.id, name, year, monthIdx + 1)
+      await setMonthOpeningBalance(current.id, parseAmount(openingBalance))
       onRenamed()
     } catch (e) {
       setError('Erro ao salvar: ' + (e as Error).message)
@@ -98,6 +109,25 @@ export function EditMonthDialog({ current, months, onClose, onRenamed, onDeleted
             </option>
           ))}
         </select>
+      </div>
+      <div className="mt-3">
+        <label className="mb-1 block text-xs font-semibold" style={{ color: 'var(--muted)' }}>
+          Saldo inicial (opcional)
+        </label>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={openingBalance}
+          onChange={(e) => setOpeningBalance(e.target.value)}
+          placeholder="Ex: 1.500,00"
+          className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+          style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+        />
+        <p className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>
+          Marca este mês como ponto de partida do saldo acumulado — use no seu mês mais antigo
+          (quanto você tinha na conta na época) ou pra corrigir o acumulado a qualquer momento.
+          Deixe em branco pra herdar o saldo final do mês anterior.
+        </p>
       </div>
       {error && (
         <p className="mb-2 mt-2 text-center text-sm" style={{ color: 'var(--red)' }}>

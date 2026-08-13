@@ -67,7 +67,7 @@ export function Import() {
       const name = `${MONTHS_PT[m - 1]} ${y}`
       if (!byName.has(name)) {
         const id = await ensureMonth(name, y, m)
-        byName.set(name, { id, name, year: y, month: m })
+        byName.set(name, { id, name, year: y, month: m, opening_balance: null })
         createdAny = true
       }
     }

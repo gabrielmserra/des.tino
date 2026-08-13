@@ -55,6 +55,11 @@ export async function deleteMonth(id: number): Promise<void> {
   if (error) throw error
 }
 
+export async function setMonthOpeningBalance(id: number, value: number | null): Promise<void> {
+  const { error } = await supabase.from('months').update({ opening_balance: value }).eq('id', id)
+  if (error) throw error
+}
+
 export async function fetchTheme(): Promise<string> {
   const { data, error } = await supabase.from('user_settings').select('theme').maybeSingle()
   if (error) throw error

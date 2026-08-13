@@ -314,9 +314,10 @@ class FinanceApp(ctk.CTkFrame):
         dlg = _RenameMonthDialog(self.winfo_toplevel(), current, existing_names)
         self.winfo_toplevel().wait_window(dlg)
         if dlg.result:
-            new_name, new_year, new_month_num = dlg.result
+            new_name, new_year, new_month_num, opening_balance = dlg.result
             try:
                 db.rename_month(month_id, new_name, new_year, new_month_num)
+                db.set_month_opening_balance(month_id, opening_balance)
                 months = db.get_months()
                 self._sidebar.update_months(months)
                 if self._current_id == month_id and self._main_content:
@@ -548,7 +549,7 @@ class _RenameMonthDialog(ctk.CTkToplevel):
         self._current  = current
         apply_app_icon(self)
         self._build()
-        _center_on_parent(self, parent, 380, 240)
+        _center_on_parent(self, parent, 380, 380)
         self.lift()
         self.focus()
 
@@ -583,11 +584,26 @@ class _RenameMonthDialog(ctk.CTkToplevel):
             dropdown_text_color=T.TEXT, corner_radius=8,
         ).grid(row=0, column=1, padx=(6, 0), sticky="ew")
 
+        ctk.CTkLabel(self, text="Saldo inicial (opcional)",
+                     font=F(11, "bold"), text_color=T.MUTED, anchor="w").grid(
+            row=2, column=0, padx=28, pady=(14, 2), sticky="w")
+        opening = self._current.get("opening_balance")
+        self._opening_var = ctk.StringVar(
+            value="" if opening is None else str(opening).replace(".", ","))
+        ctk.CTkEntry(
+            self, textvariable=self._opening_var, placeholder_text="Ex: 1.500,00",
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT, corner_radius=8,
+        ).grid(row=3, column=0, padx=28, sticky="ew")
+        ctk.CTkLabel(
+            self, text="Marca este mês como ponto de partida do saldo acumulado.\nDeixe em branco pra herdar o saldo final do mês anterior.",
+            font=F(10), text_color=T.SUBTLE, anchor="w", justify="left",
+        ).grid(row=4, column=0, padx=28, pady=(4, 0), sticky="w")
+
         self._error_lbl = ctk.CTkLabel(self, text="", font=F(12), text_color=T.RED)
-        self._error_lbl.grid(row=2, column=0, pady=(10, 0))
+        self._error_lbl.grid(row=5, column=0, pady=(10, 0))
 
         btns = ctk.CTkFrame(self, fg_color="transparent")
-        btns.grid(row=3, column=0, pady=16)
+        btns.grid(row=6, column=0, pady=16)
 
         ctk.CTkButton(
             btns, text="Cancelar", width=110,
@@ -610,5 +626,16 @@ class _RenameMonthDialog(ctk.CTkToplevel):
         if full_name in self._existing:
             self._error_lbl.configure(text=f'  "{full_name}" já existe.')
             return
-        self.result = (full_name, year, month_num)
+
+        raw = self._opening_var.get().strip()
+        if not raw:
+            opening_balance = None
+        else:
+            try:
+                opening_balance = float(raw.replace(".", "").replace(",", "."))
+            except ValueError:
+                self._error_lbl.configure(text="  Saldo inicial inválido.")
+                return
+
+        self.result = (full_name, year, month_num, opening_balance)
         self.destroy()

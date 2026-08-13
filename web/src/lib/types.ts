@@ -3,6 +3,7 @@ export type Month = {
   name: string
   year: number
   month: number
+  opening_balance: number | null
 }
 
 export type DashboardWidgetEntry = {
@@ -42,6 +43,7 @@ export type MonthSummary = {
   total_investimentos: number
   saldo: number
   saldo_projetado: number
+  saldo_acumulado: number
   n_expectations: number
   has_expectations: boolean
 }

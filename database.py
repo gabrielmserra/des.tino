@@ -291,9 +291,79 @@ def get_month_summary(month_id: int) -> Dict[str, float]:
         "total_investimentos": total_investimentos,
         "saldo":               saldo,
         "saldo_projetado":     saldo_projetado,
+        "saldo_acumulado":     get_saldo_acumulado(month_id),
         "n_expectations":      float(n_expectations),
         "has_expectations":    n_expectations > 0,
     }
+
+
+def _month_real_flow(month_id: int) -> tuple:
+    """(entradas, saídas) reais de um mês — mesma regra de get_month_summary
+    (ignora previstos, compras no cartão ainda não pagas, gastos em VR/VA),
+    usado pelo cálculo do saldo acumulado."""
+    rows = get_transactions(month_id)
+    entradas = saidas = 0.0
+    for row in rows:
+        t = row["type"]
+        if t not in ("entrada_fixa", "entrada_variavel", "saida_fixa", "saida_variavel"):
+            continue
+        if row.get("card_id") and t == "saida_variavel":
+            continue
+        if row.get("benefit_id") and t in ("saida_fixa", "saida_variavel"):
+            continue
+        if row.get("is_expectation"):
+            continue
+        amt = float(row["amount"] or 0)
+        if t.startswith("entrada"):
+            entradas += amt
+        else:
+            saidas += amt
+    bill_total = sum(float(p["amount"]) for p in get_card_payments(month_id))
+    saidas += bill_total
+    return entradas, saidas
+
+
+def get_saldo_acumulado(month_id: int) -> float:
+    """Saldo real acumulado até (e incluindo) este mês: parte da âncora
+    (opening_balance) mais recente em ou antes deste mês — ou do mês mais
+    antigo do usuário, com R$0, se nenhuma âncora existir — e soma o fluxo
+    real de cada mês em ordem cronológica até o mês alvo."""
+    months = get_months()
+    target = next((m for m in months if m["id"] == month_id), None)
+    if target is None:
+        return 0.0
+
+    chronological = sorted(months, key=lambda m: (m["year"], m["month"]))
+    target_key = (target["year"], target["month"])
+
+    anchor = None
+    for m in chronological:
+        if m.get("opening_balance") is None:
+            continue
+        if (m["year"], m["month"]) <= target_key:
+            anchor = m  # o loop está em ordem crescente, então o último achado é o mais recente <= alvo
+
+    if anchor is not None:
+        start_balance = float(anchor["opening_balance"])
+        start_key = (anchor["year"], anchor["month"])
+    elif chronological:
+        start_balance = 0.0
+        start_key = (chronological[0]["year"], chronological[0]["month"])
+    else:
+        return 0.0
+
+    total = start_balance
+    for m in chronological:
+        key = (m["year"], m["month"])
+        if start_key <= key <= target_key:
+            entradas, saidas = _month_real_flow(m["id"])
+            total += entradas - saidas
+    return total
+
+
+def set_month_opening_balance(month_id: int, value) -> None:
+    """value=None limpa a âncora desse mês (volta a herdar do mês anterior)."""
+    get_client().table("months").update({"opening_balance": value}).eq("id", month_id).execute()
 
 
 def copy_transactions_to_month(from_month_id: int, to_month_id: int) -> int:
