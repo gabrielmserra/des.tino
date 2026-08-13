@@ -104,6 +104,8 @@ export function Import() {
         description: r.description,
       })
     }
+    // Mais recente primeiro.
+    cands.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
     setCandidates(cands)
   }
 

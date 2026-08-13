@@ -188,6 +188,9 @@ class ImportTab(ctk.CTkFrame):
 
             self._candidates.append(cand)
 
+        # Mais recente primeiro.
+        self._candidates.sort(key=lambda c: c.row.date, reverse=True)
+
         self._render_candidates()
 
     def _render_candidates(self) -> None:
