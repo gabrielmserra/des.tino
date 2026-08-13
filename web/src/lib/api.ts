@@ -80,9 +80,14 @@ export async function saveDashboardConfig(config: DashboardWidgetEntry[]): Promi
 }
 
 export async function fetchImportCutoffDay(): Promise<number> {
-  const { data, error } = await supabase.from('user_settings').select('import_cutoff_day').maybeSingle()
-  if (error) throw error
-  return data?.import_cutoff_day ?? DEFAULT_IMPORT_CUTOFF_DAY
+  try {
+    const { data, error } = await supabase.from('user_settings').select('import_cutoff_day').maybeSingle()
+    if (error) throw error
+    return data?.import_cutoff_day ?? DEFAULT_IMPORT_CUTOFF_DAY
+  } catch {
+    // Migration 018 (coluna import_cutoff_day) ainda não rodou no Supabase.
+    return DEFAULT_IMPORT_CUTOFF_DAY
+  }
 }
 
 export async function saveImportCutoffDay(day: number): Promise<void> {

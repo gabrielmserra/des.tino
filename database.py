@@ -1432,12 +1432,16 @@ def save_dashboard_widgets(config: list) -> None:
 # ---------------------------------------------------------------------------
 # Dia de corte da importação de extrato (config do usuário — mesma tabela
 # user_settings, sincronizada com o site). Lançamentos a partir desse dia do
-# mês contam pro mês seguinte. Padrão 24 se o usuário nunca configurou.
+# mês contam pro mês seguinte. Padrão 1 (sem deslocamento) se o usuário
+# nunca configurou, ou se a migration 018 ainda não rodou no Supabase.
 # ---------------------------------------------------------------------------
 
 def get_import_cutoff_day() -> int:
     from utils.helpers import DEFAULT_IMPORT_CUTOFF_DAY
-    resp = get_client().table("user_settings").select("import_cutoff_day").execute()
+    try:
+        resp = get_client().table("user_settings").select("import_cutoff_day").execute()
+    except Exception:
+        return DEFAULT_IMPORT_CUTOFF_DAY
     if not resp.data or resp.data[0].get("import_cutoff_day") is None:
         return DEFAULT_IMPORT_CUTOFF_DAY
     return resp.data[0]["import_cutoff_day"]
