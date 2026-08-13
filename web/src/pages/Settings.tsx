@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
+import { Download } from 'lucide-react'
 import { fetchImportCutoffDay, saveImportCutoffDay } from '../lib/api'
+
+const DESKTOP_DOWNLOAD_URL = 'https://github.com/gabrielmserra/des.tino/releases/latest/download/destino.exe'
 
 export function Settings() {
   const [day, setDay] = useState(1)
@@ -64,6 +67,24 @@ export function Settings() {
             )}
           </div>
         )}
+      </div>
+
+      <div
+        className="mt-4 rounded-2xl border p-4"
+        style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+      >
+        <p className="font-semibold">Baixar app desktop</p>
+        <p className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>
+          Versão completa pra Windows, com os mesmos dados sincronizados com o site.
+        </p>
+        <a
+          href={DESKTOP_DOWNLOAD_URL}
+          className="mt-3 flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold text-white"
+          style={{ background: 'var(--primary)' }}
+        >
+          <Download size={16} strokeWidth={2} />
+          Baixar para Windows
+        </a>
       </div>
     </div>
   )
