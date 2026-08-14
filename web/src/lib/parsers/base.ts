@@ -4,36 +4,76 @@
 // Pix/TED pra pessoa física (só o nome, sem palavra-chave de estabelecimento)
 // nunca vai ser categorizado automaticamente — não tem como saber o motivo
 // só pela descrição, fica "Outros" mesmo e o usuário ajusta na revisão.
+import { stripAccents } from './common'
+
 const CATEGORY_KEYWORDS: [string[], string][] = [
   [['IFOOD', 'RAPPI', 'UBER EATS', 'RESTAURANTE', 'LANCHONETE', 'LANCHON',
     'PADARIA', 'PANIFIC', 'CAFE', 'BAR ', 'CHURRASCARIA', 'PIZZARIA',
     'PIZZA', 'BURGER', 'BURGUER', 'ACOUGUE', 'MERCADO', 'SUPERMERCADO',
     'HORTIFRUTI', 'CULINARIA', 'GASTRONOMIA', 'DOCERIA', 'SORVETERIA',
     'CONVENIENCIA', 'EMPORIO', 'BISTRO', 'COZINHA', 'BOTECO', 'CERVEJARIA',
-    'ADEGA', 'TODESCHINI', 'BLUMENAUENSE', 'CASA LUCE', 'GRSA VOLVO'], 'Alimentação'],
+    'ADEGA', 'TODESCHINI', 'BLUMENAUENSE', 'CASA LUCE', 'GRSA VOLVO',
+    'MASSAS', 'ESPETINHOS', 'ESPACO SOCCER', 'ESFIHA', 'ESFIRRA', 'TEMAKI',
+    'SUSHI', 'YAKISOBA', 'CHURRASCO', 'GRELHADOS', 'QUITANDA', 'ROTISSERIE',
+    'FOOD TRUCK', 'FOODTRUCK', 'ACAI', 'ACAITERIA', 'CROCERIA', 'PARRILLA',
+    'CANTINA', 'TRATTORIA', 'PIZZA HUT', 'DOMINOS', 'MC DONALD', 'MCDONALD',
+    'BURGER KING', 'BOBS', 'HABIBS', 'SUBWAY', 'GIRAFFAS', 'SPOLETO',
+    'CHINA IN BOX', 'OUTBACK', 'MADERO', 'COCO BAMBU', 'KFC', 'POPEYES',
+    'STARBUCKS', 'CACAU SHOW', 'KOPENHAGEN', 'GELATERIA', 'TAPIOCARIA',
+    'CREPERIA', 'HAMBURGUERIA', 'PASTELARIA', 'PASTEL', 'COXINHA',
+    'SALGADERIA', 'CARREFOUR', 'ATACADAO', 'ASSAI', 'EXTRA', 'PAO DE ACUCAR',
+    'DIA SUPERMERCADO', 'ANGELONI', 'GIASSI', 'BISTEK', 'KOCH', 'CONDOR',
+    'ZAFFARI', 'MUFFATO', 'FRIGORIFICO'], 'Alimentação'],
   [['UBER', '99APP', '99POP', 'POSTO', 'COMBUSTIVEL', 'GASOLINA', 'ETANOL',
     'AUTO POSTO', 'PETRO', 'ESTACIONAMENTO', 'PEDAGIO', 'METRO', 'ONIBUS',
     'PASSAGEM', 'LOCADORA', 'OFICINA', 'AUTOPECAS', 'BORRACHARIA',
-    'MECANICA', 'TRANSPORTE'], 'Transporte'],
+    'MECANICA', 'TRANSPORTE', 'CABIFY', 'INDRIVER', 'IN DRIVER',
+    'ALUGUEL DE CARRO', 'LOCALIZA', 'MOVIDA', 'UNIDAS', 'IPVA',
+    'DESPACHANTE', 'PNEU', 'LAVA JATO', 'LAVAJATO', 'BILHETE UNICO',
+    'SPTRANS', 'CPTM', 'VIA MOBILIDADE', 'BRT', 'RECARGA VEICULAR',
+    'TROCA DE OLEO', 'FUNILARIA'], 'Transporte'],
   [['FARMACIA', 'DROGARIA', 'HOSPITAL', 'CLINICA', 'LABORATORIO',
     'CONSULTA', 'PLANO DE SAUDE', 'UNIMED', 'AMIL', 'ODONTO', 'DENTISTA',
-    'FISIOTERAPIA', 'PSICOLOG', 'ACADEMIA', 'SMARTFIT'], 'Saúde'],
+    'FISIOTERAPIA', 'PSICOLOG', 'ACADEMIA', 'SMARTFIT', 'PRONTO SOCORRO',
+    'PRONTO ATENDIMENTO', 'UPA ', 'EXAME', 'RAIO X', 'TOMOGRAFIA',
+    'ULTRASSOM', 'HEMOGRAMA', 'DASA', 'FLEURY', 'HAPVIDA', 'NOTREDAME',
+    'SULAMERICA', 'PSIQUIATRA', 'NUTRICIONISTA', 'OFTALMO', 'OTORRINO',
+    'PEDIATRA', 'GINECOLOG', 'VACINA', 'DROGASIL', 'PAGUE MENOS',
+    'PACHECO', 'FARMACIA RAIA', 'DROGARIA ONOFRE', 'PANVEL', 'CROSSFIT',
+    'PILATES', 'YOGA', 'FISIO'], 'Saúde'],
   [['NETFLIX', 'SPOTIFY', 'AMAZON PRIME', 'DISNEY', 'HBO', 'YOUTUBE',
-    'ASSINATURA', 'MENSALIDADE', 'ICLOUD', 'GOOGLE ONE', 'DEEZER'], 'Assinaturas'],
+    'ASSINATURA', 'MENSALIDADE', 'ICLOUD', 'GOOGLE ONE', 'DEEZER',
+    'PRIME VIDEO', 'PARAMOUNT', 'GLOBOPLAY', 'APPLE MUSIC', 'APPLE TV',
+    'GAME PASS', 'PLAYSTATION PLUS', 'STEAM', 'KINDLE UNLIMITED', 'ADOBE',
+    'CANVA', 'CHATGPT', 'OPENAI', 'NOTION', 'DROPBOX', 'ONEDRIVE'], 'Assinaturas'],
   [['CINEMA', 'INGRESSO', 'TEATRO', 'SHOW', 'BALADA', 'JOGO', 'GAMING',
-    'APOSTA', 'BET', 'BOLICHE', 'PARQUE', 'CLUBE', 'FESTA', 'EVENTO'], 'Lazer'],
+    'APOSTA', 'BET', 'BOLICHE', 'PARQUE', 'CLUBE', 'FESTA', 'EVENTO',
+    'RUINA', 'SHOPPING', 'KARTODROMO', 'ESCAPE ROOM', 'ZOOLOGICO',
+    'MUSEU', 'EXPOSICAO', 'FESTIVAL', 'CASA NOTURNA', 'PUB ', 'KARAOKE',
+    'SINUCA', 'BILHAR', 'FLIPERAMA', 'SYMPLA', 'EVENTIM'], 'Lazer'],
   [['ALUGUEL', 'CONDOMINIO', 'IPTU', 'LUZ', 'ENERGIA', 'COPEL', 'SABESP',
     'AGUA', 'INTERNET', 'TELEFONE', 'CLARO', 'VIVO', 'TIM ', 'OI ',
-    'IMOBILIARIA', 'REFORMA', 'MATERIAL DE CONSTRUCAO'], 'Moradia'],
+    'IMOBILIARIA', 'REFORMA', 'MATERIAL DE CONSTRUCAO', 'PORTARIA',
+    'SEGURO RESIDENCIAL', 'ENCANADOR', 'ELETRICISTA', 'CHAVEIRO',
+    'DEDETIZACAO', 'GAS ENCANADO', 'ULTRAGAZ', 'COPAGAZ', 'LIQUIGAS',
+    'CEMIG', 'ENEL', 'CELESC', 'CASAN', 'CPFL'], 'Moradia'],
   [['FACULDADE', 'ESCOLA', 'CURSO', 'UDEMY', 'ALURA', 'COLEGIO',
-    'UNIVERSIDADE', 'LIVRARIA'], 'Educação'],
-  [['LOJA', 'MAGAZINE', 'SHOPPING', 'VESTUARIO', 'CALCADOS', 'BOUTIQUE',
-    'MODA', 'CONFECCOES'], 'Vestuário'],
-  [['PET ', 'VETERINAR', 'PETSHOP', 'PET SHOP'], 'Pets'],
+    'UNIVERSIDADE', 'LIVRARIA', 'MATERIAL ESCOLAR', 'APOSTILA', 'SARAIVA',
+    'KUMON', 'WIZARD', 'CCAA', 'CNA ', 'FISK', 'COURSERA', 'HOTMART'], 'Educação'],
+  [['LOJA', 'MAGAZINE', 'VESTUARIO', 'CALCADOS', 'BOUTIQUE',
+    'MODA', 'CONFECCOES', 'RENNER', 'RIACHUELO', 'ZARA', 'HERING',
+    'MARISA', 'CENTAURO', 'NIKE', 'ADIDAS', 'DECATHLON', 'MELISSA',
+    'AREZZO', 'TRACK FIELD', 'SAPATARIA'], 'Vestuário'],
+  [['PET ', 'VETERINAR', 'PETSHOP', 'PET SHOP', 'RACAO', 'BANHO E TOSA',
+    'ADESTRAMENTO', 'COBASI', 'PETZ', 'PETLOVE'], 'Pets'],
   [['SALAO', 'BARBEARIA', 'ESTETICA', 'MANICURE', 'CABELEIREIRO',
-    'COSMETICO', 'PERFUMARIA'], 'Cuidados Pessoais'],
+    'COSMETICO', 'PERFUMARIA', 'SPA ', 'DEPILACAO', 'BRONZEAMENTO',
+    'PODOLOGIA', 'TATUAGEM', 'PIERCING', 'BOTICARIO', 'NATURA',
+    'EUDORA', 'AVON', 'MASSAGEM'], 'Cuidados Pessoais'],
   [['HOTEL', 'POUSADA', 'HOSTEL', 'AIRBNB', 'CVC', 'AGENCIA DE VIAGEM',
-    'PASSAGEM AEREA', 'AZUL', 'GOL LINHAS', 'LATAM', 'DECOLAR'], 'Viagem'],
+    'PASSAGEM AEREA', 'AZUL', 'GOL LINHAS', 'LATAM', 'DECOLAR',
+    '123 MILHAS', 'MAXMILHAS', 'BOOKING', 'TRIVAGO', 'EXPEDIA',
+    'SEGURO VIAGEM'], 'Viagem'],
 ]
 
 const INVESTMENT_KEYWORDS = [
@@ -42,7 +82,7 @@ const INVESTMENT_KEYWORDS = [
 ]
 
 export function guessCategory(description: string): string {
-  const upper = description.toUpperCase()
+  const upper = stripAccents(description).toUpperCase()
   for (const [keywords, category] of CATEGORY_KEYWORDS) {
     if (keywords.some((k) => upper.includes(k))) return category
   }
@@ -50,6 +90,6 @@ export function guessCategory(description: string): string {
 }
 
 export function looksLikeInvestment(historico: string): boolean {
-  const upper = historico.toUpperCase()
-  return INVESTMENT_KEYWORDS.some((k) => upper.includes(k))
+  const upper = stripAccents(historico).toUpperCase()
+  return INVESTMENT_KEYWORDS.some((k) => upper.includes(stripAccents(k)))
 }
