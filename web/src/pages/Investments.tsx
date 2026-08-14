@@ -337,7 +337,7 @@ export function Investments() {
                               {MOVEMENT_LABEL[m.movement_type]}
                             </p>
                             <p className="truncate text-[11px]" style={{ color: 'var(--muted)' }}>
-                              {new Date(m.created_at).toLocaleDateString('pt-BR')}
+                              {months.find((mo) => mo.id === m.month_id)?.name ?? '—'}
                               {m.note ? ` · ${m.note}` : ''}
                             </p>
                           </div>

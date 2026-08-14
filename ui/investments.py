@@ -305,14 +305,14 @@ class InvestmentsTab(ctk.CTkScrollableFrame):
         hist_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
         hist_btn.configure(
-            command=lambda f=hist_frame, b=hist_btn, m=movements:
-                self._toggle_history(f, b, m)
+            command=lambda f=hist_frame, b=hist_btn, m=movements, mo=months:
+                self._toggle_history(f, b, m, mo)
         )
         return card
 
     # ------------------------------------------------------------------
     def _toggle_history(
-        self, frame: ctk.CTkFrame, btn: ctk.CTkButton, movements: list,
+        self, frame: ctk.CTkFrame, btn: ctk.CTkButton, movements: list, months: list,
     ) -> None:
         if frame.winfo_manager():
             frame.grid_remove()
@@ -330,7 +330,9 @@ class InvestmentsTab(ctk.CTkScrollableFrame):
                 "aporte":         T.GREEN,
                 "saque":          T.RED,
             }
-            for c, h in enumerate(["Data", "Tipo", "Valor", "Nota", ""]):
+            month_names = {m["id"]: m["name"] for m in months}
+
+            for c, h in enumerate(["Mês", "Tipo", "Valor", "Nota", ""]):
                 ctk.CTkLabel(frame, text=h, font=F(10, "bold"),
                              text_color=T.MUTED, anchor="w").grid(
                     row=0, column=c,
@@ -344,7 +346,7 @@ class InvestmentsTab(ctk.CTkScrollableFrame):
                 for i, mov in enumerate(movements):
                     mtype  = mov["movement_type"]
                     color  = _COLORS.get(mtype, T.TEXT)
-                    date   = str(mov.get("created_at") or "")[:10]
+                    date   = month_names.get(mov.get("month_id"), "—")
                     label  = _LABELS.get(mtype, mtype)
                     amt    = float(mov["amount"] or 0)
                     prefix = "−" if mtype == "saque" else "+"
