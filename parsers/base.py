@@ -45,7 +45,7 @@ class BankParser(Protocol):
 # só pela descrição, fica "Outros" mesmo e o usuário ajusta na revisão.
 _CATEGORY_KEYWORDS = [
     (("IFOOD", "RAPPI", "UBER EATS", "RESTAURANTE", "LANCHONETE", "LANCHON",
-      "PADARIA", "PANIFIC", "CAFE", "BAR ", "CHURRASCARIA", "PIZZARIA",
+      "PADARIA", "PANIFIC", "CAFE", "CAFFE", "PANQUECA", "BAR ", "CHURRASCARIA", "PIZZARIA",
       "PIZZA", "BURGER", "BURGUER", "ACOUGUE", "MERCADO", "SUPERMERCADO",
       "HORTIFRUTI", "CULINARIA", "GASTRONOMIA", "DOCERIA", "SORVETERIA",
       "CONVENIENCIA", "EMPORIO", "BISTRO", "COZINHA", "BOTECO", "CERVEJARIA",
