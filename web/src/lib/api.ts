@@ -133,6 +133,41 @@ export async function fetchTransactions(monthId: number): Promise<Transaction[]>
   return data ?? []
 }
 
+export type DailySpendingPoint = { date: string; total: number }
+
+/** Gasto real por dia nos últimos `days` dias (hoje incluso), mesma regra de
+ * exclusão do resto do app (ignora previstos, compras no cartão ainda não
+ * pagas, gastos em VR/VA). Não depende do mês/período — olha a data real do
+ * lançamento (payment_date, ou created_at se não tiver). */
+export async function fetchDailySpending(days = 7): Promise<DailySpendingPoint[]> {
+  const today = new Date()
+  const window: string[] = []
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(d.getDate() - i)
+    window.push(d.toISOString().slice(0, 10))
+  }
+  const totals = new Map(window.map((d) => [d, 0]))
+
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('type,amount,card_id,benefit_id,is_expectation,payment_date,created_at')
+  if (error) throw error
+
+  for (const row of data ?? []) {
+    if (row.type !== 'saida_fixa' && row.type !== 'saida_variavel') continue
+    if (row.is_expectation) continue
+    if (row.card_id && row.type === 'saida_variavel') continue
+    if (row.benefit_id) continue
+    const raw = row.payment_date || row.created_at
+    if (!raw) continue
+    const day = String(raw).slice(0, 10)
+    if (totals.has(day)) totals.set(day, (totals.get(day) ?? 0) + Number(row.amount || 0))
+  }
+
+  return window.map((date) => ({ date, total: totals.get(date) ?? 0 }))
+}
+
 export async function fetchBenefitTotal(): Promise<number> {
   const { data, error } = await supabase.rpc('get_benefit_balance_total')
   if (error) throw error

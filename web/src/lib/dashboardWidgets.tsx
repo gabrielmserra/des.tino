@@ -18,6 +18,7 @@ import {
   fetchInvestments,
   fetchCardsOverview,
   fetchTransactions,
+  fetchDailySpending,
   payCardBill,
   type MonthSeriesPoint,
 } from './api'
@@ -515,6 +516,41 @@ function SaldoEvolucaoWidget() {
   )
 }
 
+// ── Gastos dos últimos 7 dias ───────────────────────────────────────────
+function GastosUltimos7DiasWidget() {
+  const dailyQ = useQuery({ queryKey: ['dailySpending', 7], queryFn: () => fetchDailySpending(7) })
+  const points = (dailyQ.data ?? []).map((p) => {
+    const [, m, d] = p.date.split('-')
+    return { name: `${d}/${m}`, value: p.total }
+  })
+  const hasData = points.some((p) => p.value !== 0)
+
+  return (
+    <div className="rounded-2xl border p-4" style={CARD_STYLE}>
+      <p className="mb-2 text-sm font-bold">Gastos dos últimos 7 dias</p>
+      {!hasData ? (
+        <p className="py-8 text-center text-sm" style={{ color: 'var(--muted)' }}>
+          Nenhum gasto nos últimos 7 dias.
+        </p>
+      ) : (
+        <ResponsiveContainer width="100%" height={220}>
+          <LineChart data={points} margin={{ top: 20, right: 8, left: 8, bottom: 0 }}>
+            <XAxis dataKey="name" tick={{ fill: 'var(--muted)', fontSize: 11 }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} />
+            <YAxis hide />
+            <Tooltip
+              formatter={(v) => formatCurrency(Number(v))}
+              contentStyle={{ background: 'var(--card2)', border: '1px solid var(--border-l)', borderRadius: 8, color: 'var(--text)' }}
+            />
+            <ReferenceLine y={0} stroke="var(--border)" />
+            <Line type="monotone" dataKey="value" stroke="var(--red)" strokeWidth={2.5}
+                  dot={{ r: 4, fill: 'var(--red)' }} activeDot={{ r: 6 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  )
+}
+
 // ── Gastos por categoria ao longo do tempo (últimos 6 meses) ───────────
 function useCategorySeries(n = 6) {
   const { months, selected, selectedId } = useMonths()
@@ -695,6 +731,7 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { id: 'gastos_categoria_evolucao', label: 'Gastos por categoria ao longo do tempo', size: 'full', Component: ChartGastosCategoriaEvolucaoWidget },
   { id: 'maiores_gastos', label: 'Maiores gastos do mês', size: 'full', Component: MaioresGastosWidget },
   { id: 'patrimonio_evolucao', label: 'Evolução do patrimônio investido', size: 'full', Component: PatrimonioEvolucaoWidget },
+  { id: 'gastos_7_dias', label: 'Gastos dos últimos 7 dias', size: 'full', Component: GastosUltimos7DiasWidget },
 ]
 
 export const DEFAULT_WIDGET_ORDER: string[] = WIDGET_REGISTRY.map((w) => w.id)

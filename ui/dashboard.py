@@ -31,6 +31,7 @@ WIDGET_CATALOG = [
     {"id": "gastos_categoria_evolucao",              "label": "Gastos por categoria ao longo do tempo", "size": "full"},
     {"id": "maiores_gastos",                         "label": "Maiores gastos do mês",                 "size": "full"},
     {"id": "patrimonio_evolucao",                    "label": "Evolução do patrimônio investido",      "size": "full"},
+    {"id": "gastos_7_dias",                          "label": "Gastos dos últimos 7 dias",             "size": "full"},
 ]
 DEFAULT_WIDGET_ORDER = [w["id"] for w in WIDGET_CATALOG]
 
@@ -69,7 +70,7 @@ class Dashboard(ctk.CTkScrollableFrame):
         for attr in ("_saldo_proj_lbl", "_saldo_delta_lbl", "_pie_host", "_bar_host", "_pm_host",
                      "_savings_pct", "_savings_bar_bg", "_savings_bar_fill",
                      "_savings_label", "_goals_frame", "_goals_count_lbl",
-                     "_credit_frame", "_tips_frame", "_saldo_evo_host",
+                     "_credit_frame", "_tips_frame", "_saldo_evo_host", "_gastos7d_host",
                      "_cat_evo_host", "_patrimonio_evo_host", "_top_expenses_frame"):
             if hasattr(self, attr):
                 delattr(self, attr)
@@ -342,6 +343,18 @@ class Dashboard(ctk.CTkScrollableFrame):
         self._saldo_evo_host.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 12))
         return card
 
+    def _build_widget_gastos_7_dias(self, parent) -> ctk.CTkFrame:
+        card = ctk.CTkFrame(parent, fg_color=T.CARD, corner_radius=14,
+                            border_width=1, border_color=T.BORDER)
+        card.grid_rowconfigure(1, weight=1)
+        card.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(card, text="Gastos dos Últimos 7 Dias",
+                     font=F(13, "bold"), text_color=T.TEXT, anchor="w").grid(
+            row=0, column=0, padx=20, pady=(16, 8), sticky="w")
+        self._gastos7d_host = ctk.CTkFrame(card, fg_color="transparent")
+        self._gastos7d_host.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 12))
+        return card
+
     def _build_widget_gastos_categoria_evolucao(self, parent) -> ctk.CTkFrame:
         card = ctk.CTkFrame(parent, fg_color=T.CARD, corner_radius=14,
                             border_width=1, border_color=T.BORDER)
@@ -574,6 +587,20 @@ class Dashboard(ctk.CTkScrollableFrame):
                         except Exception:
                             patrimonio_evo_fig = None
 
+            gastos7d_fig = None
+            if hasattr(self, "_gastos7d_host"):
+                try:
+                    daily = db.get_daily_spending(7)
+                    labels = []
+                    for d in daily:
+                        y, m, day = d["date"].split("-")
+                        labels.append(f"{day}/{m}")
+                    values = [d["total"] for d in daily]
+                    if any(v != 0 for v in values):
+                        gastos7d_fig = self._build_line_figure(labels, values, T.RED)
+                except Exception:
+                    gastos7d_fig = None
+
             top_expenses = None
             if hasattr(self, "_top_expenses_frame"):
                 try:
@@ -607,6 +634,8 @@ class Dashboard(ctk.CTkScrollableFrame):
                 self.after(0, lambda: self._embed_host("_patrimonio_evo_host", patrimonio_evo_fig))
             if top_expenses is not None:
                 self.after(0, lambda tx=top_expenses: self._draw_top_expenses(tx))
+            if gastos7d_fig is not None:
+                self.after(0, lambda: self._embed_host("_gastos7d_host", gastos7d_fig))
 
         threading.Thread(target=_background, daemon=True).start()
 
@@ -1148,6 +1177,7 @@ class Dashboard(ctk.CTkScrollableFrame):
         "gastos_categoria_evolucao":           _build_widget_gastos_categoria_evolucao,
         "maiores_gastos":                      _build_widget_maiores_gastos,
         "patrimonio_evolucao":                 _build_widget_patrimonio_evolucao,
+        "gastos_7_dias":                       _build_widget_gastos_7_dias,
     }
 
 

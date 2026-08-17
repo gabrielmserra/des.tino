@@ -366,6 +366,43 @@ def set_month_opening_balance(month_id: int, value) -> None:
     get_client().table("months").update({"opening_balance": value}).eq("id", month_id).execute()
 
 
+def get_daily_spending(days: int = 7) -> list:
+    """Gasto real por dia nos últimos `days` dias (hoje incluso), mesma regra
+    de exclusão do resto do app (ignora previstos, compras no cartão ainda
+    não pagas, gastos em VR/VA). Não depende do mês/período — olha a data
+    real do lançamento (payment_date, ou created_at se não tiver).
+    Retorna [{"date": "YYYY-MM-DD", "total": float}, ...] do mais antigo pro
+    mais recente, com todos os dias presentes mesmo sem gasto (total 0)."""
+    from datetime import date as _date, timedelta
+
+    today  = _date.today()
+    window = [today - timedelta(days=i) for i in range(days - 1, -1, -1)]
+    totals = {d: 0.0 for d in window}
+
+    resp = get_client().table("transactions").select(
+        "type,amount,card_id,benefit_id,is_expectation,payment_date,created_at"
+    ).execute()
+    for row in (resp.data or []):
+        t = row["type"]
+        if t not in ("saida_fixa", "saida_variavel"):
+            continue
+        if row.get("is_expectation"):
+            continue
+        if row.get("card_id") and t == "saida_variavel":
+            continue
+        if row.get("benefit_id"):
+            continue
+        raw = row.get("payment_date") or row.get("created_at")
+        try:
+            d = _date.fromisoformat(str(raw)[:10])
+        except (ValueError, TypeError):
+            continue
+        if d in totals:
+            totals[d] += float(row["amount"] or 0)
+
+    return [{"date": d.isoformat(), "total": totals[d]} for d in window]
+
+
 def copy_transactions_to_month(from_month_id: int, to_month_id: int) -> int:
     """Copia gastos pós-fechamento de cartão do mês anterior para o novo mês."""
     from datetime import date as _date
