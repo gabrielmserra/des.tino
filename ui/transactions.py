@@ -44,6 +44,7 @@ class TransactionsTab(ctk.CTkFrame):
         self._expectation_active   = False
         self._expanded_list        = False
         self._q_expect_active      = False
+        self._sort_order            = "recentes"   # "recentes" | "antigos" — por data real de pagamento
 
         if tx_type in ("entrada_fixa", "entrada_variavel"):
             self._style = {"color": T.GREEN, "dim": T.GREEN_DIM}
@@ -426,6 +427,15 @@ class TransactionsTab(ctk.CTkFrame):
             top, text="0 registros", font=F(13), text_color=T.MUTED, anchor="w")
         self._count_lbl.grid(row=0, column=0, sticky="w")
 
+        self._sort_btn = ctk.CTkButton(
+            top, text="↓  Mais recentes", command=self._toggle_sort_order,
+            height=28, width=140, corner_radius=7,
+            fg_color=T.CARD2, hover_color=T.BORDER_L,
+            border_width=1, border_color=T.BORDER_L,
+            text_color=T.MUTED, font=F(11),
+        )
+        self._sort_btn.grid(row=0, column=1, sticky="e", padx=(0, 8))
+
         self._expand_btn = ctk.CTkButton(
             top, text="⤢  Expandir lista", command=self._toggle_list_expand,
             height=28, width=150, corner_radius=7,
@@ -433,7 +443,7 @@ class TransactionsTab(ctk.CTkFrame):
             border_width=1, border_color=T.BORDER_L,
             text_color=T.MUTED, font=F(11),
         )
-        self._expand_btn.grid(row=0, column=1, sticky="e")
+        self._expand_btn.grid(row=0, column=2, sticky="e")
 
         self._build_quick_add(wrapper, row=1)   # escondido até expandir
 
@@ -627,6 +637,12 @@ class TransactionsTab(ctk.CTkFrame):
         self.on_change()
 
     # ------------------------------------------------------------------
+    def _toggle_sort_order(self) -> None:
+        self._sort_order = "antigos" if self._sort_order == "recentes" else "recentes"
+        self._sort_btn.configure(
+            text="↑  Mais antigos" if self._sort_order == "antigos" else "↓  Mais recentes")
+        self.refresh()
+
     def _toggle_list_expand(self) -> None:
         """Recolhe formulário e barras de origem para a lista ocupar a tela toda.
         Uma barra de adição rápida aparece para ainda permitir novos lançamentos."""
@@ -774,7 +790,15 @@ class TransactionsTab(ctk.CTkFrame):
 
     # ------------------------------------------------------------------
     def refresh(self) -> None:
-        txs   = db.get_transactions(self.month_id, self.tx_type)
+        txs = db.get_transactions(self.month_id, self.tx_type)
+        # Ordena pela data real do pagamento (payment_date, ou created_at se
+        # não tiver) — não pela ordem de importação/criação no banco.
+        reverse = self._sort_order == "recentes"
+        txs = sorted(
+            txs,
+            key=lambda t: str(t.get("payment_date") or t.get("created_at") or ""),
+            reverse=reverse,
+        )
         color = self._style["color"]
         dim   = self._style["dim"]
         n     = len(txs)

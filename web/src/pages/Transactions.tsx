@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { ArrowDownWideNarrow, ArrowUpWideNarrow } from 'lucide-react'
 import { useMonths } from '../lib/month'
 import { useTxForm } from '../lib/txform'
 import { fetchTransactions, fetchCardsBasic, fetchDebitCardsBasic, fetchBenefitsBasic } from '../lib/api'
@@ -16,6 +17,12 @@ const IS_INCOME: Record<TxType, boolean> = {
 }
 
 type Filter = 'todos' | 'entradas' | 'saidas'
+type SortOrder = 'recentes' | 'antigos'
+
+// Data real do pagamento — não a ordem de importação/criação no banco.
+function txDate(t: Transaction): string {
+  return (t.payment_date || t.created_at || '').slice(0, 10)
+}
 
 function origemTag(
   t: Transaction,
@@ -40,6 +47,7 @@ export function Transactions() {
   const { selectedId, selected } = useMonths()
   const { openEdit } = useTxForm()
   const [filter, setFilter] = useState<Filter>('todos')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('recentes')
 
   const { data, isLoading } = useQuery({
     queryKey: ['transactions', selectedId],
@@ -51,11 +59,17 @@ export function Transactions() {
   const benefitsQ = useQuery({ queryKey: ['benefitsBasic'], queryFn: fetchBenefitsBasic })
 
   const all = data ?? []
-  const txs = all.filter((t) => {
-    if (filter === 'entradas') return IS_INCOME[t.type]
-    if (filter === 'saidas') return !IS_INCOME[t.type]
-    return true
-  })
+  const txs = all
+    .filter((t) => {
+      if (filter === 'entradas') return IS_INCOME[t.type]
+      if (filter === 'saidas') return !IS_INCOME[t.type]
+      return true
+    })
+    .sort((a, b) => {
+      const da = txDate(a)
+      const db_ = txDate(b)
+      return sortOrder === 'recentes' ? (da < db_ ? 1 : da > db_ ? -1 : 0) : da < db_ ? -1 : da > db_ ? 1 : 0
+    })
 
   const chip = (f: Filter, label: string) => (
     <button
@@ -78,10 +92,24 @@ export function Transactions() {
         {selected?.name}
       </p>
 
-      <div className="mb-4 flex gap-2">
-        {chip('todos', 'Todos')}
-        {chip('entradas', 'Entradas')}
-        {chip('saidas', 'Saídas')}
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="flex gap-2">
+          {chip('todos', 'Todos')}
+          {chip('entradas', 'Entradas')}
+          {chip('saidas', 'Saídas')}
+        </div>
+        <button
+          onClick={() => setSortOrder((o) => (o === 'recentes' ? 'antigos' : 'recentes'))}
+          className="flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
+          style={{ background: 'var(--card2)', color: 'var(--muted)' }}
+        >
+          {sortOrder === 'recentes' ? (
+            <ArrowDownWideNarrow size={14} strokeWidth={2} />
+          ) : (
+            <ArrowUpWideNarrow size={14} strokeWidth={2} />
+          )}
+          {sortOrder === 'recentes' ? 'Mais recentes' : 'Mais antigos'}
+        </button>
       </div>
 
       {isLoading ? (
