@@ -330,5 +330,7 @@ def _find_duplicate(row: NormalizedRow, existing: List[dict]) -> str:
         ratio = difflib.SequenceMatcher(
             None, tx.get("description", "").lower(), row.description.lower()).ratio()
         confidence = "alta" if ratio >= 0.6 else "baixa"
-        return f'"{tx.get("description", "")}" ({format_currency(float(tx["amount"]))}, confiança {confidence})'
+        date_str = format_date_br(tx_date)
+        return (f'"{tx.get("description", "")}" ({format_currency(float(tx["amount"]))} '
+                f'em {date_str}, confiança {confidence})')
     return ""

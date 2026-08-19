@@ -27,7 +27,7 @@ function findDuplicate(row: NormalizedRow, existing: Transaction[]): string {
     const db_ = new Date(row.date + 'T00:00:00Z').getTime()
     const diffDays = Math.abs(Math.round((da - db_) / 86400000))
     if (diffDays > 1) continue
-    return `"${tx.description}" (${formatCurrency(tx.amount)})`
+    return `"${tx.description}" (${formatCurrency(tx.amount)} em ${formatDate(txDate)})`
   }
   return ''
 }
