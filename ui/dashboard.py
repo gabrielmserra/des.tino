@@ -681,7 +681,7 @@ class Dashboard(ctk.CTkScrollableFrame):
         from matplotlib.figure import Figure
 
         pie_colors = [T.RED, T.GOLD, T.VIOLET, T.BLUE, "#22d3ee", T.GREEN, "#fb923c", "#e879f9"]
-        fig = Figure(figsize=(5.2, 3.4), facecolor=T.CARD)
+        fig = Figure(figsize=(5.2, 3.8), facecolor=T.CARD)
         ax  = fig.add_subplot(111)
         ax.set_facecolor(T.CARD)
 
@@ -689,18 +689,29 @@ class Dashboard(ctk.CTkScrollableFrame):
         if has:
             labels = [r["category"] for r in data]
             values = [float(r["total"] or 0) for r in data]
+            total  = sum(values) or 1.0
             colors = pie_colors[:len(values)]
+
+            # Fatias pequenas (<4%) não mostram o rótulo dentro do gráfico —
+            # com muitas categorias, várias porcentagens pequenas se
+            # sobrepunham e ficavam ilegíveis. A % de cada uma continua
+            # visível na legenda, só que sem competir por espaço no meio.
+            def _autopct(pct: float) -> str:
+                return f"{pct:.1f}%" if pct >= 4 else ""
+
             wedges, _, autotexts = ax.pie(
-                values, labels=None, autopct="%1.1f%%",
+                values, labels=None, autopct=_autopct,
                 colors=colors, startangle=90, pctdistance=0.78,
                 wedgeprops={"edgecolor": T.CARD, "linewidth": 2.5},
             )
             for at in autotexts:
-                at.set_color(T.TEXT); at.set_fontsize(8)
+                at.set_color(T.TEXT); at.set_fontsize(9); at.set_fontweight("bold")
+
+            legend_labels = [f"{lbl}  ·  {v / total * 100:.1f}%" for lbl, v in zip(labels, values)]
             ax.legend(
-                wedges, labels,
-                loc="lower center", bbox_to_anchor=(0.5, -0.22),
-                ncol=4, fontsize=7.5,
+                wedges, legend_labels,
+                loc="lower center", bbox_to_anchor=(0.5, -0.24),
+                ncol=3, fontsize=8,
                 facecolor=T.CARD, labelcolor=T.MUTED, edgecolor="none",
             )
         else:

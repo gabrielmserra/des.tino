@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowDownWideNarrow, ArrowUpWideNarrow } from 'lucide-react'
+import { ArrowDownWideNarrow, ArrowUpWideNarrow, Download } from 'lucide-react'
 import { useMonths } from '../lib/month'
 import { useTxForm } from '../lib/txform'
 import { fetchTransactions, fetchCardsBasic, fetchDebitCardsBasic, fetchBenefitsBasic } from '../lib/api'
@@ -48,6 +48,7 @@ export function Transactions() {
   const { openEdit } = useTxForm()
   const [filter, setFilter] = useState<Filter>('todos')
   const [sortOrder, setSortOrder] = useState<SortOrder>('recentes')
+  const [exporting, setExporting] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['transactions', selectedId],
@@ -71,6 +72,18 @@ export function Transactions() {
       return sortOrder === 'recentes' ? (da < db_ ? 1 : da > db_ ? -1 : 0) : da < db_ ? -1 : da > db_ ? 1 : 0
     })
 
+  const handleExport = async () => {
+    if (exporting || all.length === 0) return
+    setExporting(true)
+    try {
+      // Carregado sob demanda: exceljs é pesado (~1MB), só baixa quem exporta.
+      const { exportMonthXlsx } = await import('../lib/exportXlsx')
+      await exportMonthXlsx(selected?.name ?? 'lancamentos', all)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const chip = (f: Filter, label: string) => (
     <button
       key={f}
@@ -87,7 +100,18 @@ export function Transactions() {
 
   return (
     <div className="p-4">
-      <h1 className="mb-1 text-2xl font-bold">Lançamentos</h1>
+      <div className="mb-1 flex items-start justify-between gap-2">
+        <h1 className="text-2xl font-bold">Lançamentos</h1>
+        <button
+          onClick={handleExport}
+          disabled={exporting || all.length === 0}
+          className="flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-50"
+          style={{ borderColor: 'var(--border-l)', color: 'var(--text)', background: 'var(--card)' }}
+        >
+          <Download size={14} strokeWidth={2} />
+          {exporting ? 'Exportando…' : 'Exportar Excel'}
+        </button>
+      </div>
       <p className="mb-4 text-xs" style={{ color: 'var(--muted)' }}>
         {selected?.name}
       </p>

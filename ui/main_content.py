@@ -60,8 +60,8 @@ class MainContent(ctk.CTkFrame):
         self._schedule_date_tick()
 
         ctk.CTkButton(
-            header, text="↓  Exportar CSV",
-            command=self._export_csv,
+            header, text="↓  Exportar Excel",
+            command=self._export_xlsx,
             height=36, width=150, corner_radius=9,
             fg_color=T.CARD, hover_color=T.CARD2,
             border_width=1, border_color=T.BORDER_L,
@@ -182,23 +182,22 @@ class MainContent(ctk.CTkFrame):
         marca as demais abas para recarregar quando o usuário navegar até elas."""
         self._stale_tabs.update(t for t in self._frames if t != "dashboard")
 
-    def _export_csv(self) -> None:
-        filename = self.month_name.replace(" ", "_") + ".csv"
+    def _export_xlsx(self) -> None:
+        filename = self.month_name.replace(" ", "_") + ".xlsx"
         path = filedialog.asksaveasfilename(
-            defaultextension=".csv",
-            filetypes=[("CSV (Excel)", "*.csv"), ("Todos os arquivos", "*.*")],
+            defaultextension=".xlsx",
+            filetypes=[("Excel", "*.xlsx"), ("Todos os arquivos", "*.*")],
             initialfile=filename,
             title="Exportar lançamentos",
         )
         if not path:
             return
-        content = db.export_month_csv(self.month_id)
         try:
-            with open(path, "w", encoding="utf-8-sig") as f:
-                f.write(content)
+            wb = db.export_month_xlsx(self.month_id, self.month_name)
+            wb.save(path)
             from ui.dialogs import show_info
             show_info(self.winfo_toplevel(), "Exportado", f"Arquivo salvo em:\n{path}")
-        except OSError as e:
+        except Exception as e:
             from ui.dialogs import show_error
             show_error(self.winfo_toplevel(), "Erro ao exportar", str(e))
 

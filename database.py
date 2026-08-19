@@ -1490,25 +1490,105 @@ def apply_all_due_renewals() -> List[dict]:
     return summary
 
 
-def export_month_csv(month_id: int) -> str:
-    _LABELS = {
-        "entrada_fixa":     "Entrada Fixa",
-        "entrada_variavel": "Entrada Variável",
-        "saida_fixa":       "Saída Fixa",
-        "saida_variavel":   "Saída Variável",
-        "investimento":     "Investimento",
-    }
-    rows  = get_transactions(month_id)
-    lines = ["Tipo,Descrição,Categoria,Valor,Data,Previsto"]
+_EXPORT_TYPE_LABELS = {
+    "entrada_fixa":     "Entrada Fixa",
+    "entrada_variavel": "Entrada Variável",
+    "saida_fixa":       "Saída Fixa",
+    "saida_variavel":   "Saída Variável",
+    "investimento":     "Investimento",
+}
+
+
+def export_month_xlsx(month_id: int, month_name: str):
+    """Monta um Workbook (openpyxl) formatado com os lançamentos do mês —
+    cabeçalho destacado, valores como número (não texto), entradas em verde
+    e saídas em vermelho, data real de pagamento e uma linha de totais no
+    fim. O chamador só precisa dar wb.save(caminho)."""
+    from datetime import datetime as _dt
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    from utils.helpers import PAYMENT_METHODS
+
+    GREEN = "1F8A5B"
+    RED   = "C0392B"
+    HEADER_BG = "1F2937"
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = (month_name or "Lançamentos")[:31]
+
+    headers = ["Tipo", "Descrição", "Categoria", "Forma de Pagamento", "Valor", "Data", "Previsto"]
+    ws.append(headers)
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill("solid", fgColor=HEADER_BG)
+    for col in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(headers))}1"
+
+    thin = Side(style="thin", color="DDDDDD")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    rows = get_transactions(month_id)
+    total_entradas = 0.0
+    total_saidas   = 0.0
+    r_idx = 2
     for r in rows:
-        tipo  = _LABELS.get(r["type"], r["type"])
-        desc  = str(r["description"]).replace(",", ";")
-        cat   = str(r["category"] or "Outros").replace(",", ";")
-        valor = f"{float(r['amount']):.2f}".replace(".", ",")
-        data  = str(r["created_at"] or "")[:10]
-        prev  = "Sim" if r.get("is_expectation") else "Não"
-        lines.append(f"{tipo},{desc},{cat},{valor},{data},{prev}")
-    return "\n".join(lines)
+        is_income = r["type"] in ("entrada_fixa", "entrada_variavel")
+        amount = float(r["amount"] or 0)
+        raw_date = r.get("payment_date") or r.get("created_at")
+        try:
+            data_val = _dt.fromisoformat(str(raw_date)[:19]).date() if raw_date else None
+        except ValueError:
+            data_val = None
+
+        values = [
+            _EXPORT_TYPE_LABELS.get(r["type"], r["type"]),
+            r["description"],
+            r["category"] or "Outros",
+            PAYMENT_METHODS.get(r.get("payment_method"), "") if r.get("payment_method") else "",
+            amount,
+            data_val,
+            "Sim" if r.get("is_expectation") else "Não",
+        ]
+        for c, val in enumerate(values, start=1):
+            cell = ws.cell(row=r_idx, column=c, value=val)
+            cell.border = border
+            if c == 5:
+                cell.number_format = '"R$" #,##0.00'
+                cell.font = Font(color=GREEN if is_income else RED, bold=True)
+            elif c == 6 and data_val:
+                cell.number_format = "DD/MM/YYYY"
+
+        if not r.get("is_expectation"):
+            if is_income:
+                total_entradas += amount
+            else:
+                total_saidas += amount
+        r_idx += 1
+
+    # ── Linha de totais ─────────────────────────────────────────────────
+    r_idx += 1
+    for label, value, color in (
+        ("Total Entradas", total_entradas, GREEN),
+        ("Total Saídas",   total_saidas,   RED),
+        ("Saldo",          total_entradas - total_saidas, None),
+    ):
+        ws.cell(row=r_idx, column=1, value=label).font = Font(bold=True)
+        cell = ws.cell(row=r_idx, column=5, value=value)
+        cell.number_format = '"R$" #,##0.00'
+        cell.font = Font(bold=True, color=color or ("1F2937"))
+        r_idx += 1
+
+    widths = [16, 38, 18, 18, 14, 12, 10]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    return wb
 
 
 # ---------------------------------------------------------------------------
