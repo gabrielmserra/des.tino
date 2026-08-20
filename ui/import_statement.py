@@ -314,7 +314,10 @@ class ImportTab(ctk.CTkFrame):
 
 def _find_duplicate(row: NormalizedRow, existing: List[dict]) -> str:
     """Retorna uma descrição curta da transação existente que parece ser a
-    mesma (mesmo valor, data a até 1 dia de diferença), ou "" se não achar."""
+    mesma (mesmo valor, mesmo dia exato), ou "" se não achar. Não usa
+    tolerância de dias — gastos recorrentes no mesmo lugar e valor (ex: café
+    todo dia no trabalho) não podem virar falso positivo só por caírem em
+    dias diferentes."""
     for tx in existing:
         if abs(float(tx.get("amount") or 0) - row.amount) > 0.01:
             continue
@@ -325,7 +328,7 @@ def _find_duplicate(row: NormalizedRow, existing: List[dict]) -> str:
             tx_date = date.fromisoformat(str(tx_date_raw)[:10])
         except ValueError:
             continue
-        if abs((tx_date - row.date).days) > 1:
+        if tx_date != row.date:
             continue
         ratio = difflib.SequenceMatcher(
             None, tx.get("description", "").lower(), row.description.lower()).ratio()
