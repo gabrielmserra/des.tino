@@ -216,7 +216,7 @@ export function Debts() {
           amount={action.inst.amount}
           monthLabel={monthLabel(action.inst.due_year, action.inst.due_month)}
           onClose={() => setAction(null)}
-          onConfirm={(launch) => run(() => payInstallment(action.inst.id, launch))}
+          onConfirm={() => run(() => payInstallment(action.inst.id))}
         />
       )}
       {action?.kind === 'undo' && (

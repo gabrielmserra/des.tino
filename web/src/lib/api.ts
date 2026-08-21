@@ -612,11 +612,8 @@ export async function updateInstallmentAmount(instId: number, amount: number): P
   if (error) throw error
 }
 
-export async function payInstallment(instId: number, launchExpense: boolean): Promise<void> {
-  const { error } = await supabase.rpc('pay_installment', {
-    p_inst_id: instId,
-    p_launch_expense: launchExpense,
-  })
+export async function payInstallment(instId: number): Promise<void> {
+  const { error } = await supabase.rpc('pay_installment', { p_inst_id: instId })
   if (error) throw error
 }
 

@@ -31,11 +31,10 @@ type PayProps = {
   amount: number
   monthLabel: string
   onClose: () => void
-  onConfirm: (launchExpense: boolean) => void
+  onConfirm: () => void
 }
 
 export function PayDialog({ description, amount, monthLabel, onClose, onConfirm }: PayProps) {
-  const [launch, setLaunch] = useState(true)
   return (
     <Sheet onClose={onClose}>
       <h2 className="mb-1 text-center text-lg font-bold" style={{ color: 'var(--primary)' }}>
@@ -46,12 +45,8 @@ export function PayDialog({ description, amount, monthLabel, onClose, onConfirm 
         <br />
         {formatCurrency(amount)} — {monthLabel}
       </p>
-      <label className="mb-1 flex items-center justify-center gap-2 text-sm" style={{ color: 'var(--text)' }}>
-        <input type="checkbox" checked={launch} onChange={(e) => setLaunch(e.target.checked)} />
-        Lançar como gasto no mês da parcela
-      </label>
       <p className="mb-4 text-center text-[11px]" style={{ color: 'var(--muted)' }}>
-        Desmarque se você já registrou esse gasto manualmente.
+        Só marca a parcela como paga — não lança gasto nem mexe no saldo.
       </p>
       <div className="flex gap-2">
         <button
@@ -62,7 +57,7 @@ export function PayDialog({ description, amount, monthLabel, onClose, onConfirm 
           Cancelar
         </button>
         <button
-          onClick={() => onConfirm(launch)}
+          onClick={onConfirm}
           className="flex-1 rounded-lg py-3 font-bold text-white"
           style={{ background: 'var(--primary)' }}
         >

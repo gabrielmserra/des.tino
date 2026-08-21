@@ -1087,34 +1087,15 @@ def reschedule_installment(inst_id: int, year: int, month: int) -> None:
     _invalidate_debts()
 
 
-def pay_installment(inst: dict, debt: dict, n_total: int,
-                    launch_expense: bool) -> None:
-    """Marca a parcela como paga; opcionalmente lança o gasto no mês dela."""
+def pay_installment(inst: dict) -> None:
+    """Marca a parcela como paga. Não lança gasto nem mexe no saldo — é só
+    um checklist (decisão do usuário: dívida paga não é a mesma coisa que
+    dinheiro saindo da conta pelo app; quem quiser refletir isso no saldo
+    lança manualmente)."""
     from datetime import datetime, timezone
-    client  = get_client()
-    user_id = client.auth.get_user().user.id
-
-    expense_id = None
-    if launch_expense:
-        month = _ensure_month(inst["due_year"], inst["due_month"])
-        desc  = debt["description"]
-        if n_total > 1:
-            desc += f" (parcela {inst['installment_number']}/{n_total})"
-        resp = client.table("transactions").insert({
-            "month_id":    month["id"],
-            "user_id":     user_id,
-            "type":        "saida_fixa",
-            "description": desc,
-            "amount":      float(inst["amount"]),
-            "category":    debt.get("category") or "Dívidas",
-        }).execute()
-        if resp.data:
-            expense_id = resp.data[0]["id"]
-        _invalidate(month["id"])
-
-    client.table("debt_installments").update({
+    get_client().table("debt_installments").update({
         "paid_at":    datetime.now(timezone.utc).isoformat(),
-        "expense_id": expense_id,
+        "expense_id": None,
     }).eq("id", inst["id"]).execute()
     _invalidate_debts()
 

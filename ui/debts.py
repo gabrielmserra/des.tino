@@ -461,7 +461,7 @@ class DebtsTab(ctk.CTkFrame):
         if not dlg.confirmed:
             return
         months = {(inst["due_year"], inst["due_month"])}
-        self._run(lambda: db.pay_installment(inst, debt, n_total, dlg.launch), months)
+        self._run(lambda: db.pay_installment(inst), months)
 
     def _undo(self, inst: dict) -> None:
         from ui.dialogs import ConfirmDialog
@@ -756,9 +756,8 @@ class _EditDebtDialog(_BaseDialog):
 class _PayDialog(_BaseDialog):
     def __init__(self, parent, debt: dict, inst: dict, n_total: int):
         self.confirmed = False
-        self.launch    = True
         self._debt, self._inst, self._n = debt, inst, n_total
-        super().__init__(parent, "Pagar parcela", 420, 270)
+        super().__init__(parent, "Pagar parcela", 420, 210)
         self._build()
 
     def _build(self) -> None:
@@ -775,20 +774,13 @@ class _PayDialog(_BaseDialog):
                  f"{month_name_from_num(i['due_month'], i['due_year'])}",
             font=F(12), text_color=T.MUTED, justify="center",
         ).grid(row=1, column=0)
-
-        self._chk = ctk.CTkCheckBox(
-            self, text="Lançar como gasto no mês da parcela",
-            font=F(12), text_color=T.TEXT,
-            fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
-            border_color=T.BORDER_L, checkmark_color="#ffffff",
-        )
-        self._chk.select()
-        self._chk.grid(row=2, column=0, pady=(16, 0))
-        ctk.CTkLabel(self, text="Desmarque se você já registrou esse gasto manualmente.",
-                     font=F(10), text_color=T.SUBTLE).grid(row=3, column=0, pady=(2, 0))
+        ctk.CTkLabel(
+            self, text="Só marca a parcela como paga — não lança gasto\nnem mexe no saldo.",
+            font=F(10), text_color=T.SUBTLE, justify="center",
+        ).grid(row=2, column=0, pady=(10, 0))
 
         btns = ctk.CTkFrame(self, fg_color="transparent")
-        btns.grid(row=4, column=0, pady=16)
+        btns.grid(row=3, column=0, pady=16)
         ctk.CTkButton(btns, text="Cancelar", width=110,
                       fg_color=T.CARD2, hover_color=T.BORDER_L,
                       border_width=1, border_color=T.BORDER_L,
@@ -799,7 +791,6 @@ class _PayDialog(_BaseDialog):
 
     def _confirm(self) -> None:
         self.confirmed = True
-        self.launch    = bool(self._chk.get())
         self.destroy()
 
 
