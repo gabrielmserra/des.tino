@@ -215,6 +215,11 @@ function MetasWidget() {
 
 // ── Gráfico de pizza genérico (categoria / forma de pagamento) ────────
 function PieWidget({ title, empty, data }: { title: string; empty: string; data: { name: string; value: number }[] }) {
+  const total = data.reduce((a, d) => a + d.value, 0) || 1
+  // Fatias pequenas (<4%) não mostram o rótulo dentro do gráfico pra não
+  // sobrepor — a % de cada uma continua na legenda, igual no desktop.
+  const renderLabel = (p: { percent?: number }) =>
+    (p.percent ?? 0) >= 0.04 ? `${((p.percent ?? 0) * 100).toFixed(1)}%` : ''
   return (
     <div className="rounded-2xl border p-4" style={CARD_STYLE}>
       <p className="mb-2 text-sm font-bold">{title}</p>
@@ -225,7 +230,12 @@ function PieWidget({ title, empty, data }: { title: string; empty: string; data:
       ) : (
         <ResponsiveContainer width="100%" height={260}>
           <PieChart>
-            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} strokeWidth={2} stroke="var(--card)">
+            <Pie
+              data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90}
+              strokeWidth={2} stroke="var(--card)"
+              label={renderLabel}
+              labelLine={false}
+            >
               {data.map((_, i) => (
                 <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
               ))}
@@ -236,7 +246,14 @@ function PieWidget({ title, empty, data }: { title: string; empty: string; data:
             />
             <Legend
               wrapperStyle={{ fontSize: 11, color: 'var(--muted)' }}
-              formatter={(v: string) => <span style={{ color: 'var(--muted)' }}>{v}</span>}
+              formatter={(v: string, entry) => {
+                const val = Number((entry?.payload as { value?: number } | undefined)?.value ?? 0)
+                return (
+                  <span style={{ color: 'var(--muted)' }}>
+                    {v} · {((val / total) * 100).toFixed(1)}%
+                  </span>
+                )
+              }}
             />
           </PieChart>
         </ResponsiveContainer>
@@ -290,7 +307,7 @@ function ChartEntradasSaidasInvestimentosWidget() {
             <XAxis dataKey="name" tick={{ fill: 'var(--muted)', fontSize: 11 }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} />
             <YAxis hide />
             <Tooltip
-              formatter={(v) => formatCurrency(Number(v))}
+              formatter={(v, _n, p) => [formatCurrency(Number(v)), p?.payload?.name ?? '']}
               contentStyle={{ background: 'var(--card2)', border: '1px solid var(--border-l)', borderRadius: 8, color: 'var(--text)' }}
             />
             <Bar dataKey="value" radius={[6, 6, 0, 0]}>
