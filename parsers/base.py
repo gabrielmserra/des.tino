@@ -44,7 +44,7 @@ class BankParser(Protocol):
 # nunca vai ser categorizado automaticamente — não tem como saber o motivo
 # só pela descrição, fica "Outros" mesmo e o usuário ajusta na revisão.
 _CATEGORY_KEYWORDS = [
-    (("IFOOD", "RAPPI", "UBER EATS", "RESTAURANTE", "LANCHONETE", "LANCHON",
+    (("FOOD", "IFOOD", "RAPPI", "UBER EATS", "RESTAURANTE", "LANCHONETE", "LANCHON",
       "PADARIA", "PANIFIC", "CAFE", "CAFFE", "PANQUECA", "CHURRASCARIA", "PIZZARIA",
       "PIZZA", "BURGER", "BURGUER", "ACOUGUE", "MERCADO", "SUPERMERCADO",
       "HORTIFRUTI", "CULINARIA", "GASTRONOMIA", "DOCERIA", "SORVETERIA",
