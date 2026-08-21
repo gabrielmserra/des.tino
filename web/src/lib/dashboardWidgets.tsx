@@ -521,7 +521,7 @@ function SaldoEvolucaoWidget() {
         </p>
       ) : (
         <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={points} margin={{ top: 20, right: 8, left: 8, bottom: 0 }}>
+          <LineChart data={points} margin={{ top: 30, right: 40, left: 40, bottom: 0 }}>
             <XAxis dataKey="name" tick={{ fill: 'var(--muted)', fontSize: 11 }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} />
             <YAxis hide />
             <Tooltip
@@ -531,7 +531,7 @@ function SaldoEvolucaoWidget() {
             <ReferenceLine y={0} stroke="var(--border)" />
             <Line type="monotone" dataKey="value" stroke="var(--primary)" strokeWidth={2.5}
                   dot={{ r: 4, fill: 'var(--primary)' }} activeDot={{ r: 6 }}
-                  label={{ position: 'top', formatter: (v: unknown) => formatCurrency(Number(v)), fill: 'var(--text)', fontSize: 10 }} />
+                  label={{ position: 'top', offset: 12, formatter: (v: unknown) => formatCurrency(Number(v)), fill: 'var(--text)', fontSize: 10 }} />
           </LineChart>
         </ResponsiveContainer>
       )}
@@ -557,7 +557,7 @@ function GastosUltimos7DiasWidget() {
         </p>
       ) : (
         <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={points} margin={{ top: 20, right: 8, left: 8, bottom: 0 }}>
+          <LineChart data={points} margin={{ top: 30, right: 40, left: 40, bottom: 0 }}>
             <XAxis dataKey="name" tick={{ fill: 'var(--muted)', fontSize: 11 }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} />
             <YAxis hide />
             <Tooltip
@@ -567,7 +567,7 @@ function GastosUltimos7DiasWidget() {
             <ReferenceLine y={0} stroke="var(--border)" />
             <Line type="monotone" dataKey="value" stroke="var(--red)" strokeWidth={2.5}
                   dot={{ r: 4, fill: 'var(--red)' }} activeDot={{ r: 6 }}
-                  label={{ position: 'top', formatter: (v: unknown) => formatCurrency(Number(v)), fill: 'var(--text)', fontSize: 10 }} />
+                  label={{ position: 'top', offset: 12, formatter: (v: unknown) => formatCurrency(Number(v)), fill: 'var(--text)', fontSize: 10 }} />
           </LineChart>
         </ResponsiveContainer>
       )}
@@ -711,7 +711,7 @@ function PatrimonioEvolucaoWidget() {
         </p>
       ) : (
         <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={points} margin={{ top: 20, right: 8, left: 8, bottom: 0 }}>
+          <LineChart data={points} margin={{ top: 30, right: 40, left: 40, bottom: 0 }}>
             <XAxis dataKey="name" tick={{ fill: 'var(--muted)', fontSize: 11 }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} />
             <YAxis hide />
             <Tooltip
@@ -720,7 +720,7 @@ function PatrimonioEvolucaoWidget() {
             />
             <Line type="monotone" dataKey="value" stroke="var(--violet)" strokeWidth={2.5}
                   dot={{ r: 4, fill: 'var(--violet)' }} activeDot={{ r: 6 }}
-                  label={{ position: 'top', formatter: (v: unknown) => formatCurrency(Number(v)), fill: 'var(--text)', fontSize: 10 }} />
+                  label={{ position: 'top', offset: 12, formatter: (v: unknown) => formatCurrency(Number(v)), fill: 'var(--text)', fontSize: 10 }} />
           </LineChart>
         </ResponsiveContainer>
       )}
