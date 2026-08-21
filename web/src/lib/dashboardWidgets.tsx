@@ -508,12 +508,13 @@ function SaldoEvolucaoWidget() {
             <XAxis dataKey="name" tick={{ fill: 'var(--muted)', fontSize: 11 }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} />
             <YAxis hide />
             <Tooltip
-              formatter={(v) => formatCurrency(Number(v))}
+              formatter={(v) => [formatCurrency(Number(v)), 'Saldo']}
               contentStyle={{ background: 'var(--card2)', border: '1px solid var(--border-l)', borderRadius: 8, color: 'var(--text)' }}
             />
             <ReferenceLine y={0} stroke="var(--border)" />
             <Line type="monotone" dataKey="value" stroke="var(--primary)" strokeWidth={2.5}
-                  dot={{ r: 4, fill: 'var(--primary)' }} activeDot={{ r: 6 }} />
+                  dot={{ r: 4, fill: 'var(--primary)' }} activeDot={{ r: 6 }}
+                  label={{ position: 'top', formatter: (v: unknown) => formatCurrency(Number(v)), fill: 'var(--text)', fontSize: 10 }} />
           </LineChart>
         </ResponsiveContainer>
       )}
@@ -543,12 +544,13 @@ function GastosUltimos7DiasWidget() {
             <XAxis dataKey="name" tick={{ fill: 'var(--muted)', fontSize: 11 }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} />
             <YAxis hide />
             <Tooltip
-              formatter={(v) => formatCurrency(Number(v))}
+              formatter={(v) => [formatCurrency(Number(v)), 'Gasto']}
               contentStyle={{ background: 'var(--card2)', border: '1px solid var(--border-l)', borderRadius: 8, color: 'var(--text)' }}
             />
             <ReferenceLine y={0} stroke="var(--border)" />
             <Line type="monotone" dataKey="value" stroke="var(--red)" strokeWidth={2.5}
-                  dot={{ r: 4, fill: 'var(--red)' }} activeDot={{ r: 6 }} />
+                  dot={{ r: 4, fill: 'var(--red)' }} activeDot={{ r: 6 }}
+                  label={{ position: 'top', formatter: (v: unknown) => formatCurrency(Number(v)), fill: 'var(--text)', fontSize: 10 }} />
           </LineChart>
         </ResponsiveContainer>
       )}
@@ -696,11 +698,12 @@ function PatrimonioEvolucaoWidget() {
             <XAxis dataKey="name" tick={{ fill: 'var(--muted)', fontSize: 11 }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} />
             <YAxis hide />
             <Tooltip
-              formatter={(v) => formatCurrency(Number(v))}
+              formatter={(v) => [formatCurrency(Number(v)), 'Patrimônio']}
               contentStyle={{ background: 'var(--card2)', border: '1px solid var(--border-l)', borderRadius: 8, color: 'var(--text)' }}
             />
             <Line type="monotone" dataKey="value" stroke="var(--violet)" strokeWidth={2.5}
-                  dot={{ r: 4, fill: 'var(--violet)' }} activeDot={{ r: 6 }} />
+                  dot={{ r: 4, fill: 'var(--violet)' }} activeDot={{ r: 6 }}
+                  label={{ position: 'top', formatter: (v: unknown) => formatCurrency(Number(v)), fill: 'var(--text)', fontSize: 10 }} />
           </LineChart>
         </ResponsiveContainer>
       )}
