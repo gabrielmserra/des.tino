@@ -164,7 +164,7 @@ function KpiInvestimentosTotalWidget() {
 function MetasWidget() {
   const goalsQ = useQuery({ queryKey: ['goals'], queryFn: fetchGoals })
   const goals = goalsQ.data ?? []
-  const done = goals.filter((g) => g.target_amount > 0 && g.saved_amount >= g.target_amount).length
+  const done = goals.filter((g) => (g.target_amount ?? 0) > 0 && g.saved_amount >= g.target_amount!).length
 
   return (
     <Link to="/metas" className="block rounded-2xl border p-4" style={CARD_STYLE}>
@@ -183,22 +183,27 @@ function MetasWidget() {
       ) : (
         <div className="flex flex-col gap-2.5">
           {goals.map((g) => {
-            const pct = g.target_amount > 0 ? Math.min(1, g.saved_amount / g.target_amount) : 0
-            const goalDone = pct >= 1 && g.target_amount > 0
+            const hasTarget = g.target_amount != null && g.target_amount > 0
+            const pct = hasTarget ? Math.min(1, g.saved_amount / g.target_amount!) : 0
+            const goalDone = hasTarget && pct >= 1
             return (
               <div key={g.id}>
                 <div className="mb-1 flex items-center justify-between gap-2">
                   <span className="truncate text-xs font-semibold">{g.name}</span>
                   <span className="shrink-0 text-[11px]" style={{ color: 'var(--muted)' }}>
-                    {formatCurrency(g.saved_amount)} / {formatCurrency(g.target_amount)}
+                    {hasTarget
+                      ? `${formatCurrency(g.saved_amount)} / ${formatCurrency(g.target_amount!)}`
+                      : formatCurrency(g.saved_amount)}
                   </span>
                 </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--border)' }}>
-                  <div
-                    className="h-full rounded-full"
-                    style={{ width: `${pct * 100}%`, background: goalDone ? 'var(--primary)' : 'var(--accent)' }}
-                  />
-                </div>
+                {hasTarget && (
+                  <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--border)' }}>
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${pct * 100}%`, background: goalDone ? 'var(--primary)' : 'var(--accent)' }}
+                    />
+                  </div>
+                )}
               </div>
             )
           })}

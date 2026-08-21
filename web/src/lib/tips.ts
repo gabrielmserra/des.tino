@@ -264,7 +264,7 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
     const active = goals.filter((g) => (g.target_amount ?? 0) > (g.saved_amount ?? 0) && (g.saved_amount ?? 0) > 0)
     if (active.length > 0) {
       const g = active[0]
-      const restante = g.target_amount - g.saved_amount
+      const restante = (g.target_amount ?? 0) - g.saved_amount
       const meses = Math.max(1, Math.round(restante / avgInv))
       const label = monthLabel(meses)
       positive.push({

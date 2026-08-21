@@ -1,15 +1,47 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { fetchGoals, createGoal, addGoalContribution, updateGoal, deleteGoal } from '../lib/api'
-import { formatCurrency } from '../lib/format'
+import {
+  fetchGoals,
+  fetchGoalInstallments,
+  createGoal,
+  addGoalContribution,
+  updateGoal,
+  deleteGoal,
+  addGoalInstallments,
+  contributeGoalInstallment,
+  undoGoalInstallmentContribution,
+  updateGoalInstallmentAmount,
+  deleteGoalInstallment,
+} from '../lib/api'
+import { formatCurrency, MONTHS_PT } from '../lib/format'
 import { Skeleton } from '../components/Skeleton'
-import { ContributionDialog, EditGoalDialog, ConfirmDialog } from '../components/GoalDialogs'
-import type { Goal } from '../lib/types'
+import { ContributionDialog, EditGoalDialog, GenerateMoreGoalDialog, ConfirmDialog } from '../components/GoalDialogs'
+import { PayDialog, AmountDialog } from '../components/DebtDialogs'
+import { RecurringGoalForm } from '../components/RecurringGoalForm'
+import type { Goal, GoalInstallment } from '../lib/types'
 
 function parseAmount(raw: string): number {
   const s = raw.trim().replace(/\./g, '').replace(',', '.')
   const n = parseFloat(s)
   return isNaN(n) ? 0 : Math.max(0, n)
+}
+
+function monthLabel(year: number, month: number): string {
+  return `${MONTHS_PT[month - 1]} ${year}`
+}
+
+function installmentStatus(inst: GoalInstallment): 'paga' | 'atrasada' | 'pendente' {
+  if (inst.contributed_at) return 'paga'
+  const now = new Date()
+  const cur = now.getFullYear() * 12 + now.getMonth() + 1
+  const due = inst.due_year * 12 + inst.due_month
+  return due < cur ? 'atrasada' : 'pendente'
+}
+
+const STATUS_COLOR: Record<string, string> = {
+  paga: 'var(--muted)',
+  atrasada: 'var(--red)',
+  pendente: 'var(--accent)',
 }
 
 const inputStyle = { background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }
@@ -18,20 +50,32 @@ type PendingAction =
   | { kind: 'contribute'; mode: 'aporte' | 'saque'; goal: Goal }
   | { kind: 'edit'; goal: Goal }
   | { kind: 'delete'; goal: Goal }
+  | { kind: 'generateMore'; goal: Goal }
+  | { kind: 'payInst'; inst: GoalInstallment }
+  | { kind: 'undoInst'; inst: GoalInstallment }
+  | { kind: 'editInstAmount'; inst: GoalInstallment }
+  | { kind: 'deleteInst'; inst: GoalInstallment }
 
 export function Goals() {
   const qc = useQueryClient()
   const goalsQ = useQuery({ queryKey: ['goals'], queryFn: fetchGoals })
+  const instsQ = useQuery({ queryKey: ['goalInstallments'], queryFn: fetchGoalInstallments })
   const goals = goalsQ.data ?? []
+  const allInsts = instsQ.data ?? []
 
   const [name, setName] = useState('')
   const [target, setTarget] = useState('')
   const [createError, setCreateError] = useState('')
   const [creating, setCreating] = useState(false)
+  const [showRecurringForm, setShowRecurringForm] = useState(false)
   const [action, setAction] = useState<PendingAction | null>(null)
   const [error, setError] = useState('')
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['goals'] })
+  const invalidate = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ['goals'] }),
+      qc.invalidateQueries({ queryKey: ['goalInstallments'] }),
+    ])
 
   const create = async () => {
     setCreateError('')
@@ -99,6 +143,13 @@ export function Goals() {
         >
           {creating ? 'Criando…' : '+ Criar meta'}
         </button>
+        <button
+          onClick={() => setShowRecurringForm(true)}
+          className="mt-2 w-full rounded-lg border py-2 text-xs font-semibold"
+          style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
+        >
+          ↻ Meta recorrente (mensal)
+        </button>
       </div>
 
       <p className="mb-2 text-xs" style={{ color: 'var(--muted)' }}>
@@ -124,40 +175,56 @@ export function Goals() {
       ) : (
         <div className="flex flex-col gap-3">
           {goals.map((g) => {
-            const pct = g.target_amount > 0 ? Math.min(1, g.saved_amount / g.target_amount) : 0
-            const done = g.saved_amount >= g.target_amount && g.target_amount > 0
+            const hasTarget = g.target_amount != null
+            const pct = hasTarget && g.target_amount! > 0 ? Math.min(1, g.saved_amount / g.target_amount!) : 0
+            const done = hasTarget && g.saved_amount >= g.target_amount! && g.target_amount! > 0
+            const isRecurring = g.monthly_amount != null
+            const goalInsts = allInsts
+              .filter((i) => i.goal_id === g.id)
+              .sort((a, b) => a.due_year * 12 + a.due_month - (b.due_year * 12 + b.due_month))
+
             return (
               <div key={g.id} className="rounded-2xl border p-4" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
                 <div className="mb-1 flex items-center justify-between gap-2">
                   <span className="font-bold">{g.name}</span>
-                  <span className="shrink-0 text-sm font-bold" style={{ color: done ? 'var(--primary)' : 'var(--accent)' }}>
-                    {done ? 'Concluída!' : `${(pct * 100).toFixed(1)}%`}
-                  </span>
+                  {hasTarget && (
+                    <span className="shrink-0 text-sm font-bold" style={{ color: done ? 'var(--primary)' : 'var(--accent)' }}>
+                      {done ? 'Concluída!' : `${(pct * 100).toFixed(1)}%`}
+                    </span>
+                  )}
                 </div>
                 <p className="mb-2 text-sm" style={{ color: 'var(--muted)' }}>
-                  {formatCurrency(g.saved_amount)} de {formatCurrency(g.target_amount)}
+                  {hasTarget
+                    ? `${formatCurrency(g.saved_amount)} de ${formatCurrency(g.target_amount!)}`
+                    : `${formatCurrency(g.saved_amount)} guardados até agora`}
                 </p>
-                <div className="mb-3 h-2.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--border)' }}>
-                  <div
-                    className="h-full rounded-full"
-                    style={{ width: `${pct * 100}%`, background: done ? 'var(--primary)' : 'var(--accent)' }}
-                  />
-                </div>
+                {hasTarget && (
+                  <div className="mb-3 h-2.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--border)' }}>
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${pct * 100}%`, background: done ? 'var(--primary)' : 'var(--accent)' }}
+                    />
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-1.5">
-                  <button
-                    onClick={() => setAction({ kind: 'contribute', mode: 'aporte', goal: g })}
-                    className="rounded-lg px-3 py-1.5 text-xs font-bold text-white"
-                    style={{ background: 'var(--primary)' }}
-                  >
-                    + Aportar
-                  </button>
-                  <button
-                    onClick={() => setAction({ kind: 'contribute', mode: 'saque', goal: g })}
-                    className="rounded-lg border px-3 py-1.5 text-xs font-semibold"
-                    style={{ borderColor: 'var(--border-l)', color: 'var(--red)' }}
-                  >
-                    − Sacar
-                  </button>
+                  {!isRecurring && (
+                    <>
+                      <button
+                        onClick={() => setAction({ kind: 'contribute', mode: 'aporte', goal: g })}
+                        className="rounded-lg px-3 py-1.5 text-xs font-bold text-white"
+                        style={{ background: 'var(--primary)' }}
+                      >
+                        + Aportar
+                      </button>
+                      <button
+                        onClick={() => setAction({ kind: 'contribute', mode: 'saque', goal: g })}
+                        className="rounded-lg border px-3 py-1.5 text-xs font-semibold"
+                        style={{ borderColor: 'var(--border-l)', color: 'var(--red)' }}
+                      >
+                        − Sacar
+                      </button>
+                    </>
+                  )}
                   <button
                     onClick={() => setAction({ kind: 'edit', goal: g })}
                     className="rounded-lg border px-3 py-1.5 text-xs font-semibold"
@@ -173,11 +240,78 @@ export function Goals() {
                     Excluir
                   </button>
                 </div>
+
+                {isRecurring && (
+                  <div className="mt-3 flex flex-col gap-1.5 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+                    {goalInsts.map((inst) => {
+                      const st = installmentStatus(inst)
+                      return (
+                        <div
+                          key={inst.id}
+                          className="flex items-center justify-between gap-2 rounded-lg p-2"
+                          style={{ background: 'var(--card2)' }}
+                        >
+                          <span className="text-xs" style={{ color: st === 'paga' ? 'var(--muted)' : 'var(--text)' }}>
+                            {st === 'paga' ? '✓ ' : ''}
+                            {formatCurrency(inst.amount)} · {monthLabel(inst.due_year, inst.due_month)}
+                          </span>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <span className="text-[10px] font-bold" style={{ color: STATUS_COLOR[st] }}>
+                              {st}
+                            </span>
+                            {st === 'paga' ? (
+                              <button
+                                onClick={() => setAction({ kind: 'undoInst', inst })}
+                                className="rounded px-2 py-1 text-[11px] font-semibold"
+                                style={{ color: 'var(--muted)' }}
+                              >
+                                Desfazer
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => setAction({ kind: 'payInst', inst })}
+                                  className="rounded px-2 py-1 text-[11px] font-bold"
+                                  style={{ background: 'var(--card)', color: 'var(--primary)' }}
+                                >
+                                  Guardado
+                                </button>
+                                <button
+                                  onClick={() => setAction({ kind: 'editInstAmount', inst })}
+                                  className="text-[11px]"
+                                  style={{ color: 'var(--muted)' }}
+                                >
+                                  ✎
+                                </button>
+                                <button
+                                  onClick={() => setAction({ kind: 'deleteInst', inst })}
+                                  className="text-[11px]"
+                                  style={{ color: 'var(--red)' }}
+                                >
+                                  ✕
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                    <button
+                      onClick={() => setAction({ kind: 'generateMore', goal: g })}
+                      className="mt-1 rounded-lg border py-2 text-xs font-semibold"
+                      style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
+                    >
+                      ↻ Gerar mais meses
+                    </button>
+                  </div>
+                )}
               </div>
             )
           })}
         </div>
       )}
+
+      {showRecurringForm && <RecurringGoalForm onClose={() => setShowRecurringForm(false)} />}
 
       {action?.kind === 'contribute' && (
         <ContributionDialog
@@ -204,6 +338,67 @@ export function Goals() {
           confirmText="Excluir"
           onClose={() => setAction(null)}
           onConfirm={() => run(() => deleteGoal(action.goal.id))}
+        />
+      )}
+      {action?.kind === 'generateMore' && (
+        <GenerateMoreGoalDialog
+          goalName={action.goal.name}
+          onClose={() => setAction(null)}
+          onConfirm={(nMonths) =>
+            run(async () => {
+              const goal = action.goal
+              const monthly = goal.monthly_amount ?? 0
+              const goalInsts = allInsts.filter((i) => i.goal_id === goal.id)
+              if (goalInsts.length === 0 || monthly <= 0) return
+              const last = goalInsts.reduce((a, b) =>
+                a.due_year * 12 + a.due_month > b.due_year * 12 + b.due_month ? a : b,
+              )
+              let y = last.due_year
+              let m = last.due_month
+              let num = Math.max(...goalInsts.map((i) => i.installment_number)) + 1
+              const rows = []
+              for (let k = 0; k < nMonths; k++) {
+                m += 1
+                if (m > 12) { m = 1; y += 1 }
+                rows.push({ number: num++, amount: monthly, year: y, month: m })
+              }
+              await addGoalInstallments(goal.id, rows)
+            })
+          }
+        />
+      )}
+      {action?.kind === 'payInst' && (
+        <PayDialog
+          description="Marcar como guardado"
+          amount={action.inst.amount}
+          monthLabel={monthLabel(action.inst.due_year, action.inst.due_month)}
+          onClose={() => setAction(null)}
+          onConfirm={() => run(() => contributeGoalInstallment(action.inst.id))}
+        />
+      )}
+      {action?.kind === 'undoInst' && (
+        <ConfirmDialog
+          title="Desfazer?"
+          message="Confirmar?"
+          confirmText="Desfazer"
+          onClose={() => setAction(null)}
+          onConfirm={() => run(() => undoGoalInstallmentContribution(action.inst.id))}
+        />
+      )}
+      {action?.kind === 'editInstAmount' && (
+        <AmountDialog
+          current={action.inst.amount}
+          onClose={() => setAction(null)}
+          onConfirm={(amt) => run(() => updateGoalInstallmentAmount(action.inst.id, amt))}
+        />
+      )}
+      {action?.kind === 'deleteInst' && (
+        <ConfirmDialog
+          title="Excluir mês?"
+          message="Só este mês do cronograma será excluído."
+          confirmText="Excluir"
+          onClose={() => setAction(null)}
+          onConfirm={() => run(() => deleteGoalInstallment(action.inst.id))}
         />
       )}
     </div>

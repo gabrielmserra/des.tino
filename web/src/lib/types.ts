@@ -209,7 +209,25 @@ export type InvestmentMovement = {
 export type Goal = {
   id: number
   name: string
-  target_amount: number
+  target_amount: number | null
   saved_amount: number
+  monthly_amount: number | null
   created_at: string
+}
+
+export type GoalInstallment = {
+  id: number
+  goal_id: number
+  installment_number: number
+  amount: number
+  due_year: number
+  due_month: number
+  contributed_at: string | null
+}
+
+export type GoalInstallmentInput = {
+  number: number
+  amount: number
+  year: number
+  month: number
 }

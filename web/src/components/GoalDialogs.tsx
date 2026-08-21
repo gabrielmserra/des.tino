@@ -85,20 +85,21 @@ export function ContributionDialog({ mode, goalName, onClose, onConfirm }: Contr
 // ── Editar meta (nome/valor alvo) ────────────────────────────────────
 type EditGoalProps = {
   name: string
-  targetAmount: number
+  targetAmount: number | null
   onClose: () => void
-  onConfirm: (name: string, targetAmount: number) => void
+  onConfirm: (name: string, targetAmount: number | null) => void
 }
 
 export function EditGoalDialog({ name, targetAmount, onClose, onConfirm }: EditGoalProps) {
   const [n, setN] = useState(name)
-  const [value, setValue] = useState(String(targetAmount).replace('.', ','))
+  const [value, setValue] = useState(targetAmount != null ? String(targetAmount).replace('.', ',') : '')
   const [error, setError] = useState('')
 
   const confirm = () => {
     if (!n.trim()) return setError('Digite um nome.')
+    if (!value.trim()) return onConfirm(n.trim(), null)
     const amt = parseAmount(value)
-    if (amt <= 0) return setError('Digite um valor alvo positivo.')
+    if (amt <= 0) return setError('Digite um valor alvo positivo, ou deixe em branco.')
     onConfirm(n.trim(), amt)
   }
 
@@ -117,7 +118,7 @@ export function EditGoalDialog({ name, targetAmount, onClose, onConfirm }: EditG
           value={value}
           onChange={(e) => setValue(e.target.value)}
           inputMode="decimal"
-          placeholder="Valor alvo (R$)"
+          placeholder="Valor alvo (R$) — opcional"
           className="rounded-lg border px-3 py-3 text-base outline-none"
           style={inputStyle}
         />
@@ -141,6 +142,54 @@ export function EditGoalDialog({ name, targetAmount, onClose, onConfirm }: EditG
           style={{ background: 'var(--primary)' }}
         >
           Salvar
+        </button>
+      </div>
+    </Sheet>
+  )
+}
+
+// ── Gerar mais meses numa meta recorrente ────────────────────────────
+type GenerateMoreProps = {
+  goalName: string
+  onClose: () => void
+  onConfirm: (nMonths: number) => void
+}
+
+export function GenerateMoreGoalDialog({ goalName, onClose, onConfirm }: GenerateMoreProps) {
+  const [n, setN] = useState(12)
+
+  return (
+    <Sheet onClose={onClose}>
+      <h2 className="mb-1 text-center text-lg font-bold">Gerar mais meses</h2>
+      <p className="mb-4 text-center text-sm" style={{ color: 'var(--muted)' }}>
+        {goalName}
+      </p>
+      <select
+        value={n}
+        onChange={(e) => setN(Number(e.target.value))}
+        className="w-full rounded-lg border px-3 py-3 text-center text-base outline-none"
+        style={inputStyle}
+      >
+        {Array.from({ length: 24 }, (_, i) => i + 1).map((v) => (
+          <option key={v} value={v}>
+            {v} {v === 1 ? 'mês' : 'meses'}
+          </option>
+        ))}
+      </select>
+      <div className="mt-3 flex gap-2">
+        <button
+          onClick={onClose}
+          className="flex-1 rounded-lg border py-3 font-semibold"
+          style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={() => onConfirm(n)}
+          className="flex-1 rounded-lg py-3 font-bold text-white"
+          style={{ background: 'var(--primary)' }}
+        >
+          Gerar
         </button>
       </div>
     </Sheet>

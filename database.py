@@ -502,7 +502,7 @@ def add_goal_contribution(goal_id: int, amount: float) -> None:
         ).eq("id", goal_id).execute()
 
 
-def update_goal(goal_id: int, name: str, target_amount: float) -> None:
+def update_goal(goal_id: int, name: str, target_amount: Optional[float]) -> None:
     get_client().table("goals").update({
         "name": name, "target_amount": target_amount,
     }).eq("id", goal_id).execute()
@@ -510,6 +510,131 @@ def update_goal(goal_id: int, name: str, target_amount: float) -> None:
 
 def delete_goal(goal_id: int) -> None:
     get_client().table("goals").delete().eq("id", goal_id).execute()
+
+
+# ---------------------------------------------------------------------------
+# Metas com recorrência mensal — mesmo mecanismo de checklist das Dívidas
+# (parcelas por mês, marcar como guardado), mas nunca cria lançamento nem
+# mexe no saldo (mesma decisão aplicada em pay_installment). target_amount
+# é opcional: meta recorrente "sem fim" (sem valor final em mente) não tem
+# alvo, só o valor mensal — a UI mostra "guardado até agora" nesse caso.
+# ---------------------------------------------------------------------------
+
+def create_recurring_goal(name: str, target_amount: Optional[float],
+                          monthly_amount: float, installments: List[dict]) -> dict:
+    """installments: [{"number", "amount", "year", "month"}]"""
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    resp = client.table("goals").insert({
+        "name": name, "target_amount": target_amount, "saved_amount": 0,
+        "monthly_amount": monthly_amount, "user_id": user_id,
+    }).execute()
+    goal = resp.data[0]
+    rows = [{
+        "goal_id":            goal["id"],
+        "user_id":            user_id,
+        "installment_number": it["number"],
+        "amount":             float(it["amount"]),
+        "due_year":           int(it["year"]),
+        "due_month":          int(it["month"]),
+    } for it in installments]
+    if rows:
+        client.table("goal_installments").insert(rows).execute()
+    return goal
+
+
+def add_goal_installments(goal_id: int, installments: List[dict]) -> None:
+    """Gera mais parcelas pra uma meta recorrente já existente."""
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    rows = [{
+        "goal_id":            goal_id,
+        "user_id":            user_id,
+        "installment_number": it["number"],
+        "amount":             float(it["amount"]),
+        "due_year":           int(it["year"]),
+        "due_month":          int(it["month"]),
+    } for it in installments]
+    if rows:
+        client.table("goal_installments").insert(rows).execute()
+
+
+def get_all_goal_installments() -> List[dict]:
+    resp = get_client().table("goal_installments").select("*") \
+        .order("due_year").order("due_month").order("installment_number").execute()
+    return resp.data or []
+
+
+def contribute_goal_installment(inst: dict) -> None:
+    """Marca a parcela como guardada; soma o valor no progresso da meta.
+    Não cria lançamento nem mexe no saldo."""
+    from datetime import datetime, timezone
+    if inst.get("contributed_at"):
+        return
+    client = get_client()
+    client.table("goal_installments").update({
+        "contributed_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", inst["id"]).execute()
+    goal_resp = client.table("goals").select("saved_amount").eq("id", inst["goal_id"]).execute()
+    if goal_resp.data:
+        current = float(goal_resp.data[0]["saved_amount"] or 0)
+        client.table("goals").update(
+            {"saved_amount": max(0.0, current + float(inst["amount"]))}
+        ).eq("id", inst["goal_id"]).execute()
+
+
+def undo_goal_installment_contribution(inst: dict) -> None:
+    if not inst.get("contributed_at"):
+        return
+    client = get_client()
+    client.table("goal_installments").update({"contributed_at": None}).eq("id", inst["id"]).execute()
+    goal_resp = client.table("goals").select("saved_amount").eq("id", inst["goal_id"]).execute()
+    if goal_resp.data:
+        current = float(goal_resp.data[0]["saved_amount"] or 0)
+        client.table("goals").update(
+            {"saved_amount": max(0.0, current - float(inst["amount"]))}
+        ).eq("id", inst["goal_id"]).execute()
+
+
+def update_goal_installment_amount(inst: dict, new_amount: float) -> None:
+    """Edita o valor de uma parcela; se já guardada, ajusta saved_amount
+    pela diferença; se a meta tem target_amount, recalcula como soma."""
+    client = get_client()
+    delta  = new_amount - float(inst["amount"])
+    client.table("goal_installments").update({"amount": new_amount}).eq("id", inst["id"]).execute()
+
+    goal_resp = client.table("goals").select("saved_amount,target_amount").eq("id", inst["goal_id"]).execute()
+    if not goal_resp.data:
+        return
+    goal = goal_resp.data[0]
+    if inst.get("contributed_at") and delta != 0:
+        current = float(goal["saved_amount"] or 0)
+        client.table("goals").update(
+            {"saved_amount": max(0.0, current + delta)}
+        ).eq("id", inst["goal_id"]).execute()
+    if goal.get("target_amount") is not None:
+        remaining = client.table("goal_installments").select("amount").eq("goal_id", inst["goal_id"]).execute()
+        total = sum(float(r["amount"]) for r in (remaining.data or []))
+        client.table("goals").update({"target_amount": total}).eq("id", inst["goal_id"]).execute()
+
+
+def delete_goal_installment(inst: dict) -> None:
+    client = get_client()
+    client.table("goal_installments").delete().eq("id", inst["id"]).execute()
+
+    goal_resp = client.table("goals").select("saved_amount,target_amount").eq("id", inst["goal_id"]).execute()
+    if not goal_resp.data:
+        return
+    goal = goal_resp.data[0]
+    if inst.get("contributed_at"):
+        current = float(goal["saved_amount"] or 0)
+        client.table("goals").update(
+            {"saved_amount": max(0.0, current - float(inst["amount"]))}
+        ).eq("id", inst["goal_id"]).execute()
+    if goal.get("target_amount") is not None:
+        remaining = client.table("goal_installments").select("amount").eq("goal_id", inst["goal_id"]).execute()
+        total = sum(float(r["amount"]) for r in (remaining.data or []))
+        client.table("goals").update({"target_amount": total}).eq("id", inst["goal_id"]).execute()
 
 
 # ---------------------------------------------------------------------------

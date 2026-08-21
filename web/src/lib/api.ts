@@ -22,6 +22,8 @@ import type {
   InvestmentMovement,
   MovementType,
   Goal,
+  GoalInstallment,
+  GoalInstallmentInput,
   DashboardWidgetEntry,
 } from './types'
 
@@ -761,7 +763,7 @@ export async function addGoalContribution(goalId: number, amount: number): Promi
   return Number(data ?? 0)
 }
 
-export async function updateGoal(id: number, name: string, targetAmount: number): Promise<void> {
+export async function updateGoal(id: number, name: string, targetAmount: number | null): Promise<void> {
   const { error } = await supabase
     .from('goals')
     .update({ name, target_amount: targetAmount })
@@ -771,6 +773,66 @@ export async function updateGoal(id: number, name: string, targetAmount: number)
 
 export async function deleteGoal(id: number): Promise<void> {
   const { error } = await supabase.from('goals').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Metas recorrentes (cronograma mensal, mesmo mecanismo das dívidas,
+// mas sem lançamento/saldo — só um checklist) ──────────────────────────
+export async function fetchGoalInstallments(): Promise<GoalInstallment[]> {
+  const { data, error } = await supabase
+    .from('goal_installments')
+    .select('*')
+    .order('due_year')
+    .order('due_month')
+    .order('installment_number')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function createRecurringGoal(
+  name: string,
+  targetAmount: number | null,
+  monthlyAmount: number,
+  installments: GoalInstallmentInput[],
+): Promise<number> {
+  const { data, error } = await supabase.rpc('create_recurring_goal', {
+    p_name: name,
+    p_target_amount: targetAmount,
+    p_monthly_amount: monthlyAmount,
+    p_installments: installments,
+  })
+  if (error) throw error
+  return data as number
+}
+
+export async function addGoalInstallments(goalId: number, installments: GoalInstallmentInput[]): Promise<void> {
+  const { error } = await supabase.rpc('add_goal_installments', {
+    p_goal_id: goalId,
+    p_installments: installments,
+  })
+  if (error) throw error
+}
+
+export async function contributeGoalInstallment(instId: number): Promise<void> {
+  const { error } = await supabase.rpc('contribute_goal_installment', { p_inst_id: instId })
+  if (error) throw error
+}
+
+export async function undoGoalInstallmentContribution(instId: number): Promise<void> {
+  const { error } = await supabase.rpc('undo_goal_installment_contribution', { p_inst_id: instId })
+  if (error) throw error
+}
+
+export async function updateGoalInstallmentAmount(instId: number, amount: number): Promise<void> {
+  const { error } = await supabase.rpc('update_goal_installment_amount', {
+    p_inst_id: instId,
+    p_amount: amount,
+  })
+  if (error) throw error
+}
+
+export async function deleteGoalInstallment(instId: number): Promise<void> {
+  const { error } = await supabase.rpc('delete_goal_installment', { p_inst_id: instId })
   if (error) throw error
 }
 
