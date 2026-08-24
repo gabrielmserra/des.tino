@@ -5,3 +5,4 @@ pyinstaller
 supabase
 pdfplumber
 openpyxl
+reportlab

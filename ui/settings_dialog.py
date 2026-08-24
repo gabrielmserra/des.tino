@@ -34,7 +34,7 @@ class SettingsDialog(ctk.CTkToplevel):
 
     def _center(self, parent) -> None:
         self.update_idletasks()
-        w, h = 420, 300
+        w, h = 420, 380
         px = parent.winfo_x() + (parent.winfo_width()  - w) // 2
         py = parent.winfo_y() + (parent.winfo_height() - h) // 2
         self.geometry(f"{w}x{h}+{px}+{py}")
@@ -71,8 +71,19 @@ class SettingsDialog(ctk.CTkToplevel):
         self._status_lbl = ctk.CTkLabel(self, text="", font=F(11), text_color=T.MUTED)
         self._status_lbl.grid(row=4, column=0, pady=(4, 0))
 
+        sep = ctk.CTkFrame(self, fg_color=T.BORDER, height=1)
+        sep.grid(row=5, column=0, sticky="ew", padx=24, pady=(16, 12))
+
+        ctk.CTkButton(
+            self, text="📄 Baixar Relatório Completo", command=self._open_report,
+            height=36, width=240, corner_radius=8,
+            fg_color=T.CARD2, hover_color=T.BORDER_L,
+            border_width=1, border_color=T.BORDER_L,
+            text_color=T.TEXT, font=F(12, "bold"),
+        ).grid(row=6, column=0, pady=(0, 4))
+
         btn_row = ctk.CTkFrame(self, fg_color="transparent")
-        btn_row.grid(row=5, column=0, pady=(20, 24))
+        btn_row.grid(row=7, column=0, pady=(20, 24))
 
         ctk.CTkButton(
             btn_row, text="Salvar", command=self._save,
@@ -96,6 +107,10 @@ class SettingsDialog(ctk.CTkToplevel):
             day = 1
         self._current_day = day
         self._day_var.set(str(day))
+
+    def _open_report(self) -> None:
+        from ui.report_dialog import ReportDialog
+        ReportDialog(self)
 
     def _save(self) -> None:
         day = int(self._day_var.get())

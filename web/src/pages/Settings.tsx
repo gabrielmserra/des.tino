@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
-import { Download } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Download, FileText } from 'lucide-react'
 import { fetchImportCutoffDay, saveImportCutoffDay } from '../lib/api'
+import { useMonths } from '../lib/month'
 
 const DESKTOP_DOWNLOAD_URL = 'https://github.com/gabrielmserra/des.tino/releases/latest/download/destino.exe'
 
@@ -18,12 +19,50 @@ export function Settings() {
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState('')
   const [isMobile] = useState(isMobileDevice)
+  const { months } = useMonths()
+
+  const monthsAsc = useMemo(
+    () => [...months].sort((a, b) => a.year * 100 + a.month - (b.year * 100 + b.month)),
+    [months],
+  )
+  const [fromId, setFromId] = useState<number | null>(null)
+  const [toId, setToId] = useState<number | null>(null)
+  const [generating, setGenerating] = useState(false)
+  const [reportStatus, setReportStatus] = useState('')
+
+  useEffect(() => {
+    if (monthsAsc.length === 0 || fromId != null) return
+    const defaultFrom = monthsAsc[Math.max(0, monthsAsc.length - 6)]
+    const defaultTo = monthsAsc[monthsAsc.length - 1]
+    setFromId(defaultFrom.id)
+    setToId(defaultTo.id)
+  }, [monthsAsc, fromId])
 
   useEffect(() => {
     fetchImportCutoffDay()
       .then(setDay)
       .finally(() => setLoading(false))
   }, [])
+
+  const handleDownloadReport = async () => {
+    if (fromId == null || toId == null || generating) return
+    let i0 = monthsAsc.findIndex((m) => m.id === fromId)
+    let i1 = monthsAsc.findIndex((m) => m.id === toId)
+    if (i0 > i1) [i0, i1] = [i1, i0]
+    const selected = monthsAsc.slice(i0, i1 + 1)
+
+    setGenerating(true)
+    setReportStatus('')
+    try {
+      // Carregado sob demanda: jsPDF + autotable só baixa quem gera relatório.
+      const { generateAccountReportPdf } = await import('../lib/reportPdf')
+      await generateAccountReportPdf(selected)
+    } catch {
+      setReportStatus('Erro ao gerar relatório')
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   const save = async (value: number) => {
     setDay(value)
@@ -75,6 +114,67 @@ export function Settings() {
               </span>
             )}
           </div>
+        )}
+      </div>
+
+      <div
+        className="mt-4 rounded-2xl border p-4"
+        style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+      >
+        <p className="font-semibold">Relatório Financeiro Completo</p>
+        <p className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>
+          PDF com resumo, evolução de saldo, gastos por categoria e forma de pagamento e todos os
+          lançamentos do período escolhido.
+        </p>
+
+        {monthsAsc.length === 0 ? (
+          <p className="mt-3 text-sm" style={{ color: 'var(--muted)' }}>
+            Nenhum mês cadastrado ainda.
+          </p>
+        ) : (
+          <>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm">
+                <span style={{ color: 'var(--muted)' }}>De</span>
+                <select
+                  value={fromId ?? ''}
+                  onChange={(e) => setFromId(Number(e.target.value))}
+                  className="rounded-lg border px-3 py-2 text-sm font-semibold outline-none"
+                  style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+                >
+                  {monthsAsc.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <span style={{ color: 'var(--muted)' }}>Até</span>
+                <select
+                  value={toId ?? ''}
+                  onChange={(e) => setToId(Number(e.target.value))}
+                  className="rounded-lg border px-3 py-2 text-sm font-semibold outline-none"
+                  style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+                >
+                  {monthsAsc.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <button
+              onClick={handleDownloadReport}
+              disabled={generating}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold text-white disabled:opacity-50"
+              style={{ background: 'var(--primary)' }}
+            >
+              <FileText size={16} strokeWidth={2} />
+              {generating ? 'Gerando…' : 'Baixar Relatório (PDF)'}
+            </button>
+            {reportStatus && (
+              <p className="mt-2 text-xs font-semibold" style={{ color: '#E05252' }}>{reportStatus}</p>
+            )}
+          </>
         )}
       </div>
 
