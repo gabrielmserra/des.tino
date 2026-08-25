@@ -18,6 +18,7 @@ WIDGET_CATALOG = [
     {"id": "kpi_entradas",                           "label": "Entradas",                              "size": "compact"},
     {"id": "kpi_saidas",                             "label": "Saídas",                                "size": "compact"},
     {"id": "kpi_saldo_vrva",                         "label": "Saldo VR/VA",                           "size": "compact"},
+    {"id": "kpi_saldo_apos_contas",                  "label": "Saldo após contas em aberto",           "size": "compact"},
     {"id": "kpi_investimentos_mes",                  "label": "Investimentos do mês",                  "size": "compact"},
     {"id": "kpi_investimentos_total",                "label": "Investimentos totais",                  "size": "compact"},
     {"id": "chart_categoria",                        "label": "Despesas por categoria",                "size": "full"},
@@ -209,6 +210,9 @@ class Dashboard(ctk.CTkScrollableFrame):
 
     def _build_widget_kpi_saldo_vrva(self, parent) -> ctk.CTkFrame:
         return self._make_kpi_widget(parent, "saldo_beneficios", "SALDO VR/VA", T.GOLD)
+
+    def _build_widget_kpi_saldo_apos_contas(self, parent) -> ctk.CTkFrame:
+        return self._make_kpi_widget(parent, "saldo_apos_contas", "SALDO APÓS CONTAS", T.GOLD)
 
     def _build_widget_kpi_investimentos_mes(self, parent) -> ctk.CTkFrame:
         return self._make_kpi_widget(parent, "total_investimentos", "INVESTIMENTOS MÊS",
@@ -439,7 +443,7 @@ class Dashboard(ctk.CTkScrollableFrame):
         s = db.get_month_summary(self.month_id)
 
         for key, (lbl, default_color) in self._card_lbls.items():
-            if key in ("investimentos_total", "saldo_beneficios"):
+            if key in ("investimentos_total", "saldo_beneficios", "saldo_apos_contas"):
                 lbl.configure(text="...", text_color=default_color)
                 continue
             val   = s.get(key, 0.0)
@@ -499,6 +503,11 @@ class Dashboard(ctk.CTkScrollableFrame):
                 benefit_total = sum(float(b.get("balance") or 0) for b in db.get_benefits())
             except Exception:
                 benefit_total = 0.0
+            try:
+                pending_bills = db.get_pending_fixed_bills_total(self.month_id)
+                saldo_apos_contas = s.get("saldo_acumulado", 0.0) - pending_bills
+            except Exception:
+                saldo_apos_contas = s.get("saldo_acumulado", 0.0)
             try:
                 goals = db.get_goals()
             except Exception:
@@ -622,6 +631,7 @@ class Dashboard(ctk.CTkScrollableFrame):
                 self.after(0, lambda cp=card_payments: self._draw_credit_panel(cards, s, cp))
             self.after(0, lambda t=total_inv: self._update_total_inv(t))
             self.after(0, lambda t=benefit_total: self._update_benefit_balance(t))
+            self.after(0, lambda t=saldo_apos_contas: self._update_saldo_apos_contas(t))
             if hasattr(self, "_tips_frame"):
                 self.after(0, lambda g=goals, c=pie_data, h=history,
                            iv=investments, ti=total_inv, uc=total_unpaid_cards:
@@ -671,6 +681,13 @@ class Dashboard(ctk.CTkScrollableFrame):
         entry = self._card_lbls.get("saldo_beneficios")
         if entry:
             lbl, color = entry
+            lbl.configure(text=format_currency(total), text_color=color)
+
+    def _update_saldo_apos_contas(self, total: float) -> None:
+        entry = self._card_lbls.get("saldo_apos_contas")
+        if entry:
+            lbl, default_color = entry
+            color = T.GREEN if total >= 0 else T.RED
             lbl.configure(text=format_currency(total), text_color=color)
 
     # ------------------------------------------------------------------
@@ -1175,6 +1192,7 @@ class Dashboard(ctk.CTkScrollableFrame):
         "kpi_entradas":                        _build_widget_kpi_entradas,
         "kpi_saidas":                          _build_widget_kpi_saidas,
         "kpi_saldo_vrva":                      _build_widget_kpi_saldo_vrva,
+        "kpi_saldo_apos_contas":               _build_widget_kpi_saldo_apos_contas,
         "kpi_investimentos_mes":               _build_widget_kpi_investimentos_mes,
         "kpi_investimentos_total":             _build_widget_kpi_investimentos_total,
         "chart_categoria":                     _build_widget_chart_categoria,

@@ -25,6 +25,7 @@ export function DebtForm({ onClose }: Props) {
   const [category, setCategory] = useState('Dívidas')
   const [notes, setNotes] = useState('')
   const [nParcelas, setNParcelas] = useState(1)
+  const [rate, setRate] = useState('')
   const [month, setMonth] = useState(now.getMonth())
   const [year, setYear] = useState(now.getFullYear())
   const [preview, setPreview] = useState<PreviewRow[]>([])
@@ -40,9 +41,17 @@ export function DebtForm({ onClose }: Props) {
       return
     }
     setError('')
-    const base = Math.round((totalVal / nParcelas) * 100) / 100
-    const amounts = Array(nParcelas).fill(base)
-    amounts[nParcelas - 1] = Math.round((totalVal - base * (nParcelas - 1)) * 100) / 100
+    const rateVal = parseAmount(rate)
+    let amounts: number[]
+    if (rateVal > 0) {
+      const i = rateVal / 100
+      const pmt = (totalVal * i) / (1 - Math.pow(1 + i, -nParcelas))
+      amounts = Array(nParcelas).fill(Math.round(pmt * 100) / 100)
+    } else {
+      const base = Math.round((totalVal / nParcelas) * 100) / 100
+      amounts = Array(nParcelas).fill(base)
+      amounts[nParcelas - 1] = Math.round((totalVal - base * (nParcelas - 1)) * 100) / 100
+    }
 
     const rows: PreviewRow[] = []
     let y = year
@@ -79,7 +88,11 @@ export function DebtForm({ onClose }: Props) {
       return
     }
     const soma = rows.reduce((a, r) => a + r.amount, 0)
-    if (Math.abs(soma - totalVal) > 0.01) {
+    const rateVal = parseAmount(rate)
+    // Com juros, a soma das parcelas (Tabela Price) é maior que o
+    // principal financiado de propósito — só valida a igualdade exata
+    // quando não há juros (split simples do valor total).
+    if (rateVal <= 0 && Math.abs(soma - totalVal) > 0.01) {
       return setError(
         `Soma das parcelas (${formatCurrency(soma)}) difere do total (${formatCurrency(totalVal)}).`,
       )
@@ -93,6 +106,7 @@ export function DebtForm({ onClose }: Props) {
         category,
         notes.trim(),
         rows.map((r) => ({ number: r.number, amount: r.amount, year: r.year, month: r.month })),
+        rateVal > 0 ? rateVal : null,
       )
       await qc.invalidateQueries({ queryKey: ['debts'] })
       await qc.invalidateQueries({ queryKey: ['installments'] })
@@ -160,6 +174,15 @@ export function DebtForm({ onClose }: Props) {
             ))}
           </select>
         </div>
+
+        <input
+          value={rate}
+          onChange={(e) => { setRate(e.target.value); setPreview([]) }}
+          inputMode="decimal"
+          placeholder="Taxa de juros mensal (%, opcional — financiamento)"
+          className="mb-3 w-full rounded-lg border px-3 py-3 text-base outline-none"
+          style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+        />
 
         <label className="mb-1 block text-xs font-bold" style={{ color: 'var(--muted)' }}>
           PRIMEIRO MÊS DE PAGAMENTO

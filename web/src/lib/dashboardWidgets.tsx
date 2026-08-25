@@ -13,6 +13,7 @@ import {
   fetchExpensesByCategory,
   fetchExpensesByPaymentMethod,
   fetchBenefitTotal,
+  fetchPendingFixedBillsTotal,
   fetchTotalInvestments,
   fetchGoals,
   fetchInvestments,
@@ -131,6 +132,25 @@ function KpiSaldoVrVaWidget() {
       label="SALDO VR/VA"
       value={benefit.data != null ? formatCurrency(benefit.data) : '…'}
       color="var(--accent)"
+    />
+  )
+}
+
+function KpiSaldoAposContasWidget() {
+  const { selectedId } = useMonths()
+  const summary = useSummary()
+  const pending = useQuery({
+    queryKey: ['pendingFixedBills', selectedId],
+    queryFn: () => fetchPendingFixedBillsTotal(selectedId!),
+    enabled: selectedId != null,
+  })
+  const ready = summary.data != null && pending.data != null
+  const value = ready ? summary.data!.saldo_acumulado - (pending.data ?? 0) : null
+  return (
+    <Kpi
+      label="SALDO APÓS CONTAS"
+      value={value != null ? formatCurrency(value) : '…'}
+      color={value != null && value < 0 ? 'var(--red)' : 'var(--accent)'}
     />
   )
 }
@@ -743,6 +763,7 @@ export const WIDGET_REGISTRY: WidgetDef[] = [
   { id: 'kpi_entradas', label: 'Entradas', size: 'compact', Component: KpiEntradasWidget },
   { id: 'kpi_saidas', label: 'Saídas', size: 'compact', Component: KpiSaidasWidget },
   { id: 'kpi_saldo_vrva', label: 'Saldo VR/VA', size: 'compact', Component: KpiSaldoVrVaWidget },
+  { id: 'kpi_saldo_apos_contas', label: 'Saldo após contas em aberto', size: 'compact', Component: KpiSaldoAposContasWidget },
   { id: 'kpi_investimentos_mes', label: 'Investimentos do mês', size: 'compact', Component: KpiInvestimentosMesWidget },
   { id: 'kpi_investimentos_total', label: 'Investimentos totais', size: 'compact', Component: KpiInvestimentosTotalWidget },
   { id: 'chart_categoria', label: 'Despesas por categoria', size: 'full', Component: ChartCategoriaWidget },

@@ -151,6 +151,7 @@ export type Debt = {
   total_amount: number
   category: string | null
   notes: string | null
+  interest_rate: number | null
   created_at: string
 }
 
@@ -184,6 +185,27 @@ export type DebtOverview = {
   total_aberto: number
   n_atrasadas: number
   future: DebtFuture[]
+}
+
+export type FixedBill = {
+  id: number
+  name: string
+  expected_amount: number
+  due_day: number
+  category: string
+  payment_method: string | null
+  active: boolean
+  created_at: string
+}
+
+export type FixedBillInstance = {
+  id: number
+  bill_id: number
+  month_id: number
+  amount: number
+  paid_at: string | null
+  expense_id: number | null
+  created_at: string
 }
 
 export type Investment = {

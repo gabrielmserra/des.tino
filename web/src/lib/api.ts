@@ -18,6 +18,8 @@ import type {
   DebtInstallment,
   DebtInstallmentInput,
   DebtOverview,
+  FixedBill,
+  FixedBillInstance,
   Investment,
   InvestmentMovement,
   MovementType,
@@ -569,6 +571,7 @@ export async function createDebt(
   category: string,
   notes: string,
   installments: DebtInstallmentInput[],
+  interestRate: number | null = null,
 ): Promise<void> {
   const total = installments.reduce((a, i) => a + i.amount, 0)
   const { error } = await supabase.rpc('create_debt', {
@@ -578,13 +581,14 @@ export async function createDebt(
     p_category: category || 'Dívidas',
     p_notes: notes || null,
     p_installments: installments,
+    p_interest_rate: interestRate,
   })
   if (error) throw error
 }
 
 export async function updateDebt(
   id: number,
-  input: { description: string; creditor: string; category: string; notes: string },
+  input: { description: string; creditor: string; category: string; notes: string; interest_rate: number | null },
 ): Promise<void> {
   const { error } = await supabase
     .from('debts')
@@ -593,6 +597,7 @@ export async function updateDebt(
       creditor: input.creditor || null,
       category: input.category || 'Dívidas',
       notes: input.notes || null,
+      interest_rate: input.interest_rate,
     })
     .eq('id', id)
   if (error) throw error
@@ -644,6 +649,84 @@ export async function syncDebtsIntoPlan(monthId: number): Promise<boolean> {
   const { data, error } = await supabase.rpc('sync_debts_into_plan', { p_month_id: monthId })
   if (error) throw error
   return Boolean(data)
+}
+
+// ── Contas Fixas ─────────────────────────────────────────────────────
+// Diferente de Dívidas/Metas: pagar cria um lançamento real (Saída Fixa)
+// e mexe no saldo — por isso paga/desfaz sempre passam pela RPC, que faz
+// isso atomicamente no Postgres (ver docs/migrations/024_contas_fixas.sql).
+
+export async function fetchFixedBills(): Promise<FixedBill[]> {
+  const { data, error } = await supabase
+    .from('fixed_bills')
+    .select('*')
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function fetchFixedBillInstances(): Promise<FixedBillInstance[]> {
+  const { data, error } = await supabase.from('fixed_bill_instances').select('*')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function ensureFixedBillInstances(monthId: number): Promise<void> {
+  const { error } = await supabase.rpc('ensure_fixed_bill_instances', { p_month_id: monthId })
+  if (error) throw error
+}
+
+export async function createFixedBill(
+  name: string, amount: number, dueDay: number, category: string, paymentMethod: string | null,
+): Promise<number> {
+  const { data, error } = await supabase.rpc('create_fixed_bill', {
+    p_name: name, p_amount: amount, p_due_day: dueDay,
+    p_category: category, p_payment_method: paymentMethod,
+  })
+  if (error) throw error
+  return data as number
+}
+
+export async function updateFixedBill(
+  billId: number, name: string, amount: number, dueDay: number,
+  category: string, paymentMethod: string | null, active: boolean,
+): Promise<void> {
+  const { error } = await supabase.rpc('update_fixed_bill', {
+    p_bill_id: billId, p_name: name, p_amount: amount, p_due_day: dueDay,
+    p_category: category, p_payment_method: paymentMethod, p_active: active,
+  })
+  if (error) throw error
+}
+
+export async function deleteFixedBill(billId: number): Promise<void> {
+  const { error } = await supabase.rpc('delete_fixed_bill', { p_bill_id: billId })
+  if (error) throw error
+}
+
+export async function updateFixedBillInstanceAmount(instanceId: number, amount: number): Promise<void> {
+  const { error } = await supabase.rpc('update_fixed_bill_instance_amount', {
+    p_instance_id: instanceId, p_amount: amount,
+  })
+  if (error) throw error
+}
+
+export async function payFixedBillInstance(instanceId: number, paymentMethod: string | null): Promise<number> {
+  const { data, error } = await supabase.rpc('pay_fixed_bill_instance', {
+    p_instance_id: instanceId, p_payment_method: paymentMethod,
+  })
+  if (error) throw error
+  return data as number
+}
+
+export async function undoFixedBillPayment(instanceId: number): Promise<void> {
+  const { error } = await supabase.rpc('undo_fixed_bill_payment', { p_instance_id: instanceId })
+  if (error) throw error
+}
+
+export async function fetchPendingFixedBillsTotal(monthId: number): Promise<number> {
+  const { data, error } = await supabase.rpc('get_pending_fixed_bills_total', { p_month_id: monthId })
+  if (error) throw error
+  return Number(data ?? 0)
 }
 
 // ── Investimentos ─────────────────────────────────────────────────────

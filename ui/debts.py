@@ -253,7 +253,10 @@ class DebtsTab(ctk.CTkFrame):
         ctk.CTkLabel(badge, text=debt.get("category") or "Dívidas",
                      font=F(10, "bold"), text_color=T.MUTED).pack(padx=7, pady=1)
 
+        rate_str = (f"{float(debt['interest_rate']):.2f}".replace(".", ",")
+                    if debt.get("interest_rate") else "")
         info = (f"{format_currency(float(debt['total_amount']))}"
+                + (f"  ·  {rate_str}% a.m." if rate_str else "")
                 + (f"   •   {n_paid}/{n_total} pagas" if n_total > 1 else ""))
         ctk.CTkLabel(hdr, text=info, font=F(12, "bold"),
                      text_color=T.BLUE).grid(row=0, column=1, sticky="e", padx=(10, 0))
@@ -391,7 +394,8 @@ class DebtsTab(ctk.CTkFrame):
         months = {(i["year"], i["month"]) for i in r["installments"]}
         self._run(lambda: db.create_debt(
             r["description"], r["creditor"], r["total"],
-            r["category"], r["notes"], r["installments"]), months)
+            r["category"], r["notes"], r["installments"],
+            r.get("interest_rate")), months)
 
     def _edit_debt(self, debt: dict) -> None:
         dlg = _EditDebtDialog(self.winfo_toplevel(), debt)
@@ -403,7 +407,7 @@ class DebtsTab(ctk.CTkFrame):
                   if i["debt_id"] == debt["id"] and not i.get("paid_at")}
         self._run(lambda: db.update_debt(
             debt["id"], r["description"], r["creditor"],
-            r["category"], r["notes"]), months)
+            r["category"], r["notes"], r.get("interest_rate")), months)
 
     def _delete_debt(self, debt: dict) -> None:
         from ui.dialogs import ConfirmDialog
@@ -537,7 +541,7 @@ class _DebtFormDialog(_BaseDialog):
     def __init__(self, parent):
         self.result: Optional[dict] = None
         self._preview_rows: list = []
-        super().__init__(parent, "Nova Dívida", 560, 640)
+        super().__init__(parent, "Nova Dívida", 560, 690)
         self._build()
 
     def _build(self) -> None:
@@ -573,9 +577,13 @@ class _DebtFormDialog(_BaseDialog):
         self._n_parc.set("1")
         self._n_parc.grid(row=6, column=1, padx=(6, 24), sticky="ew")
 
-        _lbl("PRIMEIRO MÊS DE PAGAMENTO *", 7, 0, colspan=2)
+        _lbl("TAXA DE JUROS MENSAL (% opcional)", 7, 0, colspan=2)
+        self._rate = self._entry(self, "Ex: 1,5 — em branco = sem juros (Financiamento)")
+        self._rate.grid(row=8, column=0, columnspan=2, padx=24, sticky="ew")
+
+        _lbl("PRIMEIRO MÊS DE PAGAMENTO *", 9, 0, colspan=2)
         mrow = ctk.CTkFrame(self, fg_color="transparent")
-        mrow.grid(row=8, column=0, columnspan=2, padx=24, sticky="ew")
+        mrow.grid(row=10, column=0, columnspan=2, padx=24, sticky="ew")
         mrow.grid_columnconfigure((0, 1), weight=1)
         self._month = self._combo(mrow, MONTHS_PT)
         self._month.set(MONTHS_PT[now.month - 1])
@@ -584,32 +592,32 @@ class _DebtFormDialog(_BaseDialog):
         self._year.set(str(now.year))
         self._year.grid(row=0, column=1, padx=(6, 0), sticky="ew")
 
-        _lbl("OBSERVAÇÕES", 9, 0, colspan=2)
+        _lbl("OBSERVAÇÕES", 11, 0, colspan=2)
         self._notes = self._entry(self)
-        self._notes.grid(row=10, column=0, columnspan=2, padx=24, sticky="ew")
+        self._notes.grid(row=12, column=0, columnspan=2, padx=24, sticky="ew")
 
         ctk.CTkButton(
             self, text="↻  Gerar parcelas", command=self._gen_preview,
             height=32, corner_radius=8,
             fg_color=T.GREEN_DIM, hover_color=T.GREEN, text_color=T.GREEN,
-        ).grid(row=11, column=0, columnspan=2, padx=24, pady=(12, 4), sticky="ew")
+        ).grid(row=13, column=0, columnspan=2, padx=24, pady=(12, 4), sticky="ew")
 
         self._preview = ctk.CTkScrollableFrame(
             self, fg_color=T.CARD2, corner_radius=10, height=150,
             scrollbar_button_color=T.BORDER_L,
             scrollbar_button_hover_color=T.MUTED,
         )
-        self._preview.grid(row=12, column=0, columnspan=2, padx=24, sticky="ew")
+        self._preview.grid(row=14, column=0, columnspan=2, padx=24, sticky="ew")
         self._preview.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(self._preview,
                      text="Clique em “Gerar parcelas” para visualizar.",
                      font=F(11), text_color=T.SUBTLE).grid(row=0, column=0, pady=14)
 
         self._err = ctk.CTkLabel(self, text="", font=F(11), text_color=T.RED)
-        self._err.grid(row=13, column=0, columnspan=2, padx=24, pady=(6, 0), sticky="w")
+        self._err.grid(row=15, column=0, columnspan=2, padx=24, pady=(6, 0), sticky="w")
 
         btns = ctk.CTkFrame(self, fg_color="transparent")
-        btns.grid(row=14, column=0, columnspan=2, pady=(8, 16))
+        btns.grid(row=16, column=0, columnspan=2, pady=(8, 16))
         ctk.CTkButton(btns, text="Cancelar", width=110,
                       fg_color=T.CARD2, hover_color=T.BORDER_L,
                       border_width=1, border_color=T.BORDER_L,
@@ -627,10 +635,16 @@ class _DebtFormDialog(_BaseDialog):
         n = int(self._n_parc.get())
         y = int(self._year.get())
         m = MONTHS_PT.index(self._month.get()) + 1
+        rate = _parse_amount(self._rate.get()) if self._rate.get().strip() else 0.0
 
-        base = round(total / n, 2)
-        amounts = [base] * n
-        amounts[-1] = round(total - base * (n - 1), 2)  # ajusta o arredondamento
+        if rate > 0:
+            i = rate / 100
+            pmt = total * i / (1 - (1 + i) ** -n)
+            amounts = [round(pmt, 2)] * n
+        else:
+            base = round(total / n, 2)
+            amounts = [base] * n
+            amounts[-1] = round(total - base * (n - 1), 2)  # ajusta o arredondamento
 
         for w in self._preview.winfo_children():
             w.destroy()
@@ -671,7 +685,11 @@ class _DebtFormDialog(_BaseDialog):
             "month":  r["month"],
         } for r in self._preview_rows]
         soma = sum(i["amount"] for i in installments)
-        if abs(soma - total) > 0.01:
+        rate = _parse_amount(self._rate.get()) if self._rate.get().strip() else 0.0
+        # Com juros, a soma das parcelas (Tabela Price) é maior que o
+        # principal financiado de propósito — só valida a igualdade
+        # exata quando não há juros (split simples do valor total).
+        if rate <= 0 and abs(soma - total) > 0.01:
             self._err.configure(
                 text=f"Soma das parcelas ({format_currency(soma)}) difere "
                      f"do total ({format_currency(total)}).")
@@ -679,7 +697,8 @@ class _DebtFormDialog(_BaseDialog):
         self.result = {
             "description":  desc,
             "creditor":     self._creditor.get().strip(),
-            "total":        total,
+            "total":        soma,
+            "interest_rate": rate if rate > 0 else None,
             "category":     self._category.get(),
             "notes":        self._notes.get().strip(),
             "installments": installments,
@@ -691,7 +710,7 @@ class _EditDebtDialog(_BaseDialog):
     def __init__(self, parent, debt: dict):
         self.result: Optional[dict] = None
         self._debt = debt
-        super().__init__(parent, "Editar Dívida", 460, 400)
+        super().__init__(parent, "Editar Dívida", 460, 460)
         self._build()
 
     def _build(self) -> None:
@@ -726,11 +745,17 @@ class _EditDebtDialog(_BaseDialog):
         self._notes.grid(row=8, column=0, padx=28, sticky="ew")
         self._notes.insert(0, d.get("notes") or "")
 
+        _field("TAXA DE JUROS MENSAL (% opcional)", 9)
+        self._rate = self._entry(self, "Ex: 1,5 — em branco = sem juros")
+        self._rate.grid(row=10, column=0, padx=28, sticky="ew")
+        if d.get("interest_rate"):
+            self._rate.insert(0, f"{float(d['interest_rate']):.2f}".replace(".", ","))
+
         self._err = ctk.CTkLabel(self, text="", font=F(11), text_color=T.RED)
-        self._err.grid(row=9, column=0, padx=28, pady=(8, 0), sticky="w")
+        self._err.grid(row=11, column=0, padx=28, pady=(8, 0), sticky="w")
 
         btns = ctk.CTkFrame(self, fg_color="transparent")
-        btns.grid(row=10, column=0, pady=14)
+        btns.grid(row=12, column=0, pady=14)
         ctk.CTkButton(btns, text="Cancelar", width=110,
                       fg_color=T.CARD2, hover_color=T.BORDER_L,
                       border_width=1, border_color=T.BORDER_L,
@@ -744,11 +769,13 @@ class _EditDebtDialog(_BaseDialog):
         if not desc:
             self._err.configure(text="Preencha a descrição.")
             return
+        rate = _parse_amount(self._rate.get()) if self._rate.get().strip() else 0.0
         self.result = {
             "description": desc,
             "creditor":    self._creditor.get().strip(),
             "category":    self._category.get(),
             "notes":       self._notes.get().strip(),
+            "interest_rate": rate if rate > 0 else None,
         }
         self.destroy()
 

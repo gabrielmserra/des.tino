@@ -1153,10 +1153,14 @@ def installment_status(inst: dict) -> str:
 
 
 def create_debt(description: str, creditor: str, total_amount: float,
-                category: str, notes: str, installments: List[dict]) -> dict:
+                category: str, notes: str, installments: List[dict],
+                interest_rate: Optional[float] = None) -> dict:
     """Cria a dívida e suas parcelas.
 
     installments: [{"number", "amount", "year", "month"}]
+    interest_rate: taxa mensal em % (ex: 1.5), guardada só como referência
+    — quem já calculou o valor das parcelas com juros (Tabela Price) é o
+    chamador, antes de montar `installments`.
     """
     client  = get_client()
     user_id = client.auth.get_user().user.id
@@ -1167,6 +1171,7 @@ def create_debt(description: str, creditor: str, total_amount: float,
         "total_amount": total_amount,
         "category":     category or "Dívidas",
         "notes":        notes or None,
+        "interest_rate": interest_rate,
     }).execute()
     debt = resp.data[0]
     rows = [{
@@ -1183,12 +1188,14 @@ def create_debt(description: str, creditor: str, total_amount: float,
 
 
 def update_debt(debt_id: int, description: str, creditor: str,
-                category: str, notes: str) -> None:
+                category: str, notes: str,
+                interest_rate: Optional[float] = None) -> None:
     get_client().table("debts").update({
         "description": description,
         "creditor":    creditor or None,
         "category":    category or "Dívidas",
         "notes":       notes or None,
+        "interest_rate": interest_rate,
     }).eq("id", debt_id).execute()
     _invalidate_debts()
 
@@ -1381,6 +1388,107 @@ def get_debt_overview() -> dict:
         "n_atrasadas":  n_atrasadas,
         "future":       future,
     }
+
+
+# ---------------------------------------------------------------------------
+# Contas Fixas
+# ---------------------------------------------------------------------------
+# Diferente de Dívidas/Metas: pagar uma conta fixa CRIA um lançamento real
+# (Saída Fixa) e mexe no saldo — é o oposto de propósito, por isso as
+# operações de pagar/desfazer passam pela RPC (pay_fixed_bill_instance /
+# undo_fixed_bill_payment), que cria/apaga a transação atomicamente no
+# Postgres em vez de fazer os dois passos separados aqui no cliente.
+
+_fixed_bills_cache: Optional[List[dict]] = None
+_fixed_bill_instances_cache: Optional[List[dict]] = None
+
+
+def _invalidate_fixed_bills() -> None:
+    global _fixed_bills_cache, _fixed_bill_instances_cache
+    _fixed_bills_cache = None
+    _fixed_bill_instances_cache = None
+
+
+def get_fixed_bills() -> List[dict]:
+    global _fixed_bills_cache
+    if _fixed_bills_cache is None:
+        resp = get_client().table("fixed_bills").select("*") \
+            .order("created_at", desc=False).execute()
+        _fixed_bills_cache = resp.data or []
+    return list(_fixed_bills_cache)
+
+
+def get_fixed_bill_instances() -> List[dict]:
+    global _fixed_bill_instances_cache
+    if _fixed_bill_instances_cache is None:
+        resp = get_client().table("fixed_bill_instances").select("*").execute()
+        _fixed_bill_instances_cache = resp.data or []
+    return list(_fixed_bill_instances_cache)
+
+
+def ensure_fixed_bill_instances(month_id: int) -> None:
+    """Idempotente — garante que toda conta fixa ativa tenha uma instância
+    nesse mês. Chamar sempre que a tela de Contas Fixas ou o Dashboard
+    carregarem o mês corrente."""
+    get_client().rpc("ensure_fixed_bill_instances", {"p_month_id": month_id}).execute()
+    _invalidate_fixed_bills()
+
+
+def create_fixed_bill(name: str, amount: float, due_day: int,
+                       category: str, payment_method: Optional[str]) -> int:
+    resp = get_client().rpc("create_fixed_bill", {
+        "p_name": name, "p_amount": amount, "p_due_day": due_day,
+        "p_category": category, "p_payment_method": payment_method,
+    }).execute()
+    _invalidate_fixed_bills()
+    return resp.data
+
+
+def update_fixed_bill(bill_id: int, name: str, amount: float, due_day: int,
+                       category: str, payment_method: Optional[str], active: bool) -> None:
+    get_client().rpc("update_fixed_bill", {
+        "p_bill_id": bill_id, "p_name": name, "p_amount": amount,
+        "p_due_day": due_day, "p_category": category,
+        "p_payment_method": payment_method, "p_active": active,
+    }).execute()
+    _invalidate_fixed_bills()
+
+
+def delete_fixed_bill(bill_id: int) -> None:
+    """Cascade apaga as instâncias — transações já criadas por pagamentos
+    anteriores continuam existindo normalmente, só perdem o vínculo."""
+    get_client().rpc("delete_fixed_bill", {"p_bill_id": bill_id}).execute()
+    _invalidate_fixed_bills()
+
+
+def update_fixed_bill_instance_amount(instance_id: int, amount: float) -> None:
+    get_client().rpc("update_fixed_bill_instance_amount", {
+        "p_instance_id": instance_id, "p_amount": amount,
+    }).execute()
+    _invalidate_fixed_bills()
+
+
+def pay_fixed_bill_instance(instance_id: int, month_id: int,
+                            payment_method: Optional[str]) -> int:
+    """Cria a transação (Saída Fixa) e marca a instância como paga.
+    `month_id` só serve pra invalidar o cache de lançamentos certo."""
+    resp = get_client().rpc("pay_fixed_bill_instance", {
+        "p_instance_id": instance_id, "p_payment_method": payment_method,
+    }).execute()
+    _invalidate_fixed_bills()
+    _invalidate(month_id)
+    return resp.data
+
+
+def undo_fixed_bill_payment(instance_id: int, month_id: int) -> None:
+    get_client().rpc("undo_fixed_bill_payment", {"p_instance_id": instance_id}).execute()
+    _invalidate_fixed_bills()
+    _invalidate(month_id)
+
+
+def get_pending_fixed_bills_total(month_id: int) -> float:
+    resp = get_client().rpc("get_pending_fixed_bills_total", {"p_month_id": month_id}).execute()
+    return float(resp.data or 0)
 
 
 # ---------------------------------------------------------------------------

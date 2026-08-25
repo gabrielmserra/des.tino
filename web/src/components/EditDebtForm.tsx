@@ -11,12 +11,21 @@ type Props = {
   onClose: () => void
 }
 
+function parseAmount(raw: string): number {
+  const s = raw.trim().replace(/\./g, '').replace(',', '.')
+  const n = parseFloat(s)
+  return isNaN(n) ? 0 : Math.max(0, n)
+}
+
 export function EditDebtForm({ debt, installments, onClose }: Props) {
   const qc = useQueryClient()
   const [description, setDescription] = useState(debt.description)
   const [creditor, setCreditor] = useState(debt.creditor ?? '')
   const [category, setCategory] = useState(debt.category ?? 'Dívidas')
   const [notes, setNotes] = useState(debt.notes ?? '')
+  const [rate, setRate] = useState(
+    debt.interest_rate ? String(debt.interest_rate).replace('.', ',') : '',
+  )
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -38,11 +47,13 @@ export function EditDebtForm({ debt, installments, onClose }: Props) {
     if (!description.trim()) return setError('Preencha a descrição.')
     setBusy(true)
     try {
+      const parsedRate = parseAmount(rate)
       await updateDebt(debt.id, {
         description: description.trim(),
         creditor: creditor.trim(),
         category,
         notes: notes.trim(),
+        interest_rate: parsedRate > 0 ? parsedRate : null,
       })
       await invalidate()
       onClose()
@@ -112,6 +123,14 @@ export function EditDebtForm({ debt, installments, onClose }: Props) {
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Observações"
+          className="mb-3 w-full rounded-lg border px-3 py-3 text-base outline-none"
+          style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+        />
+        <input
+          value={rate}
+          onChange={(e) => setRate(e.target.value)}
+          inputMode="decimal"
+          placeholder="Taxa de juros mensal (%, opcional)"
           className="mb-3 w-full rounded-lg border px-3 py-3 text-base outline-none"
           style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
         />

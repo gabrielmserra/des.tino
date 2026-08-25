@@ -15,6 +15,7 @@ import { Planning } from './pages/Planning'
 import { Debts } from './pages/Debts'
 import { Investments } from './pages/Investments'
 import { Goals } from './pages/Goals'
+import { FixedBills } from './pages/FixedBills'
 import { More } from './pages/More'
 import { Settings } from './pages/Settings'
 
@@ -63,6 +64,7 @@ export default function App() {
             <Route path="/dividas" element={<Debts />} />
             <Route path="/investimentos" element={<Investments />} />
             <Route path="/metas" element={<Goals />} />
+            <Route path="/contas-fixas" element={<FixedBills />} />
             <Route
               path="/importar"
               element={

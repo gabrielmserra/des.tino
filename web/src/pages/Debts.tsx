@@ -344,6 +344,11 @@ function DebtsList({
 
             <p className="mb-3 text-sm font-bold" style={{ color: 'var(--primary)' }}>
               {formatCurrency(debt.total_amount)}
+              {debt.interest_rate != null && (
+                <span className="ml-2 text-xs font-normal" style={{ color: 'var(--muted)' }}>
+                  · {String(debt.interest_rate).replace('.', ',')}% a.m.
+                </span>
+              )}
               {nTotal > 1 && (
                 <span className="ml-2 text-xs font-normal" style={{ color: 'var(--muted)' }}>
                   {nPaid}/{nTotal} pagas
