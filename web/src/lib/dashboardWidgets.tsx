@@ -14,6 +14,9 @@ import {
   fetchExpensesByPaymentMethod,
   fetchBenefitTotal,
   fetchPendingFixedBillsTotal,
+  ensureFixedBillInstances,
+  fetchFixedBills,
+  fetchFixedBillInstances,
   fetchTotalInvestments,
   fetchGoals,
   fetchInvestments,
@@ -137,21 +140,54 @@ function KpiSaldoVrVaWidget() {
 }
 
 function KpiSaldoAposContasWidget() {
-  const { selectedId } = useMonths()
+  // Contas Fixas usa o calendário REAL (hoje), não o mês de cobrança que o
+  // dia de corte da importação desloca — vencimento é uma data real.
   const summary = useSummary()
-  const pending = useQuery({
-    queryKey: ['pendingFixedBills', selectedId],
-    queryFn: () => fetchPendingFixedBillsTotal(selectedId!),
-    enabled: selectedId != null,
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = today.getMonth() + 1
+
+  const ensureQ = useQuery({
+    queryKey: ['ensureFixedBillInstances', year, month],
+    queryFn: () => ensureFixedBillInstances(year, month),
   })
+  const pending = useQuery({
+    queryKey: ['pendingFixedBills', year, month],
+    queryFn: () => fetchPendingFixedBillsTotal(year, month),
+    enabled: ensureQ.isSuccess,
+  })
+  const billsQ = useQuery({ queryKey: ['fixedBills'], queryFn: fetchFixedBills, enabled: ensureQ.isSuccess })
+  const instQ = useQuery({ queryKey: ['fixedBillInstances'], queryFn: fetchFixedBillInstances, enabled: ensureQ.isSuccess })
+
   const ready = summary.data != null && pending.data != null
   const value = ready ? summary.data!.saldo_acumulado - (pending.data ?? 0) : null
+  const color = value != null && value < 0 ? 'var(--red)' : 'var(--accent)'
+
+  let warning = ''
+  if (billsQ.data && instQ.data) {
+    const billsById = new Map(billsQ.data.map((b) => [b.id, b]))
+    const overdue = instQ.data
+      .filter((i) => i.due_year === year && i.due_month === month && !i.paid_at)
+      .map((i) => billsById.get(i.bill_id))
+      .filter((b): b is NonNullable<typeof b> => b != null && b.due_day < today.getDate())
+    if (overdue.length === 1) warning = `⚠ ${overdue[0].name} venceu dia ${overdue[0].due_day}`
+    else if (overdue.length > 1) warning = `⚠ ${overdue.length} contas venceram`
+  }
+
+  // Layout próprio (não o <Kpi> compartilhado, usado por todos os outros
+  // KPIs compactos) — reserva uma linha pequena e sempre presente pro
+  // aviso, sem crescer o card quando não há vencimento.
   return (
-    <Kpi
-      label="SALDO APÓS CONTAS"
-      value={value != null ? formatCurrency(value) : '…'}
-      color={value != null && value < 0 ? 'var(--red)' : 'var(--accent)'}
-    />
+    <div className="rounded-2xl border p-4" style={{ ...CARD_STYLE, paddingBottom: 8 }}>
+      <div className="h-1 w-8 rounded" style={{ background: color }} />
+      <p className="mt-2 text-[10px] font-bold" style={{ color: 'var(--muted)' }}>SALDO APÓS CONTAS</p>
+      <p className="mt-1 text-lg font-bold" style={{ color }}>
+        {value != null ? formatCurrency(value) : '…'}
+      </p>
+      <p className="truncate text-[9px] font-bold" style={{ color: 'var(--red)', lineHeight: '11px', height: '11px' }}>
+        {warning}
+      </p>
+    </div>
   )
 }
 

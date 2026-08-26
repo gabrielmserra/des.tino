@@ -1393,11 +1393,10 @@ def get_debt_overview() -> dict:
 # ---------------------------------------------------------------------------
 # Contas Fixas
 # ---------------------------------------------------------------------------
-# Diferente de Dívidas/Metas: pagar uma conta fixa CRIA um lançamento real
-# (Saída Fixa) e mexe no saldo — é o oposto de propósito, por isso as
-# operações de pagar/desfazer passam pela RPC (pay_fixed_bill_instance /
-# undo_fixed_bill_payment), que cria/apaga a transação atomicamente no
-# Postgres em vez de fazer os dois passos separados aqui no cliente.
+# Igual Dívidas/Metas: marcar como paga é só um checklist — nunca cria
+# lançamento nem mexe no saldo. As instâncias mensais usam due_year/
+# due_month (calendário real), não o mês de cobrança do app — vencimento
+# de conta é uma data real, não muda com o dia de corte da importação.
 
 _fixed_bills_cache: Optional[List[dict]] = None
 _fixed_bill_instances_cache: Optional[List[dict]] = None
@@ -1426,11 +1425,11 @@ def get_fixed_bill_instances() -> List[dict]:
     return list(_fixed_bill_instances_cache)
 
 
-def ensure_fixed_bill_instances(month_id: int) -> None:
+def ensure_fixed_bill_instances(year: int, month: int) -> None:
     """Idempotente — garante que toda conta fixa ativa tenha uma instância
-    nesse mês. Chamar sempre que a tela de Contas Fixas ou o Dashboard
-    carregarem o mês corrente."""
-    get_client().rpc("ensure_fixed_bill_instances", {"p_month_id": month_id}).execute()
+    nesse ano/mês REAL (calendário, não o mês de cobrança). Chamar sempre
+    que a tela de Contas Fixas ou o Dashboard carregarem."""
+    get_client().rpc("ensure_fixed_bill_instances", {"p_year": year, "p_month": month}).execute()
     _invalidate_fixed_bills()
 
 
@@ -1468,26 +1467,19 @@ def update_fixed_bill_instance_amount(instance_id: int, amount: float) -> None:
     _invalidate_fixed_bills()
 
 
-def pay_fixed_bill_instance(instance_id: int, month_id: int,
-                            payment_method: Optional[str]) -> int:
-    """Cria a transação (Saída Fixa) e marca a instância como paga.
-    `month_id` só serve pra invalidar o cache de lançamentos certo."""
-    resp = get_client().rpc("pay_fixed_bill_instance", {
-        "p_instance_id": instance_id, "p_payment_method": payment_method,
-    }).execute()
+def pay_fixed_bill_instance(instance_id: int) -> None:
+    """Só marca a instância como paga — não lança gasto nem mexe no saldo."""
+    get_client().rpc("pay_fixed_bill_instance", {"p_instance_id": instance_id}).execute()
     _invalidate_fixed_bills()
-    _invalidate(month_id)
-    return resp.data
 
 
-def undo_fixed_bill_payment(instance_id: int, month_id: int) -> None:
+def undo_fixed_bill_payment(instance_id: int) -> None:
     get_client().rpc("undo_fixed_bill_payment", {"p_instance_id": instance_id}).execute()
     _invalidate_fixed_bills()
-    _invalidate(month_id)
 
 
-def get_pending_fixed_bills_total(month_id: int) -> float:
-    resp = get_client().rpc("get_pending_fixed_bills_total", {"p_month_id": month_id}).execute()
+def get_pending_fixed_bills_total(year: int, month: int) -> float:
+    resp = get_client().rpc("get_pending_fixed_bills_total", {"p_year": year, "p_month": month}).execute()
     return float(resp.data or 0)
 
 

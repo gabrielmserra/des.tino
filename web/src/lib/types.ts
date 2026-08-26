@@ -201,7 +201,8 @@ export type FixedBill = {
 export type FixedBillInstance = {
   id: number
   bill_id: number
-  month_id: number
+  due_year: number
+  due_month: number
   amount: number
   paid_at: string | null
   expense_id: number | null

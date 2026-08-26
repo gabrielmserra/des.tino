@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   fetchFixedBills,
@@ -10,11 +10,15 @@ import {
   updateFixedBillInstanceAmount,
   payFixedBillInstance,
   undoFixedBillPayment,
-  ensureMonth,
 } from '../lib/api'
 import { formatCurrency, MONTHS_PT } from '../lib/format'
 import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants'
 import type { FixedBill, FixedBillInstance } from '../lib/types'
+
+const today = new Date()
+const REAL_YEAR = today.getFullYear()
+const REAL_MONTH = today.getMonth() + 1
+const REAL_MONTH_NAME = `${MONTHS_PT[today.getMonth()]} ${REAL_YEAR}`
 
 function parseAmount(raw: string): number {
   const s = raw.trim().replace(/\./g, '').replace(',', '.')
@@ -26,44 +30,32 @@ const METHOD_KEYS = Object.keys(PAYMENT_METHODS)
 
 export function FixedBills() {
   const qc = useQueryClient()
-  const [monthId, setMonthId] = useState<number | null>(null)
-  const [monthName, setMonthName] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editBill, setEditBill] = useState<FixedBill | null>(null)
   const [payTarget, setPayTarget] = useState<{ bill: FixedBill; inst: FixedBillInstance } | null>(null)
   const [undoTarget, setUndoTarget] = useState<FixedBillInstance | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<FixedBill | null>(null)
-  const [error, setError] = useState('')
 
-  useEffect(() => {
-    const now = new Date()
-    const name = `${MONTHS_PT[now.getMonth()]} ${now.getFullYear()}`
-    ensureMonth(name, now.getFullYear(), now.getMonth() + 1)
-      .then((id) => {
-        setMonthId(id)
-        setMonthName(name)
-        return ensureFixedBillInstances(id)
-      })
-      .then(() => {
-        qc.invalidateQueries({ queryKey: ['fixedBillInstances'] })
-      })
-      .catch((e) => setError('Erro ao carregar o mês atual: ' + (e as Error).message))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
+  const ensureQ = useQuery({
+    queryKey: ['ensureFixedBillInstances', REAL_YEAR, REAL_MONTH],
+    queryFn: () => ensureFixedBillInstances(REAL_YEAR, REAL_MONTH),
+  })
   const billsQ = useQuery({ queryKey: ['fixedBills'], queryFn: fetchFixedBills })
-  const instQ = useQuery({ queryKey: ['fixedBillInstances'], queryFn: fetchFixedBillInstances })
+  const instQ = useQuery({
+    queryKey: ['fixedBillInstances'],
+    queryFn: fetchFixedBillInstances,
+    enabled: ensureQ.isSuccess,
+  })
 
   const bills = (billsQ.data ?? []).filter((b) => b.active)
   const instances = instQ.data ?? []
-  const loading = billsQ.isLoading || instQ.isLoading || monthId == null
+  const loading = billsQ.isLoading || instQ.isLoading || ensureQ.isLoading
 
   async function invalidateAll() {
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['fixedBills'] }),
       qc.invalidateQueries({ queryKey: ['fixedBillInstances'] }),
-      qc.invalidateQueries({ queryKey: ['transactions'] }),
-      qc.invalidateQueries({ queryKey: ['summary'] }),
+      qc.invalidateQueries({ queryKey: ['pendingFixedBills'] }),
     ])
   }
 
@@ -79,17 +71,9 @@ export function FixedBills() {
           + Nova conta
         </button>
       </div>
-      {monthName && (
-        <p className="mb-3 text-sm" style={{ color: 'var(--muted)' }}>
-          Mês corrente: {monthName}
-        </p>
-      )}
-
-      {error && (
-        <p className="mb-3 text-sm" style={{ color: 'var(--red)' }}>
-          {error}
-        </p>
-      )}
+      <p className="mb-3 text-sm" style={{ color: 'var(--muted)' }}>
+        Mês corrente: {REAL_MONTH_NAME}
+      </p>
 
       {loading ? (
         <p className="py-10 text-center text-sm" style={{ color: 'var(--muted)' }}>
@@ -102,7 +86,9 @@ export function FixedBills() {
       ) : (
         <div className="flex flex-col gap-3">
           {bills.map((bill) => {
-            const inst = instances.find((i) => i.bill_id === bill.id && i.month_id === monthId)
+            const inst = instances.find(
+              (i) => i.bill_id === bill.id && i.due_year === REAL_YEAR && i.due_month === REAL_MONTH,
+            )
             const amount = inst ? inst.amount : bill.expected_amount
             const paid = Boolean(inst?.paid_at)
             return (
@@ -166,12 +152,12 @@ export function FixedBills() {
         </div>
       )}
 
-      {showForm && monthId != null && (
+      {showForm && (
         <FixedBillFormSheet
           onClose={() => setShowForm(false)}
           onSave={async (r) => {
             await createFixedBill(r.name, r.amount, r.dueDay, r.category, r.paymentMethod)
-            await ensureFixedBillInstances(monthId)
+            await ensureFixedBillInstances(REAL_YEAR, REAL_MONTH)
             await invalidateAll()
             setShowForm(false)
           }}
@@ -199,11 +185,11 @@ export function FixedBills() {
           bill={payTarget.bill}
           inst={payTarget.inst}
           onClose={() => setPayTarget(null)}
-          onConfirm={async (amount, paymentMethod) => {
+          onConfirm={async (amount) => {
             if (Math.abs(amount - payTarget.inst.amount) > 0.001) {
               await updateFixedBillInstanceAmount(payTarget.inst.id, amount)
             }
-            await payFixedBillInstance(payTarget.inst.id, paymentMethod)
+            await payFixedBillInstance(payTarget.inst.id)
             await invalidateAll()
             setPayTarget(null)
           }}
@@ -213,7 +199,7 @@ export function FixedBills() {
       {undoTarget && (
         <ConfirmSheet
           title="Desfazer pagamento?"
-          message="O lançamento (Saída Fixa) criado será removido junto."
+          message="A conta volta a aparecer como pendente."
           confirmText="Desfazer"
           onClose={() => setUndoTarget(null)}
           onConfirm={async () => {
@@ -380,9 +366,8 @@ function FixedBillFormSheet({
 
 function PayBillSheet({
   bill, inst, onClose, onConfirm,
-}: { bill: FixedBill; inst: FixedBillInstance; onClose: () => void; onConfirm: (amount: number, paymentMethod: string | null) => Promise<void> }) {
+}: { bill: FixedBill; inst: FixedBillInstance; onClose: () => void; onConfirm: (amount: number) => Promise<void> }) {
   const [amount, setAmount] = useState(String(inst.amount).replace('.', ','))
-  const [method, setMethod] = useState(bill.payment_method ?? METHOD_KEYS[0])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -392,7 +377,7 @@ function PayBillSheet({
     setBusy(true)
     setError('')
     try {
-      await onConfirm(amt, method)
+      await onConfirm(amt)
     } catch (e) {
       setError('Erro ao pagar: ' + (e as Error).message)
     } finally {
@@ -405,7 +390,10 @@ function PayBillSheet({
       <h2 className="mb-1 text-center text-lg font-bold" style={{ color: 'var(--primary)' }}>
         Confirmar pagamento
       </h2>
-      <p className="mb-4 text-center text-sm">{bill.name}</p>
+      <p className="mb-1 text-center text-sm">{bill.name}</p>
+      <p className="mb-4 text-center text-xs" style={{ color: 'var(--muted)' }}>
+        Só marca a conta como paga — não lança despesa nem mexe no saldo.
+      </p>
 
       <input
         value={amount} onChange={(e) => setAmount(e.target.value)}
@@ -413,13 +401,6 @@ function PayBillSheet({
         className="mb-3 w-full rounded-lg border px-3 py-3 text-base outline-none"
         style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
       />
-      <select
-        value={method} onChange={(e) => setMethod(e.target.value)}
-        className="mb-3 w-full rounded-lg border px-3 py-3 text-base outline-none"
-        style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
-      >
-        {METHOD_KEYS.map((k) => <option key={k} value={k}>{PAYMENT_METHODS[k]}</option>)}
-      </select>
 
       {error && <p className="mb-3 text-sm" style={{ color: 'var(--red)' }}>{error}</p>}
 

@@ -4,6 +4,7 @@ Configurável: o usuário escolhe quais widgets aparecem e em que ordem (botão
 "Editar Dashboard"), config salva em user_settings.dashboard_widgets e
 sincronizada com o site/celular (mesma coluna, mesmo formato)."""
 import customtkinter as ctk
+from datetime import date
 from typing import Optional, Callable
 
 import database as db
@@ -212,7 +213,25 @@ class Dashboard(ctk.CTkScrollableFrame):
         return self._make_kpi_widget(parent, "saldo_beneficios", "SALDO VR/VA", T.GOLD)
 
     def _build_widget_kpi_saldo_apos_contas(self, parent) -> ctk.CTkFrame:
-        return self._make_kpi_widget(parent, "saldo_apos_contas", "SALDO APÓS CONTAS", T.GOLD)
+        # Não usa _make_kpi (compartilhado com todos os KPIs compactos) —
+        # precisa de uma linha extra pro aviso de vencimento, então tem seu
+        # próprio layout com o padding ajustado pra não ficar maior que os
+        # outros cards compactos.
+        card = ctk.CTkFrame(parent, fg_color=T.CARD, corner_radius=14,
+                            border_width=1, border_color=T.BORDER)
+        ctk.CTkFrame(card, height=3, fg_color=T.GOLD, corner_radius=2).pack(
+            fill="x", padx=8, pady=(10, 0))
+        ctk.CTkLabel(card, text="SALDO APÓS CONTAS", font=F(10, "bold"),
+                     text_color=T.MUTED).pack(pady=(10, 2))
+        card.val_lbl = ctk.CTkLabel(card, text="R$ 0,00",
+                                    font=F(18, "bold"), text_color=T.GOLD)
+        card.val_lbl.pack(pady=(0, 2))
+        card.warning_lbl = ctk.CTkLabel(card, text="", font=F(9, "bold"),
+                                        text_color=T.RED, wraplength=150, height=12)
+        card.warning_lbl.pack(pady=(0, 6))
+        self._card_lbls["saldo_apos_contas"] = (card.val_lbl, T.GOLD)
+        self._saldo_contas_warning_lbl = card.warning_lbl
+        return card
 
     def _build_widget_kpi_investimentos_mes(self, parent) -> ctk.CTkFrame:
         return self._make_kpi_widget(parent, "total_investimentos", "INVESTIMENTOS MÊS",
@@ -445,6 +464,8 @@ class Dashboard(ctk.CTkScrollableFrame):
         for key, (lbl, default_color) in self._card_lbls.items():
             if key in ("investimentos_total", "saldo_beneficios", "saldo_apos_contas"):
                 lbl.configure(text="...", text_color=default_color)
+                if key == "saldo_apos_contas" and hasattr(self, "_saldo_contas_warning_lbl"):
+                    self._saldo_contas_warning_lbl.configure(text="")
                 continue
             val   = s.get(key, 0.0)
             color = (T.GREEN if val >= 0 else T.RED) if key == "saldo_acumulado" else default_color
@@ -504,10 +525,28 @@ class Dashboard(ctk.CTkScrollableFrame):
             except Exception:
                 benefit_total = 0.0
             try:
-                pending_bills = db.get_pending_fixed_bills_total(self.month_id)
+                hoje = date.today()
+                db.ensure_fixed_bill_instances(hoje.year, hoje.month)
+                pending_bills = db.get_pending_fixed_bills_total(hoje.year, hoje.month)
                 saldo_apos_contas = s.get("saldo_acumulado", 0.0) - pending_bills
+
+                bills_by_id = {b["id"]: b for b in db.get_fixed_bills()}
+                overdue = []
+                for inst in db.get_fixed_bill_instances():
+                    if (inst["due_year"] == hoje.year and inst["due_month"] == hoje.month
+                            and not inst.get("paid_at")):
+                        bill = bills_by_id.get(inst["bill_id"])
+                        if bill and int(bill["due_day"]) < hoje.day:
+                            overdue.append(bill)
+                if not overdue:
+                    contas_warning = ""
+                elif len(overdue) == 1:
+                    contas_warning = f"⚠ {overdue[0]['name']} venceu dia {overdue[0]['due_day']}"
+                else:
+                    contas_warning = f"⚠ {len(overdue)} contas venceram"
             except Exception:
                 saldo_apos_contas = s.get("saldo_acumulado", 0.0)
+                contas_warning = ""
             try:
                 goals = db.get_goals()
             except Exception:
@@ -631,7 +670,7 @@ class Dashboard(ctk.CTkScrollableFrame):
                 self.after(0, lambda cp=card_payments: self._draw_credit_panel(cards, s, cp))
             self.after(0, lambda t=total_inv: self._update_total_inv(t))
             self.after(0, lambda t=benefit_total: self._update_benefit_balance(t))
-            self.after(0, lambda t=saldo_apos_contas: self._update_saldo_apos_contas(t))
+            self.after(0, lambda t=saldo_apos_contas, w=contas_warning: self._update_saldo_apos_contas(t, w))
             if hasattr(self, "_tips_frame"):
                 self.after(0, lambda g=goals, c=pie_data, h=history,
                            iv=investments, ti=total_inv, uc=total_unpaid_cards:
@@ -683,12 +722,14 @@ class Dashboard(ctk.CTkScrollableFrame):
             lbl, color = entry
             lbl.configure(text=format_currency(total), text_color=color)
 
-    def _update_saldo_apos_contas(self, total: float) -> None:
+    def _update_saldo_apos_contas(self, total: float, warning: str = "") -> None:
         entry = self._card_lbls.get("saldo_apos_contas")
         if entry:
             lbl, default_color = entry
             color = T.GREEN if total >= 0 else T.RED
             lbl.configure(text=format_currency(total), text_color=color)
+        if hasattr(self, "_saldo_contas_warning_lbl"):
+            self._saldo_contas_warning_lbl.configure(text=warning)
 
     # ------------------------------------------------------------------
     def _build_pie_figure(self, data: list):

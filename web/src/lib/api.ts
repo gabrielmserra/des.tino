@@ -652,9 +652,9 @@ export async function syncDebtsIntoPlan(monthId: number): Promise<boolean> {
 }
 
 // ── Contas Fixas ─────────────────────────────────────────────────────
-// Diferente de Dívidas/Metas: pagar cria um lançamento real (Saída Fixa)
-// e mexe no saldo — por isso paga/desfaz sempre passam pela RPC, que faz
-// isso atomicamente no Postgres (ver docs/migrations/024_contas_fixas.sql).
+// Igual Dívidas/Metas: marcar como paga é só um checklist — nunca cria
+// lançamento nem mexe no saldo. Instâncias usam due_year/due_month
+// (calendário real), não o mês de cobrança do app.
 
 export async function fetchFixedBills(): Promise<FixedBill[]> {
   const { data, error } = await supabase
@@ -671,9 +671,10 @@ export async function fetchFixedBillInstances(): Promise<FixedBillInstance[]> {
   return data ?? []
 }
 
-export async function ensureFixedBillInstances(monthId: number): Promise<void> {
-  const { error } = await supabase.rpc('ensure_fixed_bill_instances', { p_month_id: monthId })
+export async function ensureFixedBillInstances(year: number, month: number): Promise<true> {
+  const { error } = await supabase.rpc('ensure_fixed_bill_instances', { p_year: year, p_month: month })
   if (error) throw error
+  return true
 }
 
 export async function createFixedBill(
@@ -710,12 +711,9 @@ export async function updateFixedBillInstanceAmount(instanceId: number, amount: 
   if (error) throw error
 }
 
-export async function payFixedBillInstance(instanceId: number, paymentMethod: string | null): Promise<number> {
-  const { data, error } = await supabase.rpc('pay_fixed_bill_instance', {
-    p_instance_id: instanceId, p_payment_method: paymentMethod,
-  })
+export async function payFixedBillInstance(instanceId: number): Promise<void> {
+  const { error } = await supabase.rpc('pay_fixed_bill_instance', { p_instance_id: instanceId })
   if (error) throw error
-  return data as number
 }
 
 export async function undoFixedBillPayment(instanceId: number): Promise<void> {
@@ -723,8 +721,8 @@ export async function undoFixedBillPayment(instanceId: number): Promise<void> {
   if (error) throw error
 }
 
-export async function fetchPendingFixedBillsTotal(monthId: number): Promise<number> {
-  const { data, error } = await supabase.rpc('get_pending_fixed_bills_total', { p_month_id: monthId })
+export async function fetchPendingFixedBillsTotal(year: number, month: number): Promise<number> {
+  const { data, error } = await supabase.rpc('get_pending_fixed_bills_total', { p_year: year, p_month: month })
   if (error) throw error
   return Number(data ?? 0)
 }

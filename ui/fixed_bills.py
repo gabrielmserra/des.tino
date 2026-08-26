@@ -1,9 +1,10 @@
 """Contas Fixas: internet, luz, água, aluguel, condomínio — contas que se
-repetem todo mês, cada uma com dia de vencimento e um checklist
-pago/pendente. Diferente de Dívidas/Metas: marcar como paga CRIA um
-lançamento real (Saída Fixa) e mexe no saldo — ver database.py."""
+repetem todo mês (calendário real, não o mês de cobrança), cada uma com
+dia de vencimento e um checklist pago/pendente. Igual Dívidas/Metas:
+marcar como paga NUNCA cria lançamento nem mexe no saldo — ver
+database.py."""
 import threading
-from datetime import datetime
+from datetime import date, datetime
 from typing import Callable, Optional
 
 import customtkinter as ctk
@@ -12,7 +13,7 @@ import database as db
 import ui.theme as T
 from ui.theme import F
 from ui.debts import _BaseDialog, _parse_amount
-from utils.helpers import format_currency, CATEGORIES, PAYMENT_METHODS
+from utils.helpers import format_currency, CATEGORIES, MONTHS_PT, PAYMENT_METHODS
 
 _METHOD_LABELS = list(PAYMENT_METHODS.values())
 _LABEL_TO_METHOD_KEY = {v: k for k, v in PAYMENT_METHODS.items()}
@@ -23,7 +24,7 @@ class FixedBillsTab(ctk.CTkFrame):
     def __init__(self, parent, on_change: Optional[Callable] = None):
         super().__init__(parent, fg_color=T.BG, corner_radius=0)
         self._on_change = on_change
-        self._month: Optional[dict] = None
+        self._today = date.today()
         self._bills: list = []
         self._insts: list = []
 
@@ -67,35 +68,28 @@ class FixedBillsTab(ctk.CTkFrame):
                      font=F(13), text_color=T.MUTED).pack(pady=40)
 
         def _fetch():
+            today = self._today
             try:
-                today = datetime.now()
-                month = db._ensure_month(today.year, today.month)
-                db.ensure_fixed_bill_instances(month["id"])
+                db.ensure_fixed_bill_instances(today.year, today.month)
                 bills = db.get_fixed_bills()
                 insts = db.get_fixed_bill_instances()
             except Exception:
-                month, bills, insts = None, [], []
-            self.after(0, lambda: self._apply(month, bills, insts))
+                bills, insts = [], []
+            self.after(0, lambda: self._apply(bills, insts))
 
         threading.Thread(target=_fetch, daemon=True).start()
 
-    def _apply(self, month, bills, insts) -> None:
-        self._month = month
+    def _apply(self, bills, insts) -> None:
         self._bills = bills
         self._insts = insts
-        if month:
-            self._month_lbl.configure(text=f"Mês corrente: {month['name']}")
+        month_name = f"{MONTHS_PT[self._today.month - 1]} {self._today.year}"
+        self._month_lbl.configure(text=f"Mês corrente: {month_name}")
         self._render_list()
 
     # ------------------------------------------------------------------
     def _render_list(self) -> None:
         for w in self._scroll.winfo_children():
             w.destroy()
-
-        if not self._month:
-            ctk.CTkLabel(self._scroll, text="Erro ao carregar o mês atual.",
-                         font=F(13), text_color=T.RED).pack(pady=40)
-            return
 
         active_bills = [b for b in self._bills if b.get("active", True)]
         if not active_bills:
@@ -110,7 +104,8 @@ class FixedBillsTab(ctk.CTkFrame):
         for bill in active_bills:
             inst = next((i for i in self._insts
                         if i["bill_id"] == bill["id"]
-                        and i["month_id"] == self._month["id"]), None)
+                        and i["due_year"] == self._today.year
+                        and i["due_month"] == self._today.month), None)
             self._make_bill_card(bill, inst)
 
     def _make_bill_card(self, bill: dict, inst: Optional[dict]) -> None:
@@ -226,26 +221,24 @@ class FixedBillsTab(ctk.CTkFrame):
         self.winfo_toplevel().wait_window(dlg)
         if not dlg.confirmed:
             return
-        month_id = self._month["id"]
         new_amount = dlg.new_amount
 
         def op():
             if new_amount is not None and abs(new_amount - float(inst["amount"])) > 0.001:
                 db.update_fixed_bill_instance_amount(inst["id"], new_amount)
-            db.pay_fixed_bill_instance(inst["id"], month_id, dlg.payment_method)
+            db.pay_fixed_bill_instance(inst["id"])
 
         self._run(op)
 
     def _undo(self, inst: dict) -> None:
         from ui.dialogs import ConfirmDialog
-        month_id = self._month["id"]
         ConfirmDialog(
             self.winfo_toplevel(),
             title="Desfazer pagamento?",
-            message="O lançamento (Saída Fixa) criado será removido junto.\nConfirmar?",
+            message="A conta volta a aparecer como pendente. Confirmar?",
             confirm_text="Desfazer",
             on_confirm=lambda: self._run(
-                lambda: db.undo_fixed_bill_payment(inst["id"], month_id)),
+                lambda: db.undo_fixed_bill_payment(inst["id"])),
             danger=True,
         )
 
@@ -334,9 +327,8 @@ class _PayBillDialog(_BaseDialog):
     def __init__(self, parent, bill: dict, inst: dict):
         self.confirmed = False
         self.new_amount: Optional[float] = None
-        self.payment_method: Optional[str] = None
         self._bill, self._inst = bill, inst
-        super().__init__(parent, "Pagar conta", 420, 280)
+        super().__init__(parent, "Pagar conta", 420, 260)
         self._build()
 
     def _build(self) -> None:
@@ -345,27 +337,24 @@ class _PayBillDialog(_BaseDialog):
         ctk.CTkLabel(self, text="Confirmar pagamento", font=F(15, "bold"),
                      text_color=T.GREEN).grid(row=0, column=0, pady=(22, 4))
         ctk.CTkLabel(self, text=self._bill["name"], font=F(13),
-                     text_color=T.TEXT).grid(row=1, column=0, pady=(0, 12))
+                     text_color=T.TEXT).grid(row=1, column=0, pady=(0, 4))
+        ctk.CTkLabel(self, text="Só marca a conta como paga — não lança\n"
+                                 "despesa nem mexe no saldo.",
+                     font=F(11), text_color=T.MUTED, justify="center").grid(
+            row=2, column=0, pady=(0, 12))
 
         ctk.CTkLabel(self, text="VALOR (R$)", font=F(11, "bold"),
                      text_color=T.MUTED, anchor="w").grid(
-            row=2, column=0, padx=28, sticky="w")
+            row=3, column=0, padx=28, sticky="w")
         self._amount = self._entry(self)
-        self._amount.grid(row=3, column=0, padx=28, sticky="ew")
+        self._amount.grid(row=4, column=0, padx=28, sticky="ew")
         self._amount.insert(0, f"{float(self._inst['amount']):.2f}".replace(".", ","))
 
-        ctk.CTkLabel(self, text="FORMA DE PAGAMENTO", font=F(11, "bold"),
-                     text_color=T.MUTED, anchor="w").grid(
-            row=4, column=0, padx=28, pady=(10, 0), sticky="w")
-        self._method = self._combo(self, _METHOD_LABELS)
-        self._method.set(_METHOD_KEY_TO_LABEL.get(self._bill.get("payment_method"), _METHOD_LABELS[0]))
-        self._method.grid(row=5, column=0, padx=28, sticky="ew")
-
         self._err = ctk.CTkLabel(self, text="", font=F(11), text_color=T.RED)
-        self._err.grid(row=6, column=0, padx=28, pady=(8, 0), sticky="w")
+        self._err.grid(row=5, column=0, padx=28, pady=(8, 0), sticky="w")
 
         btns = ctk.CTkFrame(self, fg_color="transparent")
-        btns.grid(row=7, column=0, pady=16)
+        btns.grid(row=6, column=0, pady=16)
         ctk.CTkButton(btns, text="Cancelar", width=110,
                       fg_color=T.CARD2, hover_color=T.BORDER_L,
                       border_width=1, border_color=T.BORDER_L,
@@ -380,6 +369,5 @@ class _PayBillDialog(_BaseDialog):
             self._err.configure(text="Informe um valor positivo.")
             return
         self.new_amount = amount
-        self.payment_method = _LABEL_TO_METHOD_KEY.get(self._method.get())
         self.confirmed = True
         self.destroy()
