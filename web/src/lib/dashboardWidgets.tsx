@@ -26,7 +26,7 @@ import {
   payCardBill,
   type MonthSeriesPoint,
 } from './api'
-import { formatCurrency, MONTHS_PT } from './format'
+import { formatCurrency, MONTHS_PT, dateFromDaysUntil } from './format'
 import { PAYMENT_METHODS } from './constants'
 import { buildTips } from './tips'
 import { safetyMessage } from '../pages/Cards'
@@ -449,6 +449,7 @@ function CartoesSituacaoWidget() {
         <div className="flex flex-col gap-2.5">
           {cards.map((c) => {
             const safety = safetyMessage(c)
+            const pctUsed = c.card_limit > 0 ? Math.min(1, c.spent / c.card_limit) : 0
             return (
               <div key={c.id} className="rounded-xl border p-3" style={{ borderColor: 'var(--border-l)' }}>
                 <div className="mb-1 flex items-center justify-between gap-2">
@@ -460,6 +461,32 @@ function CartoesSituacaoWidget() {
                     {safety.text}
                   </span>
                 </div>
+
+                {c.card_limit > 0 && (
+                  <>
+                    <div className="mb-1 flex items-baseline justify-between">
+                      <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
+                        {formatCurrency(c.spent)} de {formatCurrency(c.card_limit)}
+                      </span>
+                      {c.available != null && (
+                        <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
+                          Disponível: {formatCurrency(c.available)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--border)' }}>
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${pctUsed * 100}%`, background: pctUsed > 0.85 ? 'var(--red)' : c.color }}
+                      />
+                    </div>
+                  </>
+                )}
+
+                <p className="mb-2 text-[11px]" style={{ color: 'var(--muted)' }}>
+                  Fecha {dateFromDaysUntil(c.days_until_closing)} · Vence {dateFromDaysUntil(c.days_until_due)}
+                </p>
+
                 {c.unpaid > 0 ? (
                   <button
                     onClick={() => pay(c.id, c.unpaid, c.name)}

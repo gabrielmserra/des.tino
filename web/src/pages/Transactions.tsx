@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowDownWideNarrow, ArrowUpWideNarrow, Download } from 'lucide-react'
+import { ArrowDownWideNarrow, ArrowUpWideNarrow, Download, X } from 'lucide-react'
 import { useMonths } from '../lib/month'
 import { useTxForm } from '../lib/txform'
 import { fetchTransactions, fetchCardsBasic, fetchDebitCardsBasic, fetchBenefitsBasic } from '../lib/api'
 import { Skeleton } from '../components/Skeleton'
 import { formatCurrency, formatDate } from '../lib/format'
-import { PAYMENT_METHODS } from '../lib/constants'
+import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants'
 import type { Transaction, TxType, CardBasic, DebitCard, BenefitBasic } from '../lib/types'
 
 const IS_INCOME: Record<TxType, boolean> = {
@@ -48,6 +48,8 @@ export function Transactions() {
   const { openEdit } = useTxForm()
   const [filter, setFilter] = useState<Filter>('todos')
   const [sortOrder, setSortOrder] = useState<SortOrder>('recentes')
+  const [categoryFilter, setCategoryFilter] = useState<string>('')
+  const [methodFilter, setMethodFilter] = useState<string>('')
   const [exporting, setExporting] = useState(false)
 
   const { data, isLoading } = useQuery({
@@ -60,12 +62,15 @@ export function Transactions() {
   const benefitsQ = useQuery({ queryKey: ['benefitsBasic'], queryFn: fetchBenefitsBasic })
 
   const all = data ?? []
+  const hasActiveFilters = filter !== 'todos' || categoryFilter !== '' || methodFilter !== ''
   const txs = all
     .filter((t) => {
       if (filter === 'entradas') return IS_INCOME[t.type]
       if (filter === 'saidas') return !IS_INCOME[t.type]
       return true
     })
+    .filter((t) => !categoryFilter || (t.category || 'Outros') === categoryFilter)
+    .filter((t) => !methodFilter || t.payment_method === methodFilter)
     .sort((a, b) => {
       const da = txDate(a)
       const db_ = txDate(b)
@@ -116,7 +121,7 @@ export function Transactions() {
         {selected?.name}
       </p>
 
-      <div className="mb-4 flex items-center justify-between gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex gap-2">
           {chip('todos', 'Todos')}
           {chip('entradas', 'Entradas')}
@@ -134,6 +139,41 @@ export function Transactions() {
           )}
           {sortOrder === 'recentes' ? 'Mais recentes' : 'Mais antigos'}
         </button>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="rounded-lg border px-2.5 py-1.5 text-xs font-semibold outline-none"
+          style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+        >
+          <option value="">Todas as categorias</option>
+          {CATEGORIES.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+        <select
+          value={methodFilter}
+          onChange={(e) => setMethodFilter(e.target.value)}
+          className="rounded-lg border px-2.5 py-1.5 text-xs font-semibold outline-none"
+          style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+        >
+          <option value="">Todas as formas de pagamento</option>
+          {Object.entries(PAYMENT_METHODS).map(([k, label]) => (
+            <option key={k} value={k}>{label}</option>
+          ))}
+        </select>
+        {hasActiveFilters && (
+          <button
+            onClick={() => { setFilter('todos'); setCategoryFilter(''); setMethodFilter('') }}
+            className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+            style={{ color: 'var(--muted)' }}
+          >
+            <X size={12} strokeWidth={2.5} />
+            Limpar filtros
+          </button>
+        )}
       </div>
 
       {isLoading ? (

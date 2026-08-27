@@ -417,7 +417,7 @@ class TransactionsTab(ctk.CTkFrame):
         wrapper = ctk.CTkFrame(self, fg_color="transparent")
         wrapper.grid(row=row, column=0, sticky="nsew", padx=28, pady=(14, 24))
         wrapper.grid_columnconfigure(0, weight=1)
-        wrapper.grid_rowconfigure(2, weight=1)
+        wrapper.grid_rowconfigure(3, weight=1)
 
         top = ctk.CTkFrame(wrapper, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew", pady=(0, 10))
@@ -445,11 +445,12 @@ class TransactionsTab(ctk.CTkFrame):
         )
         self._expand_btn.grid(row=0, column=2, sticky="e")
 
-        self._build_quick_add(wrapper, row=1)   # escondido até expandir
+        self._build_filters_row(wrapper, row=1)
+        self._build_quick_add(wrapper, row=2)   # escondido até expandir
 
         table = ctk.CTkFrame(wrapper, fg_color=T.CARD, corner_radius=12,
                              border_width=1, border_color=T.BORDER)
-        table.grid(row=2, column=0, sticky="nsew")
+        table.grid(row=3, column=0, sticky="nsew")
         table.grid_columnconfigure(0, weight=1)
         table.grid_rowconfigure(1, weight=1)
 
@@ -485,6 +486,49 @@ class TransactionsTab(ctk.CTkFrame):
         self._proj_total_lbl = ctk.CTkLabel(
             footer, text="", font=F(11), text_color=T.GOLD)
         # Packed/unpacked in refresh() when expectations exist
+
+    # ------------------------------------------------------------------
+    def _build_filters_row(self, parent, row: int) -> None:
+        """Filtros de categoria e forma de pagamento — combináveis entre si
+        e com a ordenação (não são excludentes)."""
+        bar = ctk.CTkFrame(parent, fg_color="transparent")
+        bar.grid(row=row, column=0, sticky="ew", pady=(0, 10))
+
+        cat_values = ["Todas as categorias"] + (CATEGORIES if self.is_expense else ["Receita"])
+        self._cat_filter_var = ctk.StringVar(value="Todas as categorias")
+        ctk.CTkComboBox(
+            bar, values=cat_values, variable=self._cat_filter_var,
+            command=lambda _=None: self.refresh(),
+            width=170, height=28, corner_radius=7,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.MUTED,
+            button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
+            dropdown_text_color=T.TEXT, font=F(11), state="readonly",
+        ).pack(side="left", padx=(0, 8))
+
+        method_values = ["Todas as formas"] + _METHOD_LABELS
+        self._method_filter_var = ctk.StringVar(value="Todas as formas")
+        ctk.CTkComboBox(
+            bar, values=method_values, variable=self._method_filter_var,
+            command=lambda _=None: self.refresh(),
+            width=170, height=28, corner_radius=7,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.MUTED,
+            button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
+            dropdown_text_color=T.TEXT, font=F(11), state="readonly",
+        ).pack(side="left", padx=(0, 8))
+
+        self._clear_filters_btn = ctk.CTkButton(
+            bar, text="✕ Limpar filtros", command=self._clear_filters,
+            height=24, width=110, corner_radius=6,
+            fg_color="transparent", hover_color=T.CARD2,
+            text_color=T.MUTED, font=F(10),
+        )
+        # packed/esquecido em refresh() — só aparece quando algum filtro
+        # está ativo (diferente do valor "Todas...")
+
+    def _clear_filters(self) -> None:
+        self._cat_filter_var.set("Todas as categorias")
+        self._method_filter_var.set("Todas as formas")
+        self.refresh()
 
     # ------------------------------------------------------------------
     def _build_quick_add(self, parent, row: int) -> None:
@@ -791,6 +835,23 @@ class TransactionsTab(ctk.CTkFrame):
     # ------------------------------------------------------------------
     def refresh(self) -> None:
         txs = db.get_transactions(self.month_id, self.tx_type)
+
+        # Filtros de categoria/forma de pagamento — combináveis entre si e
+        # com a ordenação (aplicados juntos, não são excludentes).
+        cat_filter = self._cat_filter_var.get() if hasattr(self, "_cat_filter_var") else "Todas as categorias"
+        method_filter = self._method_filter_var.get() if hasattr(self, "_method_filter_var") else "Todas as formas"
+        if cat_filter != "Todas as categorias":
+            txs = [t for t in txs if (t.get("category") or "Outros") == cat_filter]
+        if method_filter != "Todas as formas":
+            method_key = _LABEL_TO_METHOD_KEY.get(method_filter)
+            txs = [t for t in txs if t.get("payment_method") == method_key]
+        if hasattr(self, "_clear_filters_btn"):
+            active = cat_filter != "Todas as categorias" or method_filter != "Todas as formas"
+            if active:
+                self._clear_filters_btn.pack(side="left")
+            else:
+                self._clear_filters_btn.pack_forget()
+
         # Ordena pela data real do pagamento (payment_date, ou created_at se
         # não tiver) — não pela ordem de importação/criação no banco.
         reverse = self._sort_order == "recentes"

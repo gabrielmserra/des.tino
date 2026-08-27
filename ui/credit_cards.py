@@ -29,6 +29,14 @@ def _days_until(target_day: int) -> int:
     return (nxt - today).days
 
 
+def _date_from_days_until(days_until: int) -> str:
+    """Data real (DD/MM) a partir de 'daqui a N dias' — pra mostrar a data
+    de fechamento/vencimento de fatura em vez de só 'em Nd'."""
+    from datetime import timedelta
+    d = date.today() + timedelta(days=days_until)
+    return f"{d.day:02d}/{d.month:02d}"
+
+
 def _best_buy_day(closing_day: int) -> int:
     return (closing_day % 28) + 1
 

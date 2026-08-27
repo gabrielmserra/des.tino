@@ -1080,7 +1080,7 @@ class Dashboard(ctk.CTkScrollableFrame):
                            card_payments: list = None) -> None:
         if not hasattr(self, "_credit_frame"):
             return
-        from ui.credit_cards import _all_card_spendings, _days_until
+        from ui.credit_cards import _all_card_spendings, _days_until, _date_from_days_until
 
         for w in self._credit_frame.winfo_children():
             w.destroy()
@@ -1140,10 +1140,16 @@ class Dashboard(ctk.CTkScrollableFrame):
                          font=F(11), text_color=safety_color).pack(side="left")
 
             # Linha de info
-            info_parts = [f"Gasto: {format_currency(spent)}"]
-            if avail is not None:
-                info_parts.append(f"Disponível: {format_currency(avail)}")
-            info_parts += [f"Fecha em {days_cls}d", f"Vence em {days_due}d"]
+            if limit > 0:
+                info_parts = [f"{format_currency(spent)} de {format_currency(limit)}"]
+                if avail is not None:
+                    info_parts.append(f"Disponível: {format_currency(avail)}")
+            else:
+                info_parts = [f"Gasto: {format_currency(spent)}"]
+            info_parts += [
+                f"Fecha {_date_from_days_until(days_cls)}",
+                f"Vence {_date_from_days_until(days_due)}",
+            ]
             ctk.CTkLabel(self._credit_frame,
                          text="  •  ".join(info_parts),
                          font=F(11), text_color=T.MUTED, anchor="w").pack(

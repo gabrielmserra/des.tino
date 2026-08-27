@@ -39,6 +39,14 @@ export function billingMonth(
   return { year, month }
 }
 
+/** Data real (DD/MM) a partir de "daqui a N dias" — usado pra mostrar a
+ * data de fechamento/vencimento de fatura em vez de só "em Nd". */
+export function dateFromDaysUntil(daysUntil: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + daysUntil)
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
 export function todayLabel(): string {
   const d = new Date()
   return `Hoje, ${d.getDate()} de ${MONTHS_PT[d.getMonth()].toLowerCase()} de ${d.getFullYear()}`
