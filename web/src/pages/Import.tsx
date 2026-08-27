@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { detectParser } from '../lib/parsers/registry'
 import type { NormalizedRow } from '../lib/parsers/types'
-import { ensureMonth, importTransactionsBulk, fetchMonths, fetchTransactions, fetchImportCutoffDay } from '../lib/api'
+import { ensureMonth, importTransactionsBulk, fetchMonths, fetchTransactions, fetchImportCutoffDay, fetchCardsBasic } from '../lib/api'
 import { formatCurrency, formatDate, MONTHS_PT, billingMonth } from '../lib/format'
 import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants'
 import type { Transaction } from '../lib/types'
@@ -40,6 +40,9 @@ export function Import() {
   const [fileName, setFileName] = useState('')
   const [importing, setImporting] = useState(false)
   const [doneCount, setDoneCount] = useState<number | null>(null)
+  const [cardId, setCardId] = useState<number | null>(null)
+  const cardsQ = useQuery({ queryKey: ['cardsBasic'], queryFn: fetchCardsBasic })
+  const needsCard = candidates.some((c) => c.isCreditCardCharge)
 
   const patch = (i: number, changes: Partial<Candidate>) =>
     setCandidates((prev) => prev.map((p, pi) => (pi === i ? { ...p, ...changes } : p)))
@@ -107,6 +110,10 @@ export function Import() {
     // Mais recente primeiro.
     cands.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
     setCandidates(cands)
+    if (cands.some((c) => c.isCreditCardCharge) && cardId == null) {
+      const cards = cardsQ.data ?? (await fetchCardsBasic())
+      if (cards.length > 0) setCardId(cards[0].id)
+    }
   }
 
   const onFile = async (file: File) => {
@@ -114,6 +121,7 @@ export function Import() {
     setDoneCount(null)
     setFileName(file.name)
     setCandidates([])
+    setCardId(null)
     setBusy(true)
     try {
       const buf = await file.arrayBuffer()
@@ -138,6 +146,10 @@ export function Import() {
   const confirm = async () => {
     const selected = candidates.filter((c) => c.include && c.monthId != null)
     if (selected.length === 0) return
+    if (needsCard && cardId == null) {
+      setStatus('Escolha o cartão de crédito da fatura antes de confirmar.')
+      return
+    }
     setImporting(true)
     setStatus('')
     try {
@@ -148,8 +160,9 @@ export function Import() {
           description: c.description.trim() || 'Lançamento importado',
           amount: c.amount,
           category: c.category || 'Outros',
-          payment_method: c.paymentMethod,
+          payment_method: c.isCreditCardCharge ? 'credito' : c.paymentMethod,
           payment_date: c.date,
+          card_id: c.isCreditCardCharge ? cardId : null,
         })),
       )
       setDoneCount(selected.length)
@@ -174,7 +187,7 @@ export function Import() {
     <div className="p-4 pb-8">
       <h1 className="mb-1 text-2xl font-bold">Importar extrato</h1>
       <p className="mb-4 text-xs" style={{ color: 'var(--muted)' }}>
-        Banco Inter — arquivos .ofx, .csv ou .pdf do extrato da conta corrente
+        Banco Inter — extrato da conta corrente (.ofx, .csv, .pdf) ou fatura do cartão de crédito (.csv)
       </p>
 
       <div className="mb-4 rounded-2xl border p-4" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
@@ -206,6 +219,23 @@ export function Import() {
             Lendo arquivo…
           </p>
         )}
+        {needsCard && (
+          <div className="mt-3">
+            <label className="mb-1 block text-xs font-bold" style={{ color: 'var(--text)' }}>
+              Cartão de crédito da fatura
+            </label>
+            <select
+              value={cardId ?? ''}
+              onChange={(e) => setCardId(Number(e.target.value))}
+              className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+            >
+              {(cardsQ.data ?? []).map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
         {status && (
           <p className="mt-2 text-sm" style={{ color: 'var(--red)' }}>
             {status}
@@ -226,7 +256,7 @@ export function Import() {
             </span>
             <button
               onClick={confirm}
-              disabled={nSelected === 0 || importing}
+              disabled={nSelected === 0 || importing || (needsCard && cardId == null)}
               className="rounded-lg px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
               style={{ background: 'var(--primary)' }}
             >
@@ -279,18 +309,27 @@ export function Import() {
                       </option>
                     ))}
                   </select>
-                  <select
-                    value={c.paymentMethod}
-                    onChange={(e) => patch(i, { paymentMethod: e.target.value })}
-                    className="flex-1 rounded border px-2 py-1.5 text-xs outline-none"
-                    style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
-                  >
-                    {Object.entries(PAYMENT_METHODS).map(([k, label]) => (
-                      <option key={k} value={k}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+                  {c.isCreditCardCharge ? (
+                    <span
+                      className="flex flex-1 items-center justify-center rounded border px-2 py-1.5 text-xs font-semibold"
+                      style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--muted)' }}
+                    >
+                      💳 Crédito
+                    </span>
+                  ) : (
+                    <select
+                      value={c.paymentMethod}
+                      onChange={(e) => patch(i, { paymentMethod: e.target.value })}
+                      className="flex-1 rounded border px-2 py-1.5 text-xs outline-none"
+                      style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+                    >
+                      {Object.entries(PAYMENT_METHODS).map(([k, label]) => (
+                        <option key={k} value={k}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </div>
             ))}

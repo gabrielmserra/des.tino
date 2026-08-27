@@ -194,8 +194,15 @@ Três tipos de meta, lado a lado:
 
 ## 11. Importação de extrato bancário
 
-- **[Ambas]** Importação de extrato do Banco Inter em três formatos: OFX,
-  CSV e PDF.
+- **[Ambas]** Importação de extrato da conta corrente do Banco Inter em três
+  formatos: OFX, CSV e PDF.
+- **[Ambas]** Importação da **fatura do cartão de crédito** do Banco Inter
+  (só exportável em .csv) — pede qual cartão cadastrado é o dono da fatura
+  (um seletor único pra todo o arquivo) e já lança tudo com forma de
+  pagamento "Crédito" e vinculado a esse cartão. A linha do pagamento
+  automático da fatura (valor negativo) é descartada automaticamente — o
+  app já tem seu próprio fluxo de "Pagar Fatura" pra isso, importar
+  duplicaria o pagamento.
 - **[Ambas]** Categorização automática por palavras-chave na descrição do
   lançamento (ex.: "IFOOD", "UBER", "NETFLIX" → categoria correspondente),
   mantida em sincronia entre desktop (`parsers/base.py`), web

@@ -21,6 +21,7 @@ class NormalizedRow:
     suggested_category:      str  = "Outros"
     suggested_payment_method: str = "outro"
     is_investment_like:      bool = False   # aporte/resgate — sugerido fora por padrão
+    is_credit_card_charge:   bool = False   # veio de fatura de cartão — precisa de card_id
     raw:                     str  = ""      # texto original da linha, p/ debug
     note:                    str  = ""
 

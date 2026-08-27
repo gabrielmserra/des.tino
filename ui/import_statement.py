@@ -30,6 +30,10 @@ class _Candidate:
         self.month_name:  str = ""
         self.dup_label:   str = ""
 
+    @property
+    def is_credit_card_charge(self) -> bool:
+        return self.row.is_credit_card_charge
+
 
 class ImportTab(ctk.CTkFrame):
     def __init__(self, parent, on_change: Callable, on_months_changed: Callable = None):
@@ -38,6 +42,8 @@ class ImportTab(ctk.CTkFrame):
         self.on_months_changed  = on_months_changed or (lambda: None)
         self._candidates: List[_Candidate] = []
         self._busy = False
+        self._cards: List[dict] = []
+        self._card_name_to_id: dict = {}
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(2, weight=1)
         self._build()
@@ -50,7 +56,8 @@ class ImportTab(ctk.CTkFrame):
         ctk.CTkLabel(header, text="Importar Extrato",
                      font=F(26, "bold"), text_color=T.TEXT, anchor="w").grid(
             row=0, column=0, sticky="w")
-        ctk.CTkLabel(header, text="Banco Inter — arquivos .ofx, .csv ou .pdf do extrato da conta corrente",
+        ctk.CTkLabel(header, text="Banco Inter — extrato da conta corrente (.ofx, .csv, .pdf) "
+                                   "ou fatura do cartão de crédito (.csv)",
                      font=F(12), text_color=T.MUTED, anchor="w").grid(
             row=1, column=0, sticky="w", pady=(2, 0))
 
@@ -69,6 +76,23 @@ class ImportTab(ctk.CTkFrame):
             pick_inner, text="Nenhum arquivo selecionado.",
             font=F(12), text_color=T.MUTED, anchor="w")
         self._file_lbl.pack(side="left", padx=(12, 0))
+
+        # Só aparece quando o arquivo importado é uma fatura de cartão de
+        # crédito (todas as linhas precisam de um cartão vinculado).
+        self._card_picker_frame = ctk.CTkFrame(pick, fg_color="transparent")
+        self._card_picker_frame.pack(fill="x", padx=20, pady=(0, 16))
+        self._card_picker_frame.pack_forget()
+        ctk.CTkLabel(self._card_picker_frame, text="Cartão de crédito da fatura:",
+                     font=F(12, "bold"), text_color=T.TEXT).pack(side="left", padx=(0, 8))
+        self._card_var = ctk.StringVar(value="")
+        self._card_combo = ctk.CTkComboBox(
+            self._card_picker_frame, values=[""], variable=self._card_var,
+            command=lambda _=None: self._render_candidates(),
+            width=200, fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            button_color=T.BORDER_L, dropdown_fg_color=T.CARD2, dropdown_text_color=T.TEXT,
+            corner_radius=8, state="readonly",
+        )
+        self._card_combo.pack(side="left")
 
         self._status_lbl = ctk.CTkLabel(
             self, text="", font=F(12), text_color=T.RED, anchor="w")
@@ -134,7 +158,8 @@ class ImportTab(ctk.CTkFrame):
                     self.after(0, lambda: self._show_error(
                         "Nenhum lançamento encontrado nesse arquivo."))
                     return
-                self.after(0, lambda: self._load_candidates(rows))
+                cards = db.get_cards() if any(r.is_credit_card_charge for r in rows) else []
+                self.after(0, lambda: self._load_candidates(rows, cards))
             except Exception as e:
                 msg = str(e)[:200]
                 self.after(0, lambda: self._show_error(f"Erro ao ler o arquivo: {msg}"))
@@ -150,8 +175,24 @@ class ImportTab(ctk.CTkFrame):
         self._status_lbl.configure(text=f"⚠  {msg}")
 
     # ------------------------------------------------------------------
-    def _load_candidates(self, rows: List[NormalizedRow]) -> None:
+    def _load_candidates(self, rows: List[NormalizedRow], cards: Optional[List[dict]] = None) -> None:
         from utils.helpers import month_name_from_num, billing_month
+
+        needs_card = any(r.is_credit_card_charge for r in rows)
+        self._cards = cards or []
+        self._card_name_to_id = {c["name"]: c["id"] for c in self._cards}
+        if needs_card:
+            if not self._cards:
+                self._show_error("Fatura de cartão precisa de pelo menos um cartão de crédito cadastrado.")
+                self._card_picker_frame.pack_forget()
+                return
+            names = list(self._card_name_to_id.keys())
+            self._card_combo.configure(values=names)
+            if self._card_var.get() not in names:
+                self._card_var.set(names[0])
+            self._card_picker_frame.pack(fill="x", padx=20, pady=(0, 16))
+        else:
+            self._card_picker_frame.pack_forget()
 
         # Agrupa por (ano, mês) de cobrança e garante que cada mês exista.
         # Lançamentos a partir do dia de corte (configurável em Configurações,
@@ -247,12 +288,19 @@ class ImportTab(ctk.CTkFrame):
         ).grid(row=0, column=2, rowspan=2, padx=(0, 6), pady=10)
 
         cand.method_var = ctk.StringVar(value=PAYMENT_METHODS.get(r.suggested_payment_method, "Outro"))
-        ctk.CTkComboBox(
-            row, values=_METHOD_LABELS, variable=cand.method_var,
-            width=130, fg_color=T.CARD, border_color=T.BORDER_L, text_color=T.TEXT,
-            button_color=T.BORDER_L, dropdown_fg_color=T.CARD, dropdown_text_color=T.TEXT,
-            corner_radius=6,
-        ).grid(row=0, column=3, rowspan=2, padx=(0, 10), pady=10)
+        if cand.is_credit_card_charge:
+            # Fatura de cartão: forma de pagamento é sempre "Crédito", fixa
+            # (o cartão em si é escolhido uma vez pra toda a fatura, acima).
+            ctk.CTkLabel(
+                row, text="💳 Crédito", font=F(11, "bold"), text_color=T.MUTED,
+            ).grid(row=0, column=3, rowspan=2, padx=(0, 10), pady=10)
+        else:
+            ctk.CTkComboBox(
+                row, values=_METHOD_LABELS, variable=cand.method_var,
+                width=130, fg_color=T.CARD, border_color=T.BORDER_L, text_color=T.TEXT,
+                button_color=T.BORDER_L, dropdown_fg_color=T.CARD, dropdown_text_color=T.TEXT,
+                corner_radius=6,
+            ).grid(row=0, column=3, rowspan=2, padx=(0, 10), pady=10)
 
     def _update_count(self) -> None:
         n_total = len(self._candidates)
@@ -271,12 +319,19 @@ class ImportTab(ctk.CTkFrame):
         if not selected:
             return
 
+        selected_card_id = self._card_name_to_id.get(self._card_var.get())
+
         rows_payload = []
         for c in selected:
             if c.month_id is None:
                 continue
-            method_key = _LABEL_TO_METHOD_KEY.get(c.method_var.get(), "outro")
             tx_type = "entrada_variavel" if c.row.direction == "entrada" else "saida_variavel"
+            if c.is_credit_card_charge:
+                method_key = "credito"
+                card_id = selected_card_id
+            else:
+                method_key = _LABEL_TO_METHOD_KEY.get(c.method_var.get(), "outro")
+                card_id = None
             rows_payload.append({
                 "month_id":       c.month_id,
                 "type":           tx_type,
@@ -285,6 +340,7 @@ class ImportTab(ctk.CTkFrame):
                 "category":       c.cat_var.get() or "Outros",
                 "payment_method": method_key,
                 "payment_date":   c.row.date,
+                "card_id":        card_id,
             })
 
         self._confirm_btn.configure(state="disabled", text="Importando…")

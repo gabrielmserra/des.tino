@@ -66,6 +66,7 @@ export class InterCsvExtratoParser implements BankParser {
         // dos dois campos.
         suggestedPaymentMethod: guessPaymentMethod(`${historico} ${desc}`),
         isInvestmentLike: isInv,
+        isCreditCardCharge: false,
         raw: ln,
       })
     }

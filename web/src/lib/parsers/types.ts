@@ -8,6 +8,7 @@ export type NormalizedRow = {
   suggestedCategory: string
   suggestedPaymentMethod: string
   isInvestmentLike: boolean
+  isCreditCardCharge: boolean
   raw: string
 }
 

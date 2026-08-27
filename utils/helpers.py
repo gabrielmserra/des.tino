@@ -4,7 +4,7 @@ Funções utilitárias reutilizáveis.
 import calendar
 
 APP_NAME    = "des.tino"
-APP_VERSION = "3.9.11"
+APP_VERSION = "3.9.12"
 
 MONTHS_PT = [
     "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",

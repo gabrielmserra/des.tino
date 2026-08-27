@@ -1,9 +1,11 @@
 import type { BankParser } from './types'
 import { InterCsvExtratoParser } from './inter/csvExtrato'
+import { InterCreditCardCsvParser } from './inter/creditCardCsv'
 import { InterOfxParser } from './inter/ofx'
 import { InterPdfExtratoParser } from './inter/pdfExtrato'
 
 export const PARSERS: BankParser[] = [
+  new InterCreditCardCsvParser(),
   new InterCsvExtratoParser(),
   new InterOfxParser(),
   new InterPdfExtratoParser(),

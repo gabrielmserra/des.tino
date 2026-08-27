@@ -93,6 +93,7 @@ export function parseText(text: string): NormalizedRow[] {
       // estar em qualquer um dos dois campos, dependendo do banco.
       suggestedPaymentMethod: guessPaymentMethod(`${tipo} ${desc}`),
       isInvestmentLike: isInv,
+      isCreditCardCharge: false,
       raw: full,
     })
     buffer = []

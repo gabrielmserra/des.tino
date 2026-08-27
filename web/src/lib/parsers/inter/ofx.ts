@@ -65,6 +65,7 @@ export class InterOfxParser implements BankParser {
         suggestedCategory: isInv ? 'Investimentos' : guessCategory(desc),
         suggestedPaymentMethod: guessPaymentMethod(memo),
         isInvestmentLike: isInv,
+        isCreditCardCharge: false,
         raw: block.trim(),
       })
     }
