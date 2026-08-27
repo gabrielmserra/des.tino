@@ -235,6 +235,7 @@ export type Goal = {
   target_amount: number | null
   saved_amount: number
   monthly_amount: number | null
+  schedule_type: string | null
   created_at: string
 }
 
@@ -245,6 +246,7 @@ export type GoalInstallment = {
   amount: number
   due_year: number
   due_month: number
+  due_day: number | null
   contributed_at: string | null
 }
 
@@ -253,4 +255,5 @@ export type GoalInstallmentInput = {
   amount: number
   year: number
   month: number
+  day?: number | null
 }

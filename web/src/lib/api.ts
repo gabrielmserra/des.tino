@@ -886,6 +886,20 @@ export async function createRecurringGoal(
   return data as number
 }
 
+export async function createCustomGoal(
+  name: string,
+  targetAmount: number | null,
+  installments: GoalInstallmentInput[],
+): Promise<number> {
+  const { data, error } = await supabase.rpc('create_custom_goal', {
+    p_name: name,
+    p_target_amount: targetAmount,
+    p_installments: installments,
+  })
+  if (error) throw error
+  return data as number
+}
+
 export async function addGoalInstallments(goalId: number, installments: GoalInstallmentInput[]): Promise<void> {
   const { error } = await supabase.rpc('add_goal_installments', {
     p_goal_id: goalId,

@@ -196,6 +196,75 @@ export function GenerateMoreGoalDialog({ goalName, onClose, onConfirm }: Generat
   )
 }
 
+// ── Adicionar parcela avulsa (meta de cronograma personalizado) ──────
+type AddCustomInstallmentProps = {
+  goalName: string
+  onClose: () => void
+  onConfirm: (day: number, month: number, year: number, amount: number) => void
+}
+
+export function AddCustomInstallmentDialog({ goalName, onClose, onConfirm }: AddCustomInstallmentProps) {
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const [date, setDate] = useState(todayIso)
+  const [value, setValue] = useState('')
+  const [error, setError] = useState('')
+
+  const confirm = () => {
+    const amt = parseAmount(value)
+    if (amt <= 0) return setError('Digite um valor positivo.')
+    if (!date) return setError('Escolha uma data.')
+    const [y, m, d] = date.split('-').map(Number)
+    onConfirm(d, m, y, amt)
+  }
+
+  return (
+    <Sheet onClose={onClose}>
+      <h2 className="mb-1 text-center text-lg font-bold">Adicionar parcela</h2>
+      <p className="mb-4 text-center text-sm" style={{ color: 'var(--muted)' }}>
+        {goalName}
+      </p>
+      <div className="flex flex-col gap-2">
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="rounded-lg border px-3 py-3 text-base outline-none"
+          style={inputStyle}
+        />
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          inputMode="decimal"
+          placeholder="Valor (R$)"
+          className="rounded-lg border px-3 py-3 text-center text-base outline-none"
+          style={inputStyle}
+        />
+      </div>
+      {error && (
+        <p className="mt-2 text-center text-sm" style={{ color: 'var(--red)' }}>
+          {error}
+        </p>
+      )}
+      <div className="mt-3 flex gap-2">
+        <button
+          onClick={onClose}
+          className="flex-1 rounded-lg border py-3 font-semibold"
+          style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={confirm}
+          className="flex-1 rounded-lg py-3 font-bold text-white"
+          style={{ background: 'var(--primary)' }}
+        >
+          Adicionar
+        </button>
+      </div>
+    </Sheet>
+  )
+}
+
 // ── Confirmação genérica (excluir) ───────────────────────────────────
 type ConfirmProps = {
   title: string

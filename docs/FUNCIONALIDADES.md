@@ -27,7 +27,7 @@ exe · **[Web]** só no site/PWA.
 - **[Ambas]** Criar novo período ("+ Novo Período" no desktop; criado
   automaticamente ao navegar pro mês seguinte no web).
 - **[Ambas]** Navegar entre meses já criados.
-- **[Ambas]** Dia de corte configurável (ver [Configurações](#12-configurações)) —
+- **[Ambas]** Dia de corte configurável (ver [Configurações](#13-configurações)) —
   define a partir de que dia do mês um lançamento importado do extrato conta
   pro mês seguinte, alinhado à data de recebimento do salário.
 
@@ -81,11 +81,18 @@ Para cada lançamento:
 
 - **[Ambas]** Cadastro de dívidas com parcelas (nome, valor total, número de
   parcelas, vencimentos).
+- **[Ambas]** Taxa de juros mensal opcional (financiamento de carro, imóvel,
+  etc.) — com a taxa preenchida, "Gerar parcelas" calcula o valor de cada
+  parcela pela Tabela Price (`PMT = valor_total × i / (1 - (1+i)⁻ⁿ)`) em vez
+  de dividir o total igualmente; sem taxa, continua o split simples de
+  sempre. A taxa é exibida ao lado do valor total no card da dívida.
 - **[Ambas]** Marcar parcela como paga — **não gera lançamento nem mexe no
   saldo automaticamente** (é só um checklist de controle; o pagamento real,
   se quiser refletir no saldo, é lançado manualmente como uma Saída).
 - **[Ambas]** Desfazer pagamento de parcela.
-- **[Ambas]** Editar valor de uma parcela específica.
+- **[Ambas]** Editar valor de uma parcela específica (as parcelas geradas
+  pela Tabela Price continuam editáveis manualmente depois, pra ajustar
+  arredondamento do banco ou trocar pra sistema SAC).
 
 ## 7. Investimentos
 
@@ -99,11 +106,11 @@ Para cada lançamento:
 
 ## 8. Metas de poupança
 
-Dois tipos de meta, lado a lado:
+Três tipos de meta, lado a lado:
 
 - **Meta simples** — **[Ambas]** valor-alvo único, contribuições avulsas até
   bater a meta.
-- **Meta recorrente (parcelada)** — **[Ambas]**
+- **Meta recorrente (mensal)** — **[Ambas]**
   - Valor mensal fixo, com ou sem valor-alvo total definido (aceita meta
     "sem fim", recorrente indefinidamente).
   - Gera um cronograma de parcelas mês a mês a partir de um mês inicial
@@ -111,12 +118,45 @@ Dois tipos de meta, lado a lado:
   - Cada parcela pode ser paga/desfeita individualmente, e seu valor pode
     ser editado parcela a parcela.
   - "Gerar mais parcelas" quando o cronograma atual se esgota.
-  - Igual às dívidas: marcar parcela como contribuída **não lança
-    despesa nem mexe no saldo automaticamente** — é controle de checklist.
+  - Alvo definido é sempre recalculado como a soma das parcelas do
+    cronograma (o alvo *é* o cronograma).
+- **Meta de cronograma personalizado** — **[Ambas]**
+  - Em vez de valor mensal fixo, o usuário monta o cronograma manualmente:
+    cada parcela com **qualquer dia e qualquer valor** — ideal pra juntar um
+    valor usando datas variadas dentro do mês (ex: dia 20 e dia 24, datas de
+    salário) em vez de uma cadência mensal única.
+  - Botão **"+ Adicionar parcela"** (em vez de "Gerar mais parcelas") abre
+    o mesmo formulário de data + valor a qualquer momento.
+  - Pagar/desfazer/editar valor de uma parcela funcionam exatamente igual
+    às demais metas — nunca lança despesa nem mexe no saldo.
+  - Com valor-alvo definido, mostra a **soma das parcelas cadastradas vs. o
+    alvo** ("Cronograma: R$ X de R$ Y planejados") — aqui o alvo é
+    independente e **não** é recalculado automaticamente pela soma (ao
+    contrário da meta mensal), então dá pra ver o progresso de montar o
+    cronograma até completar o valor desejado.
 
-## 9. Dashboard
+## 9. Contas Fixas
 
-- **[Ambas]** 17 widgets configuráveis, cada usuário escolhe quais quer ver
+- **[Ambas]** Cadastro de contas recorrentes mensais — internet, luz, água,
+  aluguel, condomínio etc. — cada uma com nome, valor esperado, dia de
+  vencimento, categoria e forma de pagamento padrão.
+- **[Ambas]** Instância do mês **corrente real** (calendário, não o mês de
+  cobrança deslocado pelo dia de corte da importação) é criada
+  automaticamente ao abrir a tela ou o Dashboard.
+- **[Ambas]** Marcar como "paga"/"pendente" é um checklist puro — igual
+  Dívidas e Metas, **não lança despesa nem mexe no saldo automaticamente**.
+  Valor de cada instância do mês é editável antes de marcar como paga
+  (ex.: luz/água variam mês a mês).
+- **[Ambas]** Novo widget no Dashboard: **"Saldo após contas em aberto"** =
+  saldo atual menos as contas do mês real ainda não pagas — mostra também
+  um aviso compacto quando alguma conta pendente já passou do vencimento
+  (ex.: "Internet venceu dia 20"), sem aumentar o tamanho do card.
+- **[Desktop]** Tela acessada pela barra lateral.
+- **[Web]** Tela acessada pela página "Mais" (`/contas-fixas`).
+
+## 10. Dashboard
+
+- **[Ambas]** 18 widgets configuráveis, cada usuário escolhe quais quer ver
   e em que ordem:
 
   | Widget | Tipo |
@@ -125,6 +165,7 @@ Dois tipos de meta, lado a lado:
   | Entradas | KPI |
   | Saídas | KPI |
   | Saldo VR/VA | KPI |
+  | Saldo após contas em aberto | KPI (com aviso de vencimento) |
   | Investimentos do mês | KPI |
   | Investimentos totais | KPI |
   | Despesas por categoria | Gráfico pizza |
@@ -151,7 +192,7 @@ Dois tipos de meta, lado a lado:
   gráfico (não precisa passar o mouse em cima), com tooltip formatado em
   R$ ao passar o mouse.
 
-## 10. Importação de extrato bancário
+## 11. Importação de extrato bancário
 
 - **[Ambas]** Importação de extrato do Banco Inter em três formatos: OFX,
   CSV e PDF.
@@ -174,7 +215,7 @@ Dois tipos de meta, lado a lado:
 - **[Ambas]** Detecção automática de aporte/resgate de investimento durante
   a importação.
 
-## 11. Exportação
+## 12. Exportação
 
 - **[Ambas]** Exportação do mês em **.xlsx** (Excel) formatado: cabeçalho
   com fundo escuro e texto branco em negrito, valores em moeda (R$),
@@ -184,15 +225,25 @@ Dois tipos de meta, lado a lado:
   - **[Desktop]** gerado com `openpyxl`.
   - **[Web]** gerado com `exceljs`, carregado sob demanda só na hora do
     clique em "Exportar" (não pesa no carregamento inicial do site).
+- **[Ambas]** **Relatório Financeiro Completo em PDF**, com período
+  escolhido pelo usuário (De/Até, por mês): resumo (entradas, saídas,
+  saldo, taxa de poupança), evolução do saldo, gastos por categoria e por
+  forma de pagamento, gastos ao longo do período, maiores gastos e a lista
+  completa de lançamentos.
+  - Botão "Baixar Relatório Completo" nas Configurações.
+  - **[Desktop]** gerado com `matplotlib` (gráficos) + `reportlab` (PDF).
+  - **[Web]** gerado com `canvas` nativo (gráficos) + `jsPDF`/`jspdf-autotable`
+    (PDF), carregado sob demanda.
 
-## 12. Configurações
+## 13. Configurações
 
 - **[Ambas]** Dia de corte para importação de extrato (padrão: dia 1, ou
   seja, sem deslocamento de mês) — editável pelo usuário.
 - **[Ambas]** Temas visuais (light/dark e variações), acessível pelo menu
   lateral (desktop) ou tela de Configurações (web).
+- **[Ambas]** Botão "Baixar Relatório Completo" (ver [Exportação](#12-exportação)).
 
-## 13. Atalho de voz (quick-tx)
+## 14. Atalho de voz (quick-tx)
 
 - **[Web/Automação]** Edge Function no Supabase (`quick-tx`) que recebe um
   texto (ex. de um atalho de voz do celular) e cria um lançamento
@@ -202,7 +253,7 @@ Dois tipos de meta, lado a lado:
   function muda — não é publicado automaticamente pelo pipeline normal do
   app.
 
-## 14. Infraestrutura e sincronização
+## 15. Infraestrutura e sincronização
 
 - **[Ambas]** Um único banco Supabase Postgres com Row Level Security por
   usuário — qualquer lançamento feito no desktop aparece no site/celular e

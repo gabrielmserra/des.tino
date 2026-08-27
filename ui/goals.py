@@ -19,14 +19,29 @@ def _parse_amount(raw: str) -> float:
         return 0.0
 
 
+def _installment_sort_key(inst: dict) -> tuple:
+    return (inst["due_year"], inst["due_month"], inst.get("due_day") or 0, inst["installment_number"])
+
+
 def _installment_status(inst: dict) -> str:
     from datetime import date
     if inst.get("contributed_at"):
         return "paga"
     today = date.today()
-    if (inst["due_year"], inst["due_month"]) < (today.year, today.month):
+    due_day = inst.get("due_day")
+    if due_day:
+        if date(inst["due_year"], inst["due_month"], due_day) < today:
+            return "atrasada"
+    elif (inst["due_year"], inst["due_month"]) < (today.year, today.month):
         return "atrasada"
     return "pendente"
+
+
+def _installment_label(inst: dict) -> str:
+    due_day = inst.get("due_day")
+    if due_day:
+        return f"{due_day:02d}/{inst['due_month']:02d}/{inst['due_year']}"
+    return month_name_from_num(inst["due_month"], inst["due_year"])
 
 
 class GoalsTab(ctk.CTkFrame):
@@ -81,7 +96,7 @@ class GoalsTab(ctk.CTkFrame):
         ).grid(row=2, column=2, padx=(6, 6), pady=(4, 0), sticky="ew")
 
         ctk.CTkButton(
-            form, text="↻  Meta recorrente (mensal)", command=self._new_recurring_goal,
+            form, text="↻  Meta com cronograma (mensal ou personalizado)", command=self._new_recurring_goal,
             height=32, corner_radius=8,
             fg_color="transparent", hover_color=T.CARD2,
             border_width=1, border_color=T.BORDER_L,
@@ -144,8 +159,11 @@ class GoalsTab(ctk.CTkFrame):
             return
         r = dlg.result
         try:
-            db.create_recurring_goal(r["name"], r["target_amount"],
-                                     r["monthly_amount"], r["installments"])
+            if r["schedule_type"] == "custom":
+                db.create_custom_goal(r["name"], r["target_amount"], r["installments"])
+            else:
+                db.create_recurring_goal(r["name"], r["target_amount"],
+                                         r["monthly_amount"], r["installments"])
             self.refresh()
             if self._on_change:
                 self._on_change()
@@ -239,8 +257,9 @@ class GoalsTab(ctk.CTkFrame):
         actions.grid(row=3, column=0, sticky="ew", padx=20, pady=(0, 14))
 
         is_recurring = bool(goal.get("monthly_amount"))
+        is_custom    = goal.get("schedule_type") == "custom"
 
-        if not is_recurring:
+        if not is_recurring and not is_custom:
             ctk.CTkButton(
                 actions, text="+ Aportar",
                 command=lambda gid=goal["id"], gname=goal["name"]: self._add_contribution(gid, gname),
@@ -275,21 +294,39 @@ class GoalsTab(ctk.CTkFrame):
             text_color=T.MUTED,
         ).pack(side="left")
 
-        if is_recurring:
+        if is_recurring or is_custom:
+            if is_custom and target is not None:
+                scheduled = sum(float(i["amount"]) for i in insts)
+                ctk.CTkLabel(
+                    card,
+                    text=f"Cronograma: {format_currency(scheduled)}  de  {format_currency(target)}  planejados",
+                    font=F(11), text_color=T.MUTED, anchor="w",
+                ).grid(row=4, column=0, sticky="w", padx=20, pady=(0, 6))
+
             rows_box = ctk.CTkFrame(card, fg_color="transparent")
-            rows_box.grid(row=4, column=0, sticky="ew", padx=20, pady=(0, 14))
+            rows_box.grid(row=5, column=0, sticky="ew", padx=20, pady=(0, 14))
             rows_box.grid_columnconfigure(0, weight=1)
-            for i in sorted(insts, key=lambda x: (x["due_year"], x["due_month"])):
+            for i in sorted(insts, key=_installment_sort_key):
                 self._make_inst_row(rows_box, i)
 
-            ctk.CTkButton(
-                card, text="↻  Gerar mais meses",
-                command=lambda g=goal, ins=insts: self._generate_more(g, ins),
-                height=28, corner_radius=7,
-                fg_color="transparent", hover_color=T.CARD2,
-                border_width=1, border_color=T.BORDER_L,
-                text_color=T.MUTED, font=F(11),
-            ).grid(row=5, column=0, padx=20, pady=(0, 14), sticky="ew")
+            if is_custom:
+                ctk.CTkButton(
+                    card, text="+  Adicionar parcela",
+                    command=lambda g=goal, ins=insts: self._add_custom_installment(g, ins),
+                    height=28, corner_radius=7,
+                    fg_color="transparent", hover_color=T.CARD2,
+                    border_width=1, border_color=T.BORDER_L,
+                    text_color=T.MUTED, font=F(11),
+                ).grid(row=6, column=0, padx=20, pady=(0, 14), sticky="ew")
+            else:
+                ctk.CTkButton(
+                    card, text="↻  Gerar mais meses",
+                    command=lambda g=goal, ins=insts: self._generate_more(g, ins),
+                    height=28, corner_radius=7,
+                    fg_color="transparent", hover_color=T.CARD2,
+                    border_width=1, border_color=T.BORDER_L,
+                    text_color=T.MUTED, font=F(11),
+                ).grid(row=6, column=0, padx=20, pady=(0, 14), sticky="ew")
 
     def _make_inst_row(self, parent, inst: dict) -> None:
         status = _installment_status(inst)
@@ -303,7 +340,7 @@ class GoalsTab(ctk.CTkFrame):
         ctk.CTkLabel(
             row,
             text=f"{paid_mark}{format_currency(float(inst['amount']))}   •   "
-                 f"{month_name_from_num(inst['due_month'], inst['due_year'])}",
+                 f"{_installment_label(inst)}",
             font=F(12), text_color=T.MUTED if status == "paga" else T.TEXT,
             anchor="w",
         ).grid(row=0, column=1, sticky="w", padx=(10, 0))
@@ -386,6 +423,15 @@ class GoalsTab(ctk.CTkFrame):
         self.winfo_toplevel().wait_window(dlg)
         if dlg.installments is not None:
             self._run(lambda: db.add_goal_installments(goal["id"], dlg.installments))
+
+    def _add_custom_installment(self, goal: dict, insts: list) -> None:
+        dlg = _AddCustomInstallmentDialog(self.winfo_toplevel())
+        self.winfo_toplevel().wait_window(dlg)
+        if dlg.result is None:
+            return
+        next_number = (max((i["installment_number"] for i in insts), default=0) + 1)
+        row = {**dlg.result, "number": next_number}
+        self._run(lambda: db.add_goal_installments(goal["id"], [row]))
 
     # ------------------------------------------------------------------
     def _add_contribution(self, goal_id: int, goal_name: str) -> None:
@@ -628,23 +674,27 @@ class _EditGoalDialog(ctk.CTkToplevel):
 
 # ──────────────────────────────────────────────────────────────────────
 class _RecurringGoalDialog(ctk.CTkToplevel):
-    """Cadastro de meta recorrente: valor mensal + quantos meses gerar agora.
-    Valor alvo é opcional (deixe em branco pra recorrência sem fim)."""
+    """Cadastro de meta com cronograma — Mensal (valor fixo, 1 parcela por
+    mês) ou Personalizado (parcelas com qualquer dia e qualquer valor).
+    Valor alvo é opcional nos dois modos (deixe em branco pra sem fim)."""
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.title("Meta Recorrente")
+        self.title("Nova Meta com Cronograma")
         self.resizable(False, False)
         self.grab_set()
         self.configure(fg_color=T.CARD)
         apply_app_icon(self)
         self.result: Optional[dict] = None
+        self._mode = "monthly"
         self._preview_rows: list = []
+        self._custom_rows: list = []
+        self._custom_row_counter = 0
         self._build()
         self.update_idletasks()
         px = parent.winfo_x() + (parent.winfo_width()  - 560) // 2
-        py = parent.winfo_y() + (parent.winfo_height() - 600) // 2
-        self.geometry(f"560x600+{px}+{py}")
+        py = parent.winfo_y() + (parent.winfo_height() - 660) // 2
+        self.geometry(f"560x660+{px}+{py}")
         self.lift(); self.focus()
 
     def _entry(self, parent, placeholder: str = "", width=None) -> ctk.CTkEntry:
@@ -667,36 +717,88 @@ class _RecurringGoalDialog(ctk.CTkToplevel):
 
     def _build(self) -> None:
         self.grid_columnconfigure((0, 1), weight=1)
-        now = datetime.now()
 
-        def _lbl(text, row, col, colspan=1, pady=(10, 0)):
-            ctk.CTkLabel(self, text=text, font=F(11, "bold"),
+        def _lbl(parent, text, row, col, colspan=1, pady=(10, 0)):
+            ctk.CTkLabel(parent, text=text, font=F(11, "bold"),
                          text_color=T.MUTED, anchor="w").grid(
                 row=row, column=col, columnspan=colspan,
                 padx=24, pady=pady, sticky="w")
 
-        ctk.CTkLabel(self, text="Meta Recorrente", font=F(15, "bold"),
+        ctk.CTkLabel(self, text="Nova Meta", font=F(15, "bold"),
                      text_color=T.TEXT).grid(row=0, column=0, columnspan=2, pady=(18, 0))
 
-        _lbl("NOME DA META *", 1, 0, colspan=2)
+        toggle = ctk.CTkFrame(self, fg_color="transparent")
+        toggle.grid(row=1, column=0, columnspan=2, padx=24, pady=(12, 0), sticky="ew")
+        toggle.grid_columnconfigure((0, 1), weight=1)
+        self._btn_monthly = ctk.CTkButton(
+            toggle, text="Mensal", height=32, corner_radius=8,
+            command=lambda: self._set_mode("monthly"))
+        self._btn_monthly.grid(row=0, column=0, padx=(0, 4), sticky="ew")
+        self._btn_custom = ctk.CTkButton(
+            toggle, text="Personalizado", height=32, corner_radius=8,
+            command=lambda: self._set_mode("custom"))
+        self._btn_custom.grid(row=0, column=1, padx=(4, 0), sticky="ew")
+
+        _lbl(self, "NOME DA META *", 2, 0, colspan=2)
         self._name = self._entry(self, "Ex: Viagem, Reserva de emergência…")
-        self._name.grid(row=2, column=0, columnspan=2, padx=24, sticky="ew")
+        self._name.grid(row=3, column=0, columnspan=2, padx=24, sticky="ew")
 
-        _lbl("VALOR MENSAL (R$) *", 3, 0)
-        _lbl("MESES A GERAR AGORA", 3, 1)
-        self._monthly = self._entry(self, "0,00")
-        self._monthly.grid(row=4, column=0, padx=(24, 6), sticky="ew")
-        self._n_parc = self._combo(self, [str(n) for n in range(1, 37)])
+        _lbl(self, "VALOR ALVO (R$) — opcional", 4, 0, colspan=2)
+        self._target = self._entry(self, "Deixe em branco pra sem alvo definido")
+        self._target.grid(row=5, column=0, columnspan=2, padx=24, sticky="ew")
+
+        self._schedule_container = ctk.CTkFrame(self, fg_color="transparent")
+        self._schedule_container.grid(row=6, column=0, columnspan=2, sticky="ew")
+        self._schedule_container.grid_columnconfigure(0, weight=1)
+
+        self._build_monthly_section(_lbl)
+        self._build_custom_section(_lbl)
+        self._set_mode("monthly")
+
+        self._err = ctk.CTkLabel(self, text="", font=F(11), text_color=T.RED)
+        self._err.grid(row=7, column=0, columnspan=2, padx=24, pady=(6, 0), sticky="w")
+
+        btns = ctk.CTkFrame(self, fg_color="transparent")
+        btns.grid(row=8, column=0, columnspan=2, pady=(8, 16))
+        ctk.CTkButton(btns, text="Cancelar", width=110,
+                      fg_color=T.CARD2, hover_color=T.BORDER_L,
+                      border_width=1, border_color=T.BORDER_L,
+                      text_color=T.MUTED, command=self.destroy).pack(side="left", padx=6)
+        ctk.CTkButton(btns, text="Salvar meta", width=130,
+                      fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
+                      text_color="#ffffff", command=self._save).pack(side="left", padx=6)
+
+    def _set_mode(self, mode: str) -> None:
+        self._mode = mode
+        if mode == "monthly":
+            self._custom_frame.grid_remove()
+            self._monthly_frame.grid(row=0, column=0, sticky="ew")
+            self._btn_monthly.configure(fg_color=T.BLUE, text_color="#ffffff", hover_color=T.BLUE_HOVER)
+            self._btn_custom.configure(fg_color=T.CARD2, text_color=T.MUTED, hover_color=T.BORDER_L)
+        else:
+            self._monthly_frame.grid_remove()
+            self._custom_frame.grid(row=0, column=0, sticky="ew")
+            self._btn_custom.configure(fg_color=T.BLUE, text_color="#ffffff", hover_color=T.BLUE_HOVER)
+            self._btn_monthly.configure(fg_color=T.CARD2, text_color=T.MUTED, hover_color=T.BORDER_L)
+        self._err.configure(text="")
+
+    # ── Modo Mensal (comportamento existente, inalterado) ───────────────
+    def _build_monthly_section(self, _lbl) -> None:
+        now = datetime.now()
+        f = self._monthly_frame = ctk.CTkFrame(self._schedule_container, fg_color="transparent")
+        f.grid_columnconfigure((0, 1), weight=1)
+
+        _lbl(f, "VALOR MENSAL (R$) *", 0, 0)
+        _lbl(f, "MESES A GERAR AGORA", 0, 1)
+        self._monthly = self._entry(f, "0,00")
+        self._monthly.grid(row=1, column=0, padx=(24, 6), sticky="ew")
+        self._n_parc = self._combo(f, [str(n) for n in range(1, 37)])
         self._n_parc.set("12")
-        self._n_parc.grid(row=4, column=1, padx=(6, 24), sticky="ew")
+        self._n_parc.grid(row=1, column=1, padx=(6, 24), sticky="ew")
 
-        _lbl("VALOR ALVO (R$) — opcional", 5, 0, colspan=2)
-        self._target = self._entry(self, "Deixe em branco pra recorrência sem fim")
-        self._target.grid(row=6, column=0, columnspan=2, padx=24, sticky="ew")
-
-        _lbl("PRIMEIRO MÊS *", 7, 0, colspan=2)
-        mrow = ctk.CTkFrame(self, fg_color="transparent")
-        mrow.grid(row=8, column=0, columnspan=2, padx=24, sticky="ew")
+        _lbl(f, "PRIMEIRO MÊS *", 2, 0, colspan=2)
+        mrow = ctk.CTkFrame(f, fg_color="transparent")
+        mrow.grid(row=3, column=0, columnspan=2, padx=24, sticky="ew")
         mrow.grid_columnconfigure((0, 1), weight=1)
         self._month = self._combo(mrow, MONTHS_PT)
         self._month.set(MONTHS_PT[now.month - 1])
@@ -706,34 +808,21 @@ class _RecurringGoalDialog(ctk.CTkToplevel):
         self._year.grid(row=0, column=1, padx=(6, 0), sticky="ew")
 
         ctk.CTkButton(
-            self, text="↻  Gerar parcelas", command=self._gen_preview,
+            f, text="↻  Gerar parcelas", command=self._gen_preview,
             height=32, corner_radius=8,
             fg_color=T.GREEN_DIM, hover_color=T.GREEN, text_color=T.GREEN,
-        ).grid(row=9, column=0, columnspan=2, padx=24, pady=(12, 4), sticky="ew")
+        ).grid(row=4, column=0, columnspan=2, padx=24, pady=(12, 4), sticky="ew")
 
         self._preview = ctk.CTkScrollableFrame(
-            self, fg_color=T.CARD2, corner_radius=10, height=150,
+            f, fg_color=T.CARD2, corner_radius=10, height=150,
             scrollbar_button_color=T.BORDER_L,
             scrollbar_button_hover_color=T.MUTED,
         )
-        self._preview.grid(row=10, column=0, columnspan=2, padx=24, sticky="ew")
+        self._preview.grid(row=5, column=0, columnspan=2, padx=24, sticky="ew")
         self._preview.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(self._preview,
                      text="Clique em “Gerar parcelas” para visualizar.",
                      font=F(11), text_color=T.SUBTLE).grid(row=0, column=0, pady=14)
-
-        self._err = ctk.CTkLabel(self, text="", font=F(11), text_color=T.RED)
-        self._err.grid(row=11, column=0, columnspan=2, padx=24, pady=(6, 0), sticky="w")
-
-        btns = ctk.CTkFrame(self, fg_color="transparent")
-        btns.grid(row=12, column=0, columnspan=2, pady=(8, 16))
-        ctk.CTkButton(btns, text="Cancelar", width=110,
-                      fg_color=T.CARD2, hover_color=T.BORDER_L,
-                      border_width=1, border_color=T.BORDER_L,
-                      text_color=T.MUTED, command=self.destroy).pack(side="left", padx=6)
-        ctk.CTkButton(btns, text="Salvar meta", width=130,
-                      fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
-                      text_color="#ffffff", command=self._save).pack(side="left", padx=6)
 
     def _gen_preview(self) -> None:
         monthly = _parse_amount(self._monthly.get())
@@ -764,35 +853,114 @@ class _RecurringGoalDialog(ctk.CTkToplevel):
                 m = 1
                 y += 1
 
+    # ── Modo Personalizado (novo) ────────────────────────────────────────
+    def _build_custom_section(self, _lbl) -> None:
+        f = self._custom_frame = ctk.CTkFrame(self._schedule_container, fg_color="transparent")
+        f.grid_columnconfigure(0, weight=1)
+
+        _lbl(f, "PARCELAS (QUALQUER DIA, QUALQUER VALOR)", 0, 0)
+        self._custom_list = ctk.CTkScrollableFrame(
+            f, fg_color=T.CARD2, corner_radius=10, height=220,
+            scrollbar_button_color=T.BORDER_L,
+            scrollbar_button_hover_color=T.MUTED,
+        )
+        self._custom_list.grid(row=1, column=0, padx=24, pady=(4, 0), sticky="ew")
+        self._custom_list.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkButton(
+            f, text="+  Adicionar parcela", command=self._add_custom_row,
+            height=32, corner_radius=8,
+            fg_color=T.GREEN_DIM, hover_color=T.GREEN, text_color=T.GREEN,
+        ).grid(row=2, column=0, padx=24, pady=(8, 4), sticky="ew")
+
+        self._add_custom_row()
+
+    def _add_custom_row(self) -> None:
+        now = datetime.now()
+        row_idx = self._custom_row_counter
+        self._custom_row_counter += 1
+
+        row = ctk.CTkFrame(self._custom_list, fg_color="transparent")
+        row.grid(row=row_idx, column=0, sticky="ew", pady=2)
+
+        day = self._combo(row, [str(d) for d in range(1, 32)], width=55)
+        day.set(str(now.day))
+        day.pack(side="left", padx=(4, 2))
+        month = self._combo(row, MONTHS_PT, width=95)
+        month.set(MONTHS_PT[now.month - 1])
+        month.pack(side="left", padx=2)
+        year = self._combo(row, [str(y) for y in range(2020, 2041)], width=68)
+        year.set(str(now.year))
+        year.pack(side="left", padx=2)
+        amount = self._entry(row, "0,00", width=90)
+        amount.pack(side="left", padx=(2, 4))
+
+        entry = {"frame": row, "day": day, "month": month, "year": year, "amount": amount}
+        ctk.CTkButton(
+            row, text="✕", width=26, height=26, corner_radius=6,
+            fg_color="transparent", hover_color=T.RED, text_color=T.SUBTLE, font=F(11),
+            command=lambda: self._remove_custom_row(entry),
+        ).pack(side="left", padx=(2, 4))
+
+        self._custom_rows.append(entry)
+
+    def _remove_custom_row(self, entry: dict) -> None:
+        if len(self._custom_rows) <= 1:
+            return
+        entry["frame"].destroy()
+        self._custom_rows.remove(entry)
+
+    # ── Salvar ───────────────────────────────────────────────────────────
     def _save(self) -> None:
-        name    = self._name.get().strip()
-        monthly = _parse_amount(self._monthly.get())
+        name = self._name.get().strip()
         if not name:
             self._err.configure(text="Preencha o nome da meta.")
             return
-        if monthly <= 0:
-            self._err.configure(text="Informe um valor mensal positivo.")
-            return
-        if not self._preview_rows:
-            self._gen_preview()
-            if not self._preview_rows:
-                return
-        installments = [{
-            "number": r["number"],
-            "amount": _parse_amount(r["entry"].get()),
-            "year":   r["year"],
-            "month":  r["month"],
-        } for r in self._preview_rows]
 
         target_raw = self._target.get().strip()
         target = _parse_amount(target_raw) if target_raw else None
         if target is not None and target <= 0:
             target = None
 
-        self.result = {
-            "name": name, "target_amount": target,
-            "monthly_amount": monthly, "installments": installments,
-        }
+        if self._mode == "monthly":
+            monthly = _parse_amount(self._monthly.get())
+            if monthly <= 0:
+                self._err.configure(text="Informe um valor mensal positivo.")
+                return
+            if not self._preview_rows:
+                self._gen_preview()
+                if not self._preview_rows:
+                    return
+            installments = [{
+                "number": r["number"],
+                "amount": _parse_amount(r["entry"].get()),
+                "year":   r["year"],
+                "month":  r["month"],
+            } for r in self._preview_rows]
+            self.result = {
+                "schedule_type": "monthly", "name": name, "target_amount": target,
+                "monthly_amount": monthly, "installments": installments,
+            }
+        else:
+            installments = []
+            for i, r in enumerate(self._custom_rows, start=1):
+                amount = _parse_amount(r["amount"].get())
+                if amount <= 0:
+                    self._err.configure(text="Todas as parcelas precisam de um valor positivo.")
+                    return
+                installments.append({
+                    "number": i, "amount": amount,
+                    "day":    int(r["day"].get()),
+                    "month":  MONTHS_PT.index(r["month"].get()) + 1,
+                    "year":   int(r["year"].get()),
+                })
+            if not installments:
+                self._err.configure(text="Adicione ao menos uma parcela.")
+                return
+            self.result = {
+                "schedule_type": "custom", "name": name, "target_amount": target,
+                "monthly_amount": None, "installments": installments,
+            }
         self.destroy()
 
 
@@ -866,6 +1034,101 @@ class _GenerateMoreDialog(ctk.CTkToplevel):
                 y += 1
             rows.append({"number": next_number + k, "amount": monthly, "year": y, "month": m})
         self.installments = rows
+        self.destroy()
+
+
+# ──────────────────────────────────────────────────────────────────────
+class _AddCustomInstallmentDialog(ctk.CTkToplevel):
+    """Adiciona uma parcela avulsa a uma meta de cronograma personalizado
+    — qualquer dia, qualquer valor."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("Adicionar parcela")
+        self.resizable(False, False)
+        self.grab_set()
+        self.configure(fg_color=T.CARD)
+        apply_app_icon(self)
+        self.result: Optional[dict] = None
+        self._build()
+        self.update_idletasks()
+        px = parent.winfo_x() + (parent.winfo_width()  - 340) // 2
+        py = parent.winfo_y() + (parent.winfo_height() - 320) // 2
+        self.geometry(f"340x320+{px}+{py}")
+        self.lift(); self.focus()
+
+    def _build(self) -> None:
+        now = datetime.now()
+        self.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(self, text="Adicionar parcela", font=F(14, "bold"),
+                     text_color=T.TEXT).grid(row=0, column=0, pady=(22, 8))
+
+        ctk.CTkLabel(self, text="DATA", font=F(11, "bold"),
+                     text_color=T.MUTED).grid(row=1, column=0)
+        drow = ctk.CTkFrame(self, fg_color="transparent")
+        drow.grid(row=2, column=0, pady=(4, 0))
+        self._day = ctk.CTkComboBox(
+            drow, values=[str(d) for d in range(1, 32)], width=70,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            button_color=T.CARD2, button_hover_color=T.BORDER_L,
+            dropdown_fg_color=T.CARD2, dropdown_text_color=T.TEXT,
+            corner_radius=8, state="readonly",
+        )
+        self._day.set(str(now.day))
+        self._day.pack(side="left", padx=(0, 4))
+        self._month = ctk.CTkComboBox(
+            drow, values=MONTHS_PT, width=130,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            button_color=T.CARD2, button_hover_color=T.BORDER_L,
+            dropdown_fg_color=T.CARD2, dropdown_text_color=T.TEXT,
+            corner_radius=8, state="readonly",
+        )
+        self._month.set(MONTHS_PT[now.month - 1])
+        self._month.pack(side="left", padx=4)
+        self._year = ctk.CTkComboBox(
+            drow, values=[str(y) for y in range(2020, 2041)], width=90,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            button_color=T.CARD2, button_hover_color=T.BORDER_L,
+            dropdown_fg_color=T.CARD2, dropdown_text_color=T.TEXT,
+            corner_radius=8, state="readonly",
+        )
+        self._year.set(str(now.year))
+        self._year.pack(side="left", padx=(4, 0))
+
+        ctk.CTkLabel(self, text="VALOR (R$)", font=F(11, "bold"),
+                     text_color=T.MUTED).grid(row=3, column=0, pady=(14, 0))
+        self._amount = ctk.CTkEntry(
+            self, width=180, placeholder_text="0,00",
+            fg_color=T.CARD2, border_color=T.BORDER_L,
+            text_color=T.TEXT, corner_radius=8,
+        )
+        self._amount.grid(row=4, column=0, pady=(4, 0))
+        self._amount.bind("<Return>", lambda _: self._confirm())
+
+        self._err = ctk.CTkLabel(self, text="", font=F(11), text_color=T.RED)
+        self._err.grid(row=5, column=0, pady=(8, 0))
+
+        btns = ctk.CTkFrame(self, fg_color="transparent")
+        btns.grid(row=6, column=0, pady=14)
+        ctk.CTkButton(btns, text="Cancelar", width=100,
+                      fg_color=T.CARD2, hover_color=T.BORDER_L,
+                      border_width=1, border_color=T.BORDER_L,
+                      text_color=T.MUTED, command=self.destroy).pack(side="left", padx=6)
+        ctk.CTkButton(btns, text="Adicionar", width=110,
+                      fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
+                      text_color="#ffffff", command=self._confirm).pack(side="left", padx=6)
+
+    def _confirm(self) -> None:
+        amount = _parse_amount(self._amount.get())
+        if amount <= 0:
+            self._err.configure(text="Digite um valor positivo.")
+            return
+        self.result = {
+            "amount": amount,
+            "day":    int(self._day.get()),
+            "month":  MONTHS_PT.index(self._month.get()) + 1,
+            "year":   int(self._year.get()),
+        }
         self.destroy()
 
 

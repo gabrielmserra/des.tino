@@ -15,7 +15,7 @@ import {
 } from '../lib/api'
 import { formatCurrency, MONTHS_PT } from '../lib/format'
 import { Skeleton } from '../components/Skeleton'
-import { ContributionDialog, EditGoalDialog, GenerateMoreGoalDialog, ConfirmDialog } from '../components/GoalDialogs'
+import { ContributionDialog, EditGoalDialog, GenerateMoreGoalDialog, AddCustomInstallmentDialog, ConfirmDialog } from '../components/GoalDialogs'
 import { PayDialog, AmountDialog } from '../components/DebtDialogs'
 import { RecurringGoalForm } from '../components/RecurringGoalForm'
 import type { Goal, GoalInstallment } from '../lib/types'
@@ -30,10 +30,25 @@ function monthLabel(year: number, month: number): string {
   return `${MONTHS_PT[month - 1]} ${year}`
 }
 
+function installmentLabel(inst: GoalInstallment): string {
+  if (inst.due_day) {
+    return `${String(inst.due_day).padStart(2, '0')}/${String(inst.due_month).padStart(2, '0')}/${inst.due_year}`
+  }
+  return monthLabel(inst.due_year, inst.due_month)
+}
+
+function installmentSortKey(i: GoalInstallment): number {
+  return ((i.due_year * 12 + i.due_month) * 31) + (i.due_day ?? 0)
+}
+
 function installmentStatus(inst: GoalInstallment): 'paga' | 'atrasada' | 'pendente' {
   if (inst.contributed_at) return 'paga'
-  const now = new Date()
-  const cur = now.getFullYear() * 12 + now.getMonth() + 1
+  const today = new Date()
+  if (inst.due_day) {
+    const due = new Date(inst.due_year, inst.due_month - 1, inst.due_day)
+    return due < new Date(today.getFullYear(), today.getMonth(), today.getDate()) ? 'atrasada' : 'pendente'
+  }
+  const cur = today.getFullYear() * 12 + today.getMonth() + 1
   const due = inst.due_year * 12 + inst.due_month
   return due < cur ? 'atrasada' : 'pendente'
 }
@@ -51,6 +66,7 @@ type PendingAction =
   | { kind: 'edit'; goal: Goal }
   | { kind: 'delete'; goal: Goal }
   | { kind: 'generateMore'; goal: Goal }
+  | { kind: 'addCustomInst'; goal: Goal }
   | { kind: 'payInst'; inst: GoalInstallment }
   | { kind: 'undoInst'; inst: GoalInstallment }
   | { kind: 'editInstAmount'; inst: GoalInstallment }
@@ -148,7 +164,7 @@ export function Goals() {
           className="mt-2 w-full rounded-lg border py-2 text-xs font-semibold"
           style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
         >
-          ↻ Meta recorrente (mensal)
+          ↻ Meta com cronograma (mensal ou personalizado)
         </button>
       </div>
 
@@ -179,9 +195,11 @@ export function Goals() {
             const pct = hasTarget && g.target_amount! > 0 ? Math.min(1, g.saved_amount / g.target_amount!) : 0
             const done = hasTarget && g.saved_amount >= g.target_amount! && g.target_amount! > 0
             const isRecurring = g.monthly_amount != null
+            const isCustom = g.schedule_type === 'custom'
             const goalInsts = allInsts
               .filter((i) => i.goal_id === g.id)
-              .sort((a, b) => a.due_year * 12 + a.due_month - (b.due_year * 12 + b.due_month))
+              .sort((a, b) => installmentSortKey(a) - installmentSortKey(b))
+            const scheduledTotal = goalInsts.reduce((a, i) => a + i.amount, 0)
 
             return (
               <div key={g.id} className="rounded-2xl border p-4" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
@@ -207,7 +225,7 @@ export function Goals() {
                   </div>
                 )}
                 <div className="flex flex-wrap gap-1.5">
-                  {!isRecurring && (
+                  {!isRecurring && !isCustom && (
                     <>
                       <button
                         onClick={() => setAction({ kind: 'contribute', mode: 'aporte', goal: g })}
@@ -241,8 +259,13 @@ export function Goals() {
                   </button>
                 </div>
 
-                {isRecurring && (
+                {(isRecurring || isCustom) && (
                   <div className="mt-3 flex flex-col gap-1.5 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+                    {isCustom && hasTarget && (
+                      <p className="mb-1 text-xs" style={{ color: 'var(--muted)' }}>
+                        Cronograma: {formatCurrency(scheduledTotal)} de {formatCurrency(g.target_amount!)} planejados
+                      </p>
+                    )}
                     {goalInsts.map((inst) => {
                       const st = installmentStatus(inst)
                       return (
@@ -253,7 +276,7 @@ export function Goals() {
                         >
                           <span className="text-xs" style={{ color: st === 'paga' ? 'var(--muted)' : 'var(--text)' }}>
                             {st === 'paga' ? '✓ ' : ''}
-                            {formatCurrency(inst.amount)} · {monthLabel(inst.due_year, inst.due_month)}
+                            {formatCurrency(inst.amount)} · {installmentLabel(inst)}
                           </span>
                           <div className="flex shrink-0 items-center gap-1.5">
                             <span className="text-[10px] font-bold" style={{ color: STATUS_COLOR[st] }}>
@@ -296,13 +319,23 @@ export function Goals() {
                         </div>
                       )
                     })}
-                    <button
-                      onClick={() => setAction({ kind: 'generateMore', goal: g })}
-                      className="mt-1 rounded-lg border py-2 text-xs font-semibold"
-                      style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
-                    >
-                      ↻ Gerar mais meses
-                    </button>
+                    {isCustom ? (
+                      <button
+                        onClick={() => setAction({ kind: 'addCustomInst', goal: g })}
+                        className="mt-1 rounded-lg border py-2 text-xs font-semibold"
+                        style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
+                      >
+                        + Adicionar parcela
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setAction({ kind: 'generateMore', goal: g })}
+                        className="mt-1 rounded-lg border py-2 text-xs font-semibold"
+                        style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
+                      >
+                        ↻ Gerar mais meses
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -367,11 +400,25 @@ export function Goals() {
           }
         />
       )}
+      {action?.kind === 'addCustomInst' && (
+        <AddCustomInstallmentDialog
+          goalName={action.goal.name}
+          onClose={() => setAction(null)}
+          onConfirm={(day, month, year, amount) =>
+            run(async () => {
+              const goal = action.goal
+              const goalInsts = allInsts.filter((i) => i.goal_id === goal.id)
+              const nextNumber = Math.max(0, ...goalInsts.map((i) => i.installment_number)) + 1
+              await addGoalInstallments(goal.id, [{ number: nextNumber, amount, year, month, day }])
+            })
+          }
+        />
+      )}
       {action?.kind === 'payInst' && (
         <PayDialog
           description="Marcar como guardado"
           amount={action.inst.amount}
-          monthLabel={monthLabel(action.inst.due_year, action.inst.due_month)}
+          monthLabel={installmentLabel(action.inst)}
           onClose={() => setAction(null)}
           onConfirm={() => run(() => contributeGoalInstallment(action.inst.id))}
         />

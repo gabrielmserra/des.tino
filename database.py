@@ -544,7 +544,10 @@ def create_recurring_goal(name: str, target_amount: Optional[float],
 
 
 def add_goal_installments(goal_id: int, installments: List[dict]) -> None:
-    """Gera mais parcelas pra uma meta recorrente já existente."""
+    """Gera mais parcelas pra uma meta recorrente já existente, ou
+    adiciona uma parcela avulsa a uma meta de cronograma personalizado.
+    installments: [{"number","amount","year","month","day"?}] — "day" é
+    opcional (parcela mensal não tem dia; personalizada tem)."""
     client  = get_client()
     user_id = client.auth.get_user().user.id
     rows = [{
@@ -554,9 +557,37 @@ def add_goal_installments(goal_id: int, installments: List[dict]) -> None:
         "amount":             float(it["amount"]),
         "due_year":           int(it["year"]),
         "due_month":          int(it["month"]),
+        "due_day":            int(it["day"]) if it.get("day") else None,
     } for it in installments]
     if rows:
         client.table("goal_installments").insert(rows).execute()
+
+
+def create_custom_goal(name: str, target_amount: Optional[float],
+                       installments: List[dict]) -> dict:
+    """Meta de cronograma personalizado: parcelas com qualquer dia e
+    qualquer valor, sem cadência mensal. Nunca tem monthly_amount —
+    schedule_type='custom' é o que a distingue de meta simples.
+    installments: [{"number","amount","year","month","day"}]"""
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    resp = client.table("goals").insert({
+        "name": name, "target_amount": target_amount, "saved_amount": 0,
+        "monthly_amount": None, "schedule_type": "custom", "user_id": user_id,
+    }).execute()
+    goal = resp.data[0]
+    rows = [{
+        "goal_id":            goal["id"],
+        "user_id":            user_id,
+        "installment_number": it["number"],
+        "amount":             float(it["amount"]),
+        "due_year":           int(it["year"]),
+        "due_month":          int(it["month"]),
+        "due_day":            int(it["day"]),
+    } for it in installments]
+    if rows:
+        client.table("goal_installments").insert(rows).execute()
+    return goal
 
 
 def get_all_goal_installments() -> List[dict]:
@@ -603,7 +634,7 @@ def update_goal_installment_amount(inst: dict, new_amount: float) -> None:
     delta  = new_amount - float(inst["amount"])
     client.table("goal_installments").update({"amount": new_amount}).eq("id", inst["id"]).execute()
 
-    goal_resp = client.table("goals").select("saved_amount,target_amount").eq("id", inst["goal_id"]).execute()
+    goal_resp = client.table("goals").select("saved_amount,target_amount,schedule_type").eq("id", inst["goal_id"]).execute()
     if not goal_resp.data:
         return
     goal = goal_resp.data[0]
@@ -612,7 +643,9 @@ def update_goal_installment_amount(inst: dict, new_amount: float) -> None:
         client.table("goals").update(
             {"saved_amount": max(0.0, current + delta)}
         ).eq("id", inst["goal_id"]).execute()
-    if goal.get("target_amount") is not None:
+    # Meta de cronograma personalizado tem alvo independente — só meta
+    # mensal recalcula o alvo como soma das parcelas.
+    if goal.get("target_amount") is not None and goal.get("schedule_type") != "custom":
         remaining = client.table("goal_installments").select("amount").eq("goal_id", inst["goal_id"]).execute()
         total = sum(float(r["amount"]) for r in (remaining.data or []))
         client.table("goals").update({"target_amount": total}).eq("id", inst["goal_id"]).execute()
@@ -622,7 +655,7 @@ def delete_goal_installment(inst: dict) -> None:
     client = get_client()
     client.table("goal_installments").delete().eq("id", inst["id"]).execute()
 
-    goal_resp = client.table("goals").select("saved_amount,target_amount").eq("id", inst["goal_id"]).execute()
+    goal_resp = client.table("goals").select("saved_amount,target_amount,schedule_type").eq("id", inst["goal_id"]).execute()
     if not goal_resp.data:
         return
     goal = goal_resp.data[0]
@@ -631,7 +664,7 @@ def delete_goal_installment(inst: dict) -> None:
         client.table("goals").update(
             {"saved_amount": max(0.0, current - float(inst["amount"]))}
         ).eq("id", inst["goal_id"]).execute()
-    if goal.get("target_amount") is not None:
+    if goal.get("target_amount") is not None and goal.get("schedule_type") != "custom":
         remaining = client.table("goal_installments").select("amount").eq("goal_id", inst["goal_id"]).execute()
         total = sum(float(r["amount"]) for r in (remaining.data or []))
         client.table("goals").update({"target_amount": total}).eq("id", inst["goal_id"]).execute()
