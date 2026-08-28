@@ -168,6 +168,10 @@ Três tipos de meta, lado a lado:
   do mês corrente), **tudo** que já está comprometido pra frente: parcelas
   de compras no cartão ainda previstas, dívidas em aberto e contas fixas
   pendentes — três subtotais por mês mais o total geral.
+- **[Ambas]** O subtotal de cartão do mês corrente também inclui a
+  **fatura em aberto** (gasto real do ciclo atual ainda não pago) — mesmo
+  cálculo de `get_cards_overview`, usado na tela de Cartões — e não só as
+  parcelas futuras previstas.
 - **[Desktop]** Tela acessada pela barra lateral ("💳 Compromissos
   Futuros").
 - **[Web]** Tela acessada pela página "Mais" (`/compromissos-futuros`).
