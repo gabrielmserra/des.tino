@@ -16,21 +16,15 @@ function Stat({ emoji, label, value }: { emoji: string; label: string; value: nu
   )
 }
 
-function MonthCard({ r, maxTotal }: { r: FutureCommitment; maxTotal: number }) {
-  const pct = maxTotal > 0 ? Math.min(1, r.grand_total / maxTotal) : 0
+function MonthCard({ r }: { r: FutureCommitment }) {
   return (
     <div className="rounded-2xl border p-4" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
-      <div className="mb-1 flex items-baseline justify-between">
+      <div className="mb-3 flex items-baseline justify-between">
         <span className="font-bold">{MONTHS_PT[r.month - 1]} {r.year}</span>
         <span className="font-bold" style={{ color: r.grand_total > 0 ? 'var(--accent)' : 'var(--muted)' }}>
           {formatCurrency(r.grand_total)}
         </span>
       </div>
-      {r.grand_total > 0 && (
-        <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--border)' }}>
-          <div className="h-full rounded-full" style={{ width: `${pct * 100}%`, background: 'var(--accent)' }} />
-        </div>
-      )}
       <div className="flex gap-3">
         <Stat emoji="💳" label="Cartão" value={r.card_total} />
         <Stat emoji="💸" label="Dívidas" value={r.debt_total} />
@@ -52,7 +46,6 @@ export function FutureCommitments() {
   })
 
   const rows = data ?? []
-  const maxTotal = Math.max(0, ...rows.map((r) => r.grand_total))
 
   return (
     <div className="p-4 pb-8">
@@ -72,7 +65,7 @@ export function FutureCommitments() {
       ) : (
         <div className="flex flex-col gap-3">
           {rows.map((r) => (
-            <MonthCard key={`${r.year}-${r.month}`} r={r} maxTotal={maxTotal} />
+            <MonthCard key={`${r.year}-${r.month}`} r={r} />
           ))}
         </div>
       )}

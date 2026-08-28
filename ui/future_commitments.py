@@ -69,12 +69,10 @@ class FutureCommitmentsTab(ctk.CTkFrame):
                          font=F(13), text_color=T.MUTED).pack(pady=40)
             return
 
-        max_total = max((float(r.get("grand_total") or 0) for r in rows), default=0.0)
-
         for r in rows:
-            self._make_month_card(r, max_total)
+            self._make_month_card(r)
 
-    def _make_month_card(self, r: dict, max_total: float) -> None:
+    def _make_month_card(self, r: dict) -> None:
         card_total  = float(r.get("card_total") or 0)
         debt_total  = float(r.get("debt_total") or 0)
         bills_total = float(r.get("bills_total") or 0)
@@ -87,7 +85,7 @@ class FutureCommitmentsTab(ctk.CTkFrame):
         card.grid_columnconfigure(0, weight=1)
 
         hdr = ctk.CTkFrame(card, fg_color="transparent")
-        hdr.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 4))
+        hdr.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 10))
         hdr.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(hdr, text=month_name, font=F(15, "bold"),
                      text_color=T.TEXT, anchor="w").grid(row=0, column=0, sticky="w")
@@ -95,16 +93,8 @@ class FutureCommitmentsTab(ctk.CTkFrame):
                      text_color=T.GOLD if grand_total > 0 else T.MUTED, anchor="e").grid(
             row=0, column=1, sticky="e")
 
-        if grand_total > 0:
-            bar_bg = ctk.CTkFrame(card, height=6, fg_color=T.CARD2, corner_radius=3)
-            bar_bg.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 10))
-            bar_bg.grid_propagate(False)
-            pct = grand_total / max_total if max_total > 0 else 0.0
-            ctk.CTkFrame(bar_bg, height=6, fg_color=T.GOLD, corner_radius=3).place(
-                x=0, y=0, relheight=1, relwidth=min(pct, 1.0))
-
         detail = ctk.CTkFrame(card, fg_color="transparent")
-        detail.grid(row=2, column=0, sticky="ew", padx=20, pady=(0, 16))
+        detail.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 16))
         detail.grid_columnconfigure((0, 1, 2), weight=1)
 
         def _stat(col, emoji, label, value):
@@ -122,4 +112,4 @@ class FutureCommitmentsTab(ctk.CTkFrame):
         if grand_total == 0:
             ctk.CTkLabel(card, text="Nada comprometido ainda pra este mês.",
                          font=F(11), text_color=T.SUBTLE).grid(
-                row=3, column=0, padx=20, pady=(0, 14), sticky="w")
+                row=2, column=0, padx=20, pady=(0, 14), sticky="w")
