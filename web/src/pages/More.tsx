@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom'
-import { TrendingUp, Target, Receipt, Upload, Settings, ChevronRight } from 'lucide-react'
+import { TrendingUp, Target, Receipt, Upload, Settings, ChevronRight, CalendarClock } from 'lucide-react'
 
 const ITEMS = [
   { to: '/investimentos', icon: TrendingUp, label: 'Investimentos', desc: 'Aportes, saques e histórico' },
   { to: '/metas', icon: Target, label: 'Metas de poupança', desc: 'Crie e acompanhe suas metas' },
   { to: '/contas-fixas', icon: Receipt, label: 'Contas Fixas', desc: 'Internet, luz, água, aluguel — todo mês' },
+  { to: '/compromissos-futuros', icon: CalendarClock, label: 'Compromissos Futuros', desc: 'Cartão, dívidas e contas fixas dos próximos meses' },
   { to: '/importar', icon: Upload, label: 'Importar extrato', desc: 'Banco Inter — OFX, CSV ou PDF' },
   { to: '/configuracoes', icon: Settings, label: 'Configurações', desc: 'Dia de corte da importação e mais' },
 ]

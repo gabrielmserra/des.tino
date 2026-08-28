@@ -27,6 +27,8 @@ import type {
   GoalInstallment,
   GoalInstallmentInput,
   DashboardWidgetEntry,
+  CardPurchaseInstallmentInput,
+  FutureCommitment,
 } from './types'
 
 export async function fetchMonths(): Promise<Month[]> {
@@ -336,6 +338,29 @@ export async function payCardBill(cardId: number, monthId: number): Promise<numb
   return Number(data ?? 0)
 }
 
+export async function createCardPurchase(
+  cardId: number,
+  description: string,
+  category: string,
+  installments: CardPurchaseInstallmentInput[],
+): Promise<number> {
+  const { data, error } = await supabase.rpc('create_card_purchase', {
+    p_card_id: cardId,
+    p_description: description,
+    p_category: category || 'Outros',
+    p_installments: installments,
+  })
+  if (error) throw error
+  return Number(data)
+}
+
+export async function deleteRemainingCardPurchaseInstallments(purchaseId: number): Promise<void> {
+  const { error } = await supabase.rpc('delete_remaining_card_purchase_installments', {
+    p_purchase_id: purchaseId,
+  })
+  if (error) throw error
+}
+
 // ── Benefícios VR/VA ──────────────────────────────────────────────────
 // Criação e a lista com dias-até-renovar são RPC (têm cálculo de data).
 // Editar/ajustar saldo/arquivar são updates simples direto na tabela.
@@ -563,6 +588,12 @@ export async function fetchDebtOverview(): Promise<DebtOverview> {
   const { data, error } = await supabase.rpc('get_debt_overview')
   if (error) throw error
   return data as DebtOverview
+}
+
+export async function fetchFutureCommitments(months = 6): Promise<FutureCommitment[]> {
+  const { data, error } = await supabase.rpc('get_future_commitments', { p_months: months })
+  if (error) throw error
+  return (data ?? []) as FutureCommitment[]
 }
 
 export async function createDebt(

@@ -24,6 +24,15 @@ function txDate(t: Transaction): string {
   return (t.payment_date || t.created_at || '').slice(0, 10)
 }
 
+// Parcela de compra no cartão mostra "🧾 descrição (N/M)" em vez da
+// descrição crua.
+function txDisplayDesc(t: Transaction): string {
+  if (t.card_purchase_id && t.installment_number && t.installment_total) {
+    return `🧾 ${t.description} (${t.installment_number}/${t.installment_total})`
+  }
+  return t.description
+}
+
 function origemTag(
   t: Transaction,
   cards: CardBasic[],
@@ -204,7 +213,7 @@ export function Transactions() {
                     className="truncate font-semibold"
                     style={{ color: t.is_expectation ? 'var(--muted)' : 'var(--text)' }}
                   >
-                    {t.description}
+                    {txDisplayDesc(t)}
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     <span className="text-xs" style={{ color: 'var(--muted)' }}>

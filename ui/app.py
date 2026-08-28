@@ -27,6 +27,7 @@ class FinanceApp(ctk.CTkFrame):
         self._debts_content                            = None
         self._fixed_bills_content                      = None
         self._import_content                           = None
+        self._future_commitments_content               = None
 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -60,6 +61,7 @@ class FinanceApp(ctk.CTkFrame):
             on_debts       = self._show_debts,
             on_fixed_bills = self._show_fixed_bills,
             on_import      = self._show_import,
+            on_future_commitments = self._show_future_commitments,
             user_email     = self.user_email,
         )
         self._sidebar.grid(row=0, column=0, sticky="nsew")
@@ -114,6 +116,7 @@ class FinanceApp(ctk.CTkFrame):
         self._sidebar.set_debts_active(False)
         self._sidebar.set_fixed_bills_active(False)
         self._sidebar.set_import_active(False)
+        self._sidebar.set_future_commitments_active(False)
         if self._investments_content:
             self._investments_content.grid_remove()
         if self._debts_content:
@@ -122,6 +125,8 @@ class FinanceApp(ctk.CTkFrame):
             self._fixed_bills_content.grid_remove()
         if self._import_content:
             self._import_content.grid_remove()
+        if self._future_commitments_content:
+            self._future_commitments_content.grid_remove()
 
         if db.is_cached(month_id):
             self._render_month(month_id, month_name)
@@ -170,6 +175,7 @@ class FinanceApp(ctk.CTkFrame):
         self._sidebar.set_debts_active(False)
         self._sidebar.set_fixed_bills_active(False)
         self._sidebar.set_import_active(False)
+        self._sidebar.set_future_commitments_active(False)
         self._sidebar.clear_active_month()
         if self._main_content:
             self._main_content.grid_remove()
@@ -181,6 +187,8 @@ class FinanceApp(ctk.CTkFrame):
             self._fixed_bills_content.grid_remove()
         if self._import_content:
             self._import_content.grid_remove()
+        if self._future_commitments_content:
+            self._future_commitments_content.grid_remove()
         if self._investments_content is None:
             self._investments_content = InvestmentsTab(
                 self, on_change=self._on_investments_change,
@@ -235,6 +243,7 @@ class FinanceApp(ctk.CTkFrame):
         self._sidebar.set_investments_active(False)
         self._sidebar.set_fixed_bills_active(False)
         self._sidebar.set_import_active(False)
+        self._sidebar.set_future_commitments_active(False)
         self._sidebar.clear_active_month()
         if self._main_content:
             self._main_content.grid_remove()
@@ -246,6 +255,8 @@ class FinanceApp(ctk.CTkFrame):
             self._fixed_bills_content.grid_remove()
         if self._import_content:
             self._import_content.grid_remove()
+        if self._future_commitments_content:
+            self._future_commitments_content.grid_remove()
         if self._debts_content is None:
             self._debts_content = DebtsTab(
                 self, on_change=self._on_investments_change,
@@ -261,6 +272,7 @@ class FinanceApp(ctk.CTkFrame):
         self._sidebar.set_investments_active(False)
         self._sidebar.set_debts_active(False)
         self._sidebar.set_import_active(False)
+        self._sidebar.set_future_commitments_active(False)
         self._sidebar.clear_active_month()
         if self._main_content:
             self._main_content.grid_remove()
@@ -272,6 +284,8 @@ class FinanceApp(ctk.CTkFrame):
             self._debts_content.grid_remove()
         if self._import_content:
             self._import_content.grid_remove()
+        if self._future_commitments_content:
+            self._future_commitments_content.grid_remove()
         if self._fixed_bills_content is None:
             self._fixed_bills_content = FixedBillsTab(
                 self, on_change=self._on_investments_change,
@@ -287,6 +301,7 @@ class FinanceApp(ctk.CTkFrame):
         self._sidebar.set_investments_active(False)
         self._sidebar.set_debts_active(False)
         self._sidebar.set_fixed_bills_active(False)
+        self._sidebar.set_future_commitments_active(False)
         self._sidebar.clear_active_month()
         if self._main_content:
             self._main_content.grid_remove()
@@ -298,6 +313,8 @@ class FinanceApp(ctk.CTkFrame):
             self._debts_content.grid_remove()
         if self._fixed_bills_content:
             self._fixed_bills_content.grid_remove()
+        if self._future_commitments_content:
+            self._future_commitments_content.grid_remove()
         if self._import_content is None:
             self._import_content = ImportTab(
                 self, on_change=self._on_investments_change,
@@ -307,6 +324,35 @@ class FinanceApp(ctk.CTkFrame):
 
     def _on_months_changed_by_import(self) -> None:
         self._sidebar.update_months(db.get_months())
+
+    # ------------------------------------------------------------------
+    def _show_future_commitments(self) -> None:
+        from ui.future_commitments import FutureCommitmentsTab
+        self._sidebar.set_future_commitments_active(True)
+        self._sidebar.set_investments_active(False)
+        self._sidebar.set_debts_active(False)
+        self._sidebar.set_fixed_bills_active(False)
+        self._sidebar.set_import_active(False)
+        self._sidebar.clear_active_month()
+        if self._main_content:
+            self._main_content.grid_remove()
+        if self._placeholder:
+            self._placeholder.grid_remove()
+        if self._investments_content:
+            self._investments_content.grid_remove()
+        if self._debts_content:
+            self._debts_content.grid_remove()
+        if self._fixed_bills_content:
+            self._fixed_bills_content.grid_remove()
+        if self._import_content:
+            self._import_content.grid_remove()
+        if self._future_commitments_content is None:
+            self._future_commitments_content = FutureCommitmentsTab(
+                self, on_change=self._on_investments_change,
+            )
+        else:
+            self._future_commitments_content.refresh()
+        self._future_commitments_content.grid(row=0, column=1, sticky="nsew")
 
     # ------------------------------------------------------------------
     def _add_month(self) -> None:

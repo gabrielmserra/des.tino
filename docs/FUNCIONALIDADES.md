@@ -61,9 +61,17 @@ Para cada lançamento:
 ## 4. Cartões (débito, crédito e benefícios)
 
 - **[Ambas]** Cadastro de cartões de crédito e de débito.
-- **[Ambas]** Ao lançar uma despesa no crédito, é possível informar o
-  **percentual da fatura** que aquele gasto representa (parcelamento
-  simplificado).
+- **[Ambas]** **Compra parcelada real** — em vez de dividir o valor de
+  cabeça e lançar já fracionado, o botão "🧾 Compra parcelada" (por cartão)
+  abre um formulário (descrição, categoria, valor total, número de
+  parcelas, primeira parcela) que gera e lança uma transação por mês, uma
+  por parcela. A parcela do mês corrente entra como gasto real de uma vez;
+  as parcelas de meses futuros entram como **previstas** (reaproveita o
+  mesmo mecanismo de "previsto"/confirmação usado no resto do app) — os
+  meses futuros necessários são criados automaticamente. Na lista de
+  lançamentos, uma parcela aparece como "🧾 descrição (N/M)". Pagar a
+  fatura do mês continua funcionando normalmente: só consolida a parcela
+  daquele mês específico, as futuras ficam intactas.
 - **[Ambas]** "Situação dos cartões" — acompanhamento de fatura por cartão.
 - **[Ambas]** Saldo de benefícios (VR/VA) com controle de uso separado do
   saldo em conta.
@@ -154,7 +162,27 @@ Três tipos de meta, lado a lado:
 - **[Desktop]** Tela acessada pela barra lateral.
 - **[Web]** Tela acessada pela página "Mais" (`/contas-fixas`).
 
-## 10. Dashboard
+## 10. Compromissos Futuros
+
+- **[Ambas]** Tela dedicada que soma, mês a mês (próximos 6 meses a partir
+  do mês corrente), **tudo** que já está comprometido pra frente: parcelas
+  de compras no cartão ainda previstas, dívidas em aberto e contas fixas
+  pendentes — três subtotais por mês mais o total geral.
+- **[Desktop]** Tela acessada pela barra lateral ("💳 Compromissos
+  Futuros").
+- **[Web]** Tela acessada pela página "Mais" (`/compromissos-futuros`).
+
+## 11. Aviso proativo de risco de cartão
+
+- **[Ambas]** Banner de alerta visível direto no Dashboard (sem precisar
+  abrir a tela de Cartões) quando algum cartão está em nível de risco
+  vermelho — limite quase estourado (≥90% usado) ou fatura vencendo em até
+  3 dias com saldo negativo — reaproveita a mesma lógica de segurança já
+  usada na tela de Cartões, não duplica critérios novos.
+- **[Ambas]** Aviso adicional quando o **mês seguinte** já tem mais de
+  R$300 em parcelas de cartão previstas.
+
+## 12. Dashboard
 
 - **[Ambas]** 18 widgets configuráveis, cada usuário escolhe quais quer ver
   e em que ordem:
@@ -192,7 +220,7 @@ Três tipos de meta, lado a lado:
   gráfico (não precisa passar o mouse em cima), com tooltip formatado em
   R$ ao passar o mouse.
 
-## 11. Importação de extrato bancário
+## 13. Importação de extrato bancário
 
 - **[Ambas]** Importação de extrato da conta corrente do Banco Inter em três
   formatos: OFX, CSV e PDF.
@@ -222,7 +250,7 @@ Três tipos de meta, lado a lado:
 - **[Ambas]** Detecção automática de aporte/resgate de investimento durante
   a importação.
 
-## 12. Exportação
+## 14. Exportação
 
 - **[Ambas]** Exportação do mês em **.xlsx** (Excel) formatado: cabeçalho
   com fundo escuro e texto branco em negrito, valores em moeda (R$),
@@ -242,7 +270,7 @@ Três tipos de meta, lado a lado:
   - **[Web]** gerado com `canvas` nativo (gráficos) + `jsPDF`/`jspdf-autotable`
     (PDF), carregado sob demanda.
 
-## 13. Configurações
+## 15. Configurações
 
 - **[Ambas]** Dia de corte para importação de extrato (padrão: dia 1, ou
   seja, sem deslocamento de mês) — editável pelo usuário.
@@ -250,7 +278,7 @@ Três tipos de meta, lado a lado:
   lateral (desktop) ou tela de Configurações (web).
 - **[Ambas]** Botão "Baixar Relatório Completo" (ver [Exportação](#12-exportação)).
 
-## 14. Atalho de voz (quick-tx)
+## 16. Atalho de voz (quick-tx)
 
 - **[Web/Automação]** Edge Function no Supabase (`quick-tx`) que recebe um
   texto (ex. de um atalho de voz do celular) e cria um lançamento
@@ -260,7 +288,7 @@ Três tipos de meta, lado a lado:
   function muda — não é publicado automaticamente pelo pipeline normal do
   app.
 
-## 15. Infraestrutura e sincronização
+## 17. Infraestrutura e sincronização
 
 - **[Ambas]** Um único banco Supabase Postgres com Row Level Security por
   usuário — qualquer lançamento feito no desktop aparece no site/celular e

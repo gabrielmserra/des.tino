@@ -1,15 +1,15 @@
 """Presets de cartão de crédito — barra usada dentro de Saídas Variáveis."""
 import threading
 import calendar
-from datetime import date
-from typing import Callable, List
+from datetime import date, datetime
+from typing import Callable, List, Optional
 
 import customtkinter as ctk
 
 import database as db
 import ui.theme as T
 from ui.theme import F
-from utils.helpers import apply_app_icon
+from utils.helpers import apply_app_icon, CATEGORIES, MONTHS_PT, month_name_from_num
 
 CARD_COLORS = [
     "#6C8EFF", "#2EAF7D", "#E05252", "#9B72F5",
@@ -102,10 +102,12 @@ def _all_card_spendings(cards: list, month_id: int) -> dict:
 class CardPresetsBar(ctk.CTkFrame):
     """Faixa colapsável com cartões preset, exibida no topo de Saídas Variáveis."""
 
-    def __init__(self, parent, month_id: int, on_cards_changed: Callable[[List[dict]], None]):
+    def __init__(self, parent, month_id: int, on_cards_changed: Callable[[List[dict]], None],
+                on_purchase_created: Optional[Callable] = None):
         super().__init__(parent, fg_color="transparent")
-        self.month_id         = month_id
-        self.on_cards_changed = on_cards_changed
+        self.month_id            = month_id
+        self.on_cards_changed    = on_cards_changed
+        self.on_purchase_created = on_purchase_created or (lambda: None)
         self._cards: List[dict] = []
         self._expanded          = False   # começa recolhido
         self.grid_columnconfigure(0, weight=1)
@@ -218,6 +220,13 @@ class CardPresetsBar(ctk.CTkFrame):
             text_color=T.MUTED, font=F(11),
             command=lambda c=card: self._edit_card(c),
         ).pack(side="right")
+        ctk.CTkButton(
+            name_row, text="🧾", width=28, height=24, corner_radius=6,
+            fg_color=T.CARD2, hover_color=T.BORDER_L,
+            border_width=1, border_color=T.BORDER_L,
+            text_color=T.MUTED, font=F(11),
+            command=lambda c=card: self._new_purchase(c),
+        ).pack(side="right", padx=(0, 4))
 
         # Status fatura
         if cycle_open:
@@ -324,6 +333,25 @@ class CardPresetsBar(ctk.CTkFrame):
                 name, limit, due_day, closing_day, color = dlg.result
                 db.update_card(card["id"], name, limit, due_day, closing_day, color)
             self.refresh()
+
+    def _new_purchase(self, card: dict) -> None:
+        dlg = _NewCardPurchaseDialog(self, card)
+        self.wait_window(dlg)
+        if not dlg.result:
+            return
+        name, category, installments = dlg.result
+
+        def _work():
+            try:
+                db.create_card_purchase(card["id"], name, category, installments)
+            except Exception as e:
+                from ui.dialogs import show_error
+                self.after(0, lambda: show_error(self.winfo_toplevel(), "Erro ao parcelar compra", str(e)[:200]))
+                return
+            self.after(0, self.refresh)
+            self.after(0, self.on_purchase_created)
+
+        threading.Thread(target=_work, daemon=True).start()
 
     def get_cards(self) -> List[dict]:
         return list(self._cards)
@@ -527,4 +555,196 @@ class _CardDialog(ctk.CTkToplevel):
     def _delete(self) -> None:
         self.result  = True
         self.deleted = True
+        self.destroy()
+
+
+# ---------------------------------------------------------------------------
+
+def _parse_amount(raw: str) -> float:
+    raw = raw.strip()
+    if not raw:
+        return 0.0
+    raw = raw.replace(".", "").replace(",", ".") if raw.count(",") else raw
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return 0.0
+
+
+class _NewCardPurchaseDialog(ctk.CTkToplevel):
+    """Parcela uma compra no cartão: gera uma transação real por parcela,
+    uma por mês. A parcela do mês corrente entra como gasto real; as
+    futuras entram como previstas — mesmo mecanismo de "previsto" já
+    usado em todo o app, então cada parcela futura só vira gasto de
+    verdade quando o usuário confirmar o previsto naquele mês."""
+
+    def __init__(self, parent, card: dict):
+        super().__init__(parent)
+        self.result: Optional[tuple] = None
+        self._card = card
+        self._preview_rows: list = []
+        self.title(f"Parcelar compra — {card['name']}")
+        self.resizable(False, False)
+        self.grab_set()
+        apply_app_icon(self)
+        self._build()
+        self.update_idletasks()
+        self.after(100, self._center)
+
+    def _center(self) -> None:
+        self.update_idletasks()
+        w, h = 460, 620
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        self.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
+
+    def _build(self) -> None:
+        now = datetime.now()
+        p = {"padx": 24, "pady": (0, 10)}
+
+        ctk.CTkLabel(self, text="DESCRIÇÃO DA COMPRA", font=F(11, "bold"),
+                     text_color=T.MUTED, anchor="w").pack(fill="x", padx=24, pady=(20, 4))
+        self._name = ctk.CTkEntry(
+            self, placeholder_text="Ex: Notebook, Geladeira…",
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT, corner_radius=8,
+        )
+        self._name.pack(fill="x", **p)
+
+        ctk.CTkLabel(self, text="CATEGORIA", font=F(11, "bold"),
+                     text_color=T.MUTED, anchor="w").pack(fill="x", padx=24, pady=(0, 4))
+        self._category = ctk.CTkComboBox(
+            self, values=CATEGORIES,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
+            dropdown_text_color=T.TEXT, corner_radius=8, state="readonly",
+        )
+        self._category.set("Outros")
+        self._category.pack(fill="x", **p)
+
+        row1 = ctk.CTkFrame(self, fg_color="transparent")
+        row1.pack(fill="x", padx=24, pady=(0, 10))
+        row1.grid_columnconfigure((0, 1), weight=1)
+        ctk.CTkLabel(row1, text="VALOR TOTAL (R$)", font=F(11, "bold"),
+                     text_color=T.MUTED, anchor="w").grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(row1, text="Nº DE PARCELAS", font=F(11, "bold"),
+                     text_color=T.MUTED, anchor="w").grid(row=0, column=1, sticky="w", padx=(8, 0))
+        self._total = ctk.CTkEntry(
+            row1, placeholder_text="0,00",
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT, corner_radius=8,
+        )
+        self._total.grid(row=1, column=0, sticky="ew")
+        self._n_parc = ctk.CTkComboBox(
+            row1, values=[str(n) for n in range(1, 25)],
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
+            dropdown_text_color=T.TEXT, corner_radius=8, state="readonly",
+        )
+        self._n_parc.set("2")
+        self._n_parc.grid(row=1, column=1, sticky="ew", padx=(8, 0))
+
+        ctk.CTkLabel(self, text="PRIMEIRA PARCELA", font=F(11, "bold"),
+                     text_color=T.MUTED, anchor="w").pack(fill="x", padx=24, pady=(0, 4))
+        row2 = ctk.CTkFrame(self, fg_color="transparent")
+        row2.pack(fill="x", padx=24, pady=(0, 10))
+        row2.grid_columnconfigure((0, 1), weight=1)
+        self._month = ctk.CTkComboBox(
+            row2, values=MONTHS_PT,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
+            dropdown_text_color=T.TEXT, corner_radius=8, state="readonly",
+        )
+        self._month.set(MONTHS_PT[now.month - 1])
+        self._month.grid(row=0, column=0, sticky="ew")
+        self._year = ctk.CTkComboBox(
+            row2, values=[str(y) for y in range(2020, 2041)],
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
+            dropdown_text_color=T.TEXT, corner_radius=8, state="readonly",
+        )
+        self._year.set(str(now.year))
+        self._year.grid(row=0, column=1, sticky="ew", padx=(8, 0))
+
+        ctk.CTkButton(
+            self, text="↻  Gerar parcelas", command=self._gen_preview,
+            height=32, corner_radius=8,
+            fg_color=T.GREEN_DIM, hover_color=T.GREEN, text_color=T.GREEN,
+        ).pack(fill="x", padx=24, pady=(4, 6))
+
+        self._preview = ctk.CTkScrollableFrame(
+            self, fg_color=T.CARD2, corner_radius=10, height=170,
+            scrollbar_button_color=T.BORDER_L, scrollbar_button_hover_color=T.MUTED,
+        )
+        self._preview.pack(fill="x", padx=24)
+        self._preview.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(self._preview, text="Clique em “Gerar parcelas” para visualizar.",
+                     font=F(11), text_color=T.SUBTLE).grid(row=0, column=0, pady=14)
+
+        self._err = ctk.CTkLabel(self, text="", font=F(11), text_color=T.RED)
+        self._err.pack(fill="x", padx=24, pady=(6, 0))
+
+        ctk.CTkLabel(
+            self, text="A parcela do mês atual entra como gasto real; as\n"
+                       "futuras entram como previstas até você confirmá-las.",
+            font=F(10), text_color=T.MUTED, justify="center",
+        ).pack(pady=(8, 4))
+
+        btns = ctk.CTkFrame(self, fg_color="transparent")
+        btns.pack(pady=(4, 20))
+        ctk.CTkButton(btns, text="Cancelar", width=110,
+                      fg_color=T.CARD2, hover_color=T.BORDER_L,
+                      border_width=1, border_color=T.BORDER_L,
+                      text_color=T.MUTED, command=self.destroy).pack(side="left", padx=6)
+        ctk.CTkButton(btns, text="Salvar", width=130,
+                      fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
+                      text_color="#ffffff", command=self._save).pack(side="left", padx=6)
+
+    def _gen_preview(self) -> None:
+        total = _parse_amount(self._total.get())
+        if total <= 0:
+            self._err.configure(text="Informe o valor total antes de gerar as parcelas.")
+            return
+        self._err.configure(text="")
+        n = int(self._n_parc.get())
+        y = int(self._year.get())
+        m = MONTHS_PT.index(self._month.get()) + 1
+        base = round(total / n, 2)
+
+        for w in self._preview.winfo_children():
+            w.destroy()
+        self._preview_rows = []
+        for k in range(n):
+            amount = base if k < n - 1 else round(total - base * (n - 1), 2)
+            row = ctk.CTkFrame(self._preview, fg_color="transparent")
+            row.grid(row=k, column=0, sticky="ew", pady=2)
+            row.grid_columnconfigure(0, weight=1)
+            ctk.CTkLabel(row, text=f"{k + 1}/{n}  •  {month_name_from_num(m, y)}",
+                         font=F(11), text_color=T.TEXT, anchor="w").grid(
+                row=0, column=0, padx=(8, 6), sticky="w")
+            e = ctk.CTkEntry(row, width=100, fg_color=T.CARD, border_color=T.BORDER_L,
+                             text_color=T.TEXT, corner_radius=6)
+            e.insert(0, f"{amount:.2f}".replace(".", ","))
+            e.grid(row=0, column=1, padx=(0, 8))
+            self._preview_rows.append({"entry": e, "year": y, "month": m})
+            m += 1
+            if m > 12:
+                m = 1
+                y += 1
+
+    def _save(self) -> None:
+        name = self._name.get().strip()
+        if not name:
+            self._err.configure(text="Preencha a descrição da compra.")
+            return
+        if not self._preview_rows:
+            self._gen_preview()
+            if not self._preview_rows:
+                return
+        installments = [{
+            "amount": _parse_amount(r["entry"].get()),
+            "year":   r["year"],
+            "month":  r["month"],
+        } for r in self._preview_rows]
+        if any(i["amount"] <= 0 for i in installments):
+            self._err.configure(text="Todas as parcelas precisam de um valor positivo.")
+            return
+        self.result = (name, self._category.get(), installments)
         self.destroy()

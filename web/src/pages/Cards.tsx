@@ -10,6 +10,7 @@ import { formatCurrency } from '../lib/format'
 import { Skeleton } from '../components/Skeleton'
 import { CardForm } from '../components/CardForm'
 import { BenefitForm } from '../components/BenefitForm'
+import { CardPurchaseForm } from '../components/CardPurchaseForm'
 import type { CardOverview, BenefitOverview } from '../lib/types'
 
 export function safetyMessage(c: CardOverview): { text: string; color: string } {
@@ -41,6 +42,7 @@ export function Cards() {
   const [addChoice, setAddChoice] = useState(false)
   const [creditForm, setCreditForm] = useState<CardOverview | 'new' | null>(null)
   const [benefitForm, setBenefitForm] = useState<BenefitOverview | 'new' | null>(null)
+  const [purchaseForm, setPurchaseForm] = useState<CardOverview | null>(null)
 
   const [payBusy, setPayBusy] = useState<number | null>(null)
   const [payError, setPayError] = useState('')
@@ -179,16 +181,24 @@ export function Cards() {
                       <button
                         onClick={() => pay(c)}
                         disabled={payBusy === c.id}
-                        className="w-full rounded-lg py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                        className="mb-2 w-full rounded-lg py-2.5 text-sm font-bold text-white disabled:opacity-60"
                         style={{ background: 'var(--primary)' }}
                       >
                         {payBusy === c.id ? 'Pagando…' : `Pagar fatura (${formatCurrency(c.unpaid)})`}
                       </button>
                     ) : (
-                      <p className="text-center text-xs" style={{ color: 'var(--primary)' }}>
+                      <p className="mb-2 text-center text-xs" style={{ color: 'var(--primary)' }}>
                         ✓ Fatura em dia
                       </p>
                     )}
+
+                    <button
+                      onClick={() => setPurchaseForm(c)}
+                      className="w-full rounded-lg border py-2.5 text-sm font-bold"
+                      style={{ borderColor: 'var(--border-l)', color: 'var(--text)' }}
+                    >
+                      🧾 Compra parcelada
+                    </button>
                   </div>
                 )
               })}
@@ -289,6 +299,9 @@ export function Cards() {
       )}
       {benefitForm !== null && (
         <BenefitForm benefit={benefitForm === 'new' ? null : benefitForm} onClose={() => setBenefitForm(null)} />
+      )}
+      {purchaseForm !== null && (
+        <CardPurchaseForm card={purchaseForm} onClose={() => setPurchaseForm(null)} />
       )}
     </div>
   )

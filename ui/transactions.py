@@ -21,6 +21,14 @@ _METHOD_LABELS = list(PAYMENT_METHODS.values())
 _LABEL_TO_METHOD_KEY = {v: k for k, v in PAYMENT_METHODS.items()}
 
 
+def _tx_display_desc(tx: dict) -> str:
+    """Parcela de compra no cartão mostra '🧾 descrição (N/M)' em vez da
+    descrição crua."""
+    if tx.get("card_purchase_id") and tx.get("installment_number") and tx.get("installment_total"):
+        return f"🧾 {tx['description']} ({tx['installment_number']}/{tx['installment_total']})"
+    return tx["description"]
+
+
 class TransactionsTab(ctk.CTkFrame):
     def __init__(self, parent, month_id: int, tx_type: str, on_change: Callable):
         super().__init__(parent, fg_color=T.BG, corner_radius=0)
@@ -103,7 +111,8 @@ class TransactionsTab(ctk.CTkFrame):
             border_width=1, border_color=T.BORDER,
         )
         wrap.grid(row=row, column=0, sticky="ew", padx=28, pady=(20, 0))
-        bar = CardPresetsBar(wrap, month_id=self.month_id, on_cards_changed=self._on_cards_changed)
+        bar = CardPresetsBar(wrap, month_id=self.month_id, on_cards_changed=self._on_cards_changed,
+                             on_purchase_created=self._on_purchase_created)
         bar.pack(fill="x", padx=16, pady=14)
         self._card_bar  = bar
         self._card_wrap = wrap
@@ -130,6 +139,13 @@ class TransactionsTab(ctk.CTkFrame):
         self._refresh_secondary_combo()
         if self._initialized:
             self.refresh()
+
+    def _on_purchase_created(self) -> None:
+        """Uma compra parcelada lançou a parcela do mês atual (gasto real)
+        — refresca a lista pra mostrar na hora, e avisa o resto do app
+        (Dashboard/Planejamento ficam desatualizados)."""
+        self.refresh()
+        self.on_change()
 
     def _on_benefits_changed(self, benefits: List[dict]) -> None:
         self._benefits_list = benefits
@@ -928,7 +944,7 @@ class TransactionsTab(ctk.CTkFrame):
             w["frame"].configure(bg=row_bg)
             w["desc_cell"].configure(bg=row_bg)
             w["actions"].configure(bg=row_bg)
-            w["desc_lbl"].configure(fg_color=row_bg, text=tx["description"], text_color=text_col)
+            w["desc_lbl"].configure(fg_color=row_bg, text=_tx_display_desc(tx), text_color=text_col)
             w["amount_lbl"].configure(fg_color=row_bg, text=format_currency(tx["amount"]), text_color=amt_col)
             w["cat_lbl"].configure(text=f" {tx['category'] or 'Outros'} ", text_color=amt_col)
 
@@ -991,7 +1007,7 @@ class TransactionsTab(ctk.CTkFrame):
 
         # fg_color explícito (não "transparent") para não depender da detecção de pai tk.Frame
         desc_lbl = ctk.CTkLabel(
-            desc_cell, text=tx["description"],
+            desc_cell, text=_tx_display_desc(tx),
             font=F(17, "bold"), text_color=text_col, anchor="w", fg_color=T.CARD,
         )
         desc_lbl.pack(anchor="w")

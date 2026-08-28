@@ -105,6 +105,15 @@ class Dashboard(ctk.CTkScrollableFrame):
         )
         self._plan_alert_lbl.pack(side="left", padx=16, pady=10)
 
+        # ── Aviso proativo de risco de cartão (mesmo padrão do de cima) ─
+        self._card_alert = ctk.CTkFrame(alerts_box, fg_color=T.RED_DIM, corner_radius=10,
+                                        border_width=1, border_color=T.RED)
+        self._card_alert_lbl = ctk.CTkLabel(
+            self._card_alert, text="",
+            font=F(12, "bold"), text_color=T.RED, anchor="w",
+        )
+        self._card_alert_lbl.pack(side="left", padx=16, pady=10)
+
         # ── Widgets configuráveis ────────────────────────────────────
         content = ctk.CTkFrame(self, fg_color="transparent")
         content.grid(row=2, column=0, sticky="nsew", padx=28, pady=(16, 28))
@@ -580,6 +589,10 @@ class Dashboard(ctk.CTkScrollableFrame):
             except Exception:
                 total_unpaid_cards = 0.0
             try:
+                card_warning = self._compute_card_warning(cards, spendings, paid_by_card, s)
+            except Exception:
+                card_warning = ""
+            try:
                 plan          = db.get_plan(self.month_id)
                 plan_items    = db.get_plan_items(plan["id"]) if plan else []
                 plan_realized = db.get_plan_realized(self.month_id) if plan else {}
@@ -658,6 +671,7 @@ class Dashboard(ctk.CTkScrollableFrame):
 
             self.after(0, lambda p=plan, it=plan_items, pr=plan_realized:
                        self._update_plan_alert(p, it, pr))
+            self.after(0, lambda w=card_warning: self._update_card_alert(w))
             if pie_fig is not None:
                 self.after(0, lambda: self._embed_pie(pie_fig))
             if bar_fig is not None:
@@ -687,6 +701,52 @@ class Dashboard(ctk.CTkScrollableFrame):
                 self.after(0, lambda: self._embed_host("_gastos7d_host", gastos7d_fig))
 
         threading.Thread(target=_background, daemon=True).start()
+
+    def _compute_card_warning(self, cards: list, spendings: dict,
+                              paid_by_card: dict, s: dict) -> str:
+        """Roda em background thread. Reaproveita _credit_safety (mesma
+        lógica do painel de cartões) pra achar cartões em nível vermelho,
+        e soma quanto o mês seguinte já tem em parcelas previstas."""
+        from ui.credit_cards import _days_until
+        saldo = s.get("saldo", 0)
+        red_cards = []
+        for c in cards:
+            limit    = float(c.get("limit") or 0)
+            spent    = spendings.get(c["id"], 0.0)
+            paid     = paid_by_card.get(c["id"], 0.0)
+            unpaid   = max(0.0, spent - paid)
+            pct_used = spent / limit if limit > 0 else 0.0
+            avail    = max(0.0, limit - spent) if limit > 0 else None
+            days_due = _days_until(c.get("due_day", 10))
+            msg, color = _credit_safety(pct_used, days_due, unpaid, saldo, avail)
+            if color == T.RED:
+                red_cards.append((c["name"], msg))
+
+        parts = []
+        if len(red_cards) == 1:
+            parts.append(f"⚠ {red_cards[0][0]}: {red_cards[0][1]}")
+        elif red_cards:
+            names = ", ".join(n for n, _ in red_cards[:3]) + ("…" if len(red_cards) > 3 else "")
+            parts.append(f"⚠ Atenção com: {names}")
+
+        try:
+            commitments = db.get_future_commitments(2)
+            if len(commitments) > 1:
+                next_card_total = float(commitments[1].get("card_total") or 0)
+                if next_card_total > 300:
+                    parts.append(f"mês que vem já tem {format_currency(next_card_total)} "
+                                 "comprometido em parcelas")
+        except Exception:
+            pass
+
+        return "  •  ".join(parts)
+
+    def _update_card_alert(self, warning: str) -> None:
+        if warning:
+            self._card_alert_lbl.configure(text=warning)
+            self._card_alert.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+        else:
+            self._card_alert.grid_remove()
 
     def _update_plan_alert(self, plan, items: list, spent: dict) -> None:
         """Mostra alerta quando categorias do plano ativo estouram o planejado."""

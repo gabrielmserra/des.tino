@@ -14,6 +14,7 @@ import { DashboardSkeleton } from '../components/Skeleton'
 import { EditableWidgetCard } from '../components/EditableWidgetCard'
 import { AddWidgetPicker } from '../components/AddWidgetPicker'
 import { AddMonthDialog } from '../components/AddMonthDialog'
+import { CardRiskBanner } from '../components/CardRiskBanner'
 import { DEFAULT_WIDGET_ORDER, WIDGET_REGISTRY, widgetById, type WidgetDef } from '../lib/dashboardWidgets'
 import type { DashboardWidgetEntry } from '../lib/types'
 
@@ -172,6 +173,8 @@ export function Dashboard() {
           {editMode && <span className="text-sm font-bold">Concluir</span>}
         </button>
       </div>
+
+      {!editMode && <CardRiskBanner />}
 
       {activeDefs.length === 0 && !editMode ? (
         <p className="py-8 text-center text-sm" style={{ color: 'var(--muted)' }}>

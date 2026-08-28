@@ -709,6 +709,48 @@ def delete_card(card_id: int) -> None:
         _card_tx_cache.pop(k, None)
 
 
+# ---------------------------------------------------------------------------
+# Parcelamento real de compra no cartão — cada parcela é uma transação
+# normal (mesmo mecanismo de qualquer gasto no cartão), uma por mês. A
+# parcela do mês corrente é gasto real; as futuras entram como previstas.
+# Criação é atômica (compra + N transações + meses garantidos numa única
+# chamada), por isso via RPC em vez de reimplementar em várias chamadas.
+# ---------------------------------------------------------------------------
+
+def create_card_purchase(card_id: int, description: str, category: str,
+                         installments: List[dict]) -> int:
+    """installments: [{"amount","year","month"}]"""
+    resp = get_client().rpc("create_card_purchase", {
+        "p_card_id": card_id, "p_description": description,
+        "p_category": category, "p_installments": installments,
+    }).execute()
+    _invalidate_cards_tx_cache()
+    return resp.data
+
+
+def delete_remaining_card_purchase_installments(purchase_id: int) -> None:
+    """Apaga só as parcelas ainda previstas (futuras) — a parcela real do
+    mês corrente/passado fica intacta."""
+    get_client().rpc("delete_remaining_card_purchase_installments", {
+        "p_purchase_id": purchase_id,
+    }).execute()
+    _invalidate_cards_tx_cache()
+
+
+def get_future_commitments(months: int = 6) -> List[dict]:
+    """Agrega, mês a mês a partir do corrente: parcelas de cartão
+    previstas + dívidas em aberto + contas fixas pendentes."""
+    resp = get_client().rpc("get_future_commitments", {"p_months": months}).execute()
+    return resp.data or []
+
+
+def _invalidate_cards_tx_cache() -> None:
+    """Uma compra parcelada mexe em `transactions` de vários meses de uma
+    vez — invalida tudo em vez de tentar rastrear quais month_ids foram
+    tocados."""
+    _tx_cache.clear()
+
+
 def get_card_transactions(card_id: int, month_id: int) -> List[dict]:
     key = f"{card_id}_{month_id}"
     if key not in _card_tx_cache:

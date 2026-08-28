@@ -31,6 +31,9 @@ export type Transaction = {
   payment_date: string | null
   is_expectation: boolean
   created_at: string
+  card_purchase_id: number | null
+  installment_number: number | null
+  installment_total: number | null
 }
 
 export type MonthSummary = {
@@ -256,4 +259,29 @@ export type GoalInstallmentInput = {
   year: number
   month: number
   day?: number | null
+}
+
+export type CardPurchase = {
+  id: number
+  card_id: number
+  description: string
+  category: string
+  total_amount: number
+  installment_count: number
+  created_at: string
+}
+
+export type CardPurchaseInstallmentInput = {
+  amount: number
+  year: number
+  month: number
+}
+
+export type FutureCommitment = {
+  year: number
+  month: number
+  card_total: number
+  debt_total: number
+  bills_total: number
+  grand_total: number
 }
