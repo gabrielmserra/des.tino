@@ -5,7 +5,7 @@ import { formatCurrency } from '../lib/format'
 import { safetyMessage } from '../pages/Cards'
 
 export function CardRiskBanner() {
-  const { selectedId } = useMonths()
+  const { selectedId, months } = useMonths()
 
   const cardsQ = useQuery({
     queryKey: ['cardsOverview', selectedId],
@@ -13,8 +13,8 @@ export function CardRiskBanner() {
     enabled: selectedId != null,
   })
   const commitmentsQ = useQuery({
-    queryKey: ['futureCommitments', 2],
-    queryFn: () => fetchFutureCommitments(2),
+    queryKey: ['futureCommitments', 3],
+    queryFn: () => fetchFutureCommitments(3),
   })
 
   const cards = cardsQ.data ?? []
@@ -22,7 +22,18 @@ export function CardRiskBanner() {
     .map((c) => ({ c, safety: safetyMessage(c) }))
     .filter(({ safety }) => safety.color === 'var(--red)')
 
-  const nextMonthCardTotal = commitmentsQ.data?.[1]?.card_total ?? 0
+  // "Mês atual" na visão do app (o mais recente cadastrado — pode estar à
+  // frente do calendário por causa do dia de corte), não a data real de hoje.
+  const current = months[0]
+  const commitments = commitmentsQ.data ?? []
+  const curRow = current
+    ? commitments.find((c) => c.year === current.year && c.month === current.month)
+    : undefined
+  const openBillTotal = curRow?.card_total ?? 0
+  const nextRow = current
+    ? commitments.find((c) => c.year > current.year || (c.year === current.year && c.month > current.month))
+    : undefined
+  const nextMonthCardTotal = nextRow?.card_total ?? 0
 
   const parts: string[] = []
   if (redCards.length === 1) {
@@ -30,6 +41,9 @@ export function CardRiskBanner() {
   } else if (redCards.length > 1) {
     const names = redCards.slice(0, 3).map(({ c }) => c.name).join(', ') + (redCards.length > 3 ? '…' : '')
     parts.push(`⚠ Atenção com: ${names}`)
+  }
+  if (openBillTotal > 300) {
+    parts.push(`fatura em aberto: ${formatCurrency(openBillTotal)}`)
   }
   if (nextMonthCardTotal > 300) {
     parts.push(`mês que vem já tem ${formatCurrency(nextMonthCardTotal)} comprometido em parcelas`)
