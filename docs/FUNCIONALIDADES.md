@@ -168,10 +168,15 @@ Três tipos de meta, lado a lado:
   do mês corrente), **tudo** que já está comprometido pra frente: parcelas
   de compras no cartão ainda previstas, dívidas em aberto e contas fixas
   pendentes — três subtotais por mês mais o total geral.
-- **[Ambas]** O subtotal de cartão do mês corrente também inclui a
-  **fatura em aberto** (gasto real do ciclo atual ainda não pago) — mesmo
-  cálculo de `get_cards_overview`, usado na tela de Cartões — e não só as
-  parcelas futuras previstas.
+- **[Ambas]** O subtotal de cartão também inclui a **fatura em aberto**
+  (gasto real do ciclo atual ainda não pago) de cada cartão, não só as
+  parcelas futuras previstas. A fatura é rotulada pelo **mês em que o
+  ciclo do cartão começou** (dia de fechamento configurado em cada
+  cartão) — ex.: cartão que fecha dia 4 e vence dia 12: a fatura que
+  fecha 04/09 é "a fatura de Agosto" (ciclo começou 04/08); a que abre a
+  partir de 04/09 é "a de Setembro". Isso é independente do dia de corte
+  global da importação de extrato (Configurações), que só decide em qual
+  mês um lançamento importado cai — os dois não têm relação entre si.
 - **[Desktop]** Tela acessada pela barra lateral ("💳 Compromissos
   Futuros").
 - **[Web]** Tela acessada pela página "Mais" (`/compromissos-futuros`).

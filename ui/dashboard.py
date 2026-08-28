@@ -706,9 +706,10 @@ class Dashboard(ctk.CTkScrollableFrame):
                               paid_by_card: dict, s: dict) -> str:
         """Roda em background thread. Reaproveita _credit_safety (mesma
         lógica do painel de cartões) pra achar cartões em nível vermelho,
-        soma a fatura em aberto do mês corrente (na visão do app, que pode
-        estar à frente do calendário por causa do dia de corte) e quanto o
-        mês seguinte a esse já tem em parcelas previstas."""
+        soma a fatura em aberto do ciclo atual de cada cartão (rotulada
+        pelo mês em que o ciclo começou, mesmo critério de fechamento
+        usado na tela de Cartões) e quanto o mês seguinte já tem em
+        parcelas previstas."""
         from ui.credit_cards import _days_until
         saldo = s.get("saldo", 0)
         red_cards = []
@@ -732,23 +733,16 @@ class Dashboard(ctk.CTkScrollableFrame):
             parts.append(f"⚠ Atenção com: {names}")
 
         try:
-            months = db.get_months()
-            if months:
-                cur_year, cur_month = months[0]["year"], months[0]["month"]
-                commitments = db.get_future_commitments(3)
-                cur_row = next(
-                    (c for c in commitments if c["year"] == cur_year and c["month"] == cur_month), None)
-                if cur_row:
-                    cur_total = float(cur_row.get("card_total") or 0)
-                    if cur_total > 300:
-                        parts.append(f"fatura em aberto: {format_currency(cur_total)}")
-                future_rows = [c for c in commitments
-                               if (c["year"], c["month"]) > (cur_year, cur_month)]
-                if future_rows:
-                    next_total = float(future_rows[0].get("card_total") or 0)
-                    if next_total > 300:
-                        parts.append(f"mês que vem já tem {format_currency(next_total)} "
-                                     "comprometido em parcelas")
+            commitments = db.get_future_commitments(2)
+            if commitments:
+                cur_total = float(commitments[0].get("card_total") or 0)
+                if cur_total > 300:
+                    parts.append(f"fatura em aberto: {format_currency(cur_total)}")
+            if len(commitments) > 1:
+                next_total = float(commitments[1].get("card_total") or 0)
+                if next_total > 300:
+                    parts.append(f"mês que vem já tem {format_currency(next_total)} "
+                                 "comprometido em parcelas")
         except Exception:
             pass
 

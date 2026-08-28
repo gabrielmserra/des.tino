@@ -5,7 +5,7 @@ import { formatCurrency } from '../lib/format'
 import { safetyMessage } from '../pages/Cards'
 
 export function CardRiskBanner() {
-  const { selectedId, months } = useMonths()
+  const { selectedId } = useMonths()
 
   const cardsQ = useQuery({
     queryKey: ['cardsOverview', selectedId],
@@ -13,8 +13,8 @@ export function CardRiskBanner() {
     enabled: selectedId != null,
   })
   const commitmentsQ = useQuery({
-    queryKey: ['futureCommitments', 3],
-    queryFn: () => fetchFutureCommitments(3),
+    queryKey: ['futureCommitments', 2],
+    queryFn: () => fetchFutureCommitments(2),
   })
 
   const cards = cardsQ.data ?? []
@@ -22,18 +22,12 @@ export function CardRiskBanner() {
     .map((c) => ({ c, safety: safetyMessage(c) }))
     .filter(({ safety }) => safety.color === 'var(--red)')
 
-  // "Mês atual" na visão do app (o mais recente cadastrado — pode estar à
-  // frente do calendário por causa do dia de corte), não a data real de hoje.
-  const current = months[0]
+  // commitments[0] é sempre o mês corrente de verdade (data real), e
+  // commitments[1] o mês seguinte — get_future_commitments rotula a
+  // fatura em aberto de cada cartão pelo mês em que o ciclo dele começou.
   const commitments = commitmentsQ.data ?? []
-  const curRow = current
-    ? commitments.find((c) => c.year === current.year && c.month === current.month)
-    : undefined
-  const openBillTotal = curRow?.card_total ?? 0
-  const nextRow = current
-    ? commitments.find((c) => c.year > current.year || (c.year === current.year && c.month > current.month))
-    : undefined
-  const nextMonthCardTotal = nextRow?.card_total ?? 0
+  const openBillTotal = commitments[0]?.card_total ?? 0
+  const nextMonthCardTotal = commitments[1]?.card_total ?? 0
 
   const parts: string[] = []
   if (redCards.length === 1) {
