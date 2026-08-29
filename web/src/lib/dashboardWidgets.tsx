@@ -223,7 +223,7 @@ function MetasWidget() {
   const done = goals.filter((g) => (g.target_amount ?? 0) > 0 && g.saved_amount >= g.target_amount!).length
 
   return (
-    <Link to="/metas" className="block rounded-2xl border p-4" style={CARD_STYLE}>
+    <Link to="/compromissos?tab=metas" className="block rounded-2xl border p-4" style={CARD_STYLE}>
       <div className="mb-2 flex items-center justify-between">
         <p className="text-sm font-bold">🎯 Metas de Poupança</p>
         {goals.length > 0 && (
