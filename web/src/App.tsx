@@ -12,10 +12,8 @@ import { Dashboard } from './pages/Dashboard'
 import { Transactions } from './pages/Transactions'
 import { Cards } from './pages/Cards'
 import { Planning } from './pages/Planning'
-import { Debts } from './pages/Debts'
+import { Commitments } from './pages/Commitments'
 import { Investments } from './pages/Investments'
-import { Goals } from './pages/Goals'
-import { FixedBills } from './pages/FixedBills'
 import { FutureCommitments } from './pages/FutureCommitments'
 import { More } from './pages/More'
 import { Settings } from './pages/Settings'
@@ -62,10 +60,11 @@ export default function App() {
             <Route path="/cartoes" element={<Cards />} />
             <Route path="/beneficios" element={<Navigate to="/cartoes" replace />} />
             <Route path="/planejamento" element={<Planning />} />
-            <Route path="/dividas" element={<Debts />} />
+            <Route path="/compromissos" element={<Commitments />} />
+            <Route path="/dividas" element={<Navigate to="/compromissos?tab=dividas" replace />} />
+            <Route path="/metas" element={<Navigate to="/compromissos?tab=metas" replace />} />
+            <Route path="/contas-fixas" element={<Navigate to="/compromissos?tab=contas-fixas" replace />} />
             <Route path="/investimentos" element={<Investments />} />
-            <Route path="/metas" element={<Goals />} />
-            <Route path="/contas-fixas" element={<FixedBills />} />
             <Route path="/compromissos-futuros" element={<FutureCommitments />} />
             <Route
               path="/importar"

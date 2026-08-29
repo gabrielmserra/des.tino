@@ -245,7 +245,7 @@ export function Layout() {
         <NavTab to="/planejamento" icon={ClipboardList} label="Plano" />
         <NavTab to="/lancamentos" icon={Receipt} label="Lançamentos" />
         <NavTab to="/cartoes" icon={CreditCard} label="Cartões" />
-        <NavTab to="/dividas" icon={HandCoins} label="Dívidas" />
+        <NavTab to="/compromissos" icon={HandCoins} label="Compromissos" />
         <NavTab to="/mais" icon={MoreHorizontal} label="Mais" />
       </nav>
     </div>

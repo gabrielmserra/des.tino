@@ -85,7 +85,21 @@ Para cada lançamento:
 - **[Ambas]** Comparação visual entre planejado x realizado por categoria.
 - **[Ambas]** Mesmas 13 categorias dos lançamentos (`PLAN_CATEGORIES`).
 
-## 6. Dívidas
+## 6. Compromissos (Dívidas, Metas e Contas Fixas)
+
+- **[Ambas]** As três funcionalidades abaixo vivem numa única tela
+  "Compromissos", com uma aba pra cada uma — todas compartilham a mesma
+  ideia: uma lista de itens com um cronograma de parcelas/instâncias com
+  status pago/pendente/atrasado, e marcar como pago **nunca lança
+  despesa nem mexe no saldo automaticamente** (é só um checklist de
+  controle).
+- **[Desktop]** Tela acessada pela barra lateral ("📋 Compromissos"), com
+  as 3 abas dentro.
+- **[Web]** Aba "Compromissos" na barra inferior (`/compromissos`), com
+  seletor de sub-aba (`?tab=dividas|metas|contas-fixas`). As rotas
+  antigas (`/dividas`, `/metas`, `/contas-fixas`) redirecionam pra cá.
+
+### 6.1 Dívidas
 
 - **[Ambas]** Cadastro de dívidas com parcelas (nome, valor total, número de
   parcelas, vencimentos).
@@ -102,17 +116,7 @@ Para cada lançamento:
   pela Tabela Price continuam editáveis manualmente depois, pra ajustar
   arredondamento do banco ou trocar pra sistema SAC).
 
-## 7. Investimentos
-
-- **[Ambas]** Registro de aportes e resgates por categoria: Ações, FIIs,
-  Criptomoedas, CDB/LCI/LCA, Tesouro Direto, Previdência, Poupança, Outros.
-- **[Ambas]** Acompanhamento do total investido e evolução do patrimônio.
-- **[Ambas]** Detecção automática de aporte/resgate na importação de extrato
-  (palavras-chave: "Tesouro Direto", "Aplicação", "Resgate", "CDB", "LCI",
-  "LCA", "Fundo de Investimento") — sugerido como investimento, fora do
-  fluxo normal de despesa/receita, mas confirmado pelo usuário na revisão.
-
-## 8. Metas de poupança
+### 6.2 Metas de poupança
 
 Três tipos de meta, lado a lado:
 
@@ -143,7 +147,7 @@ Três tipos de meta, lado a lado:
     contrário da meta mensal), então dá pra ver o progresso de montar o
     cronograma até completar o valor desejado.
 
-## 9. Contas Fixas
+### 6.3 Contas Fixas
 
 - **[Ambas]** Cadastro de contas recorrentes mensais — internet, luz, água,
   aluguel, condomínio etc. — cada uma com nome, valor esperado, dia de
@@ -159,10 +163,18 @@ Três tipos de meta, lado a lado:
   saldo atual menos as contas do mês real ainda não pagas — mostra também
   um aviso compacto quando alguma conta pendente já passou do vencimento
   (ex.: "Internet venceu dia 20"), sem aumentar o tamanho do card.
-- **[Desktop]** Tela acessada pela barra lateral.
-- **[Web]** Tela acessada pela página "Mais" (`/contas-fixas`).
 
-## 10. Compromissos Futuros
+## 7. Investimentos
+
+- **[Ambas]** Registro de aportes e resgates por categoria: Ações, FIIs,
+  Criptomoedas, CDB/LCI/LCA, Tesouro Direto, Previdência, Poupança, Outros.
+- **[Ambas]** Acompanhamento do total investido e evolução do patrimônio.
+- **[Ambas]** Detecção automática de aporte/resgate na importação de extrato
+  (palavras-chave: "Tesouro Direto", "Aplicação", "Resgate", "CDB", "LCI",
+  "LCA", "Fundo de Investimento") — sugerido como investimento, fora do
+  fluxo normal de despesa/receita, mas confirmado pelo usuário na revisão.
+
+## 8. Compromissos Futuros
 
 - **[Ambas]** Tela dedicada que soma, mês a mês (próximos 6 meses a partir
   do mês corrente), **tudo** que já está comprometido pra frente: parcelas
@@ -181,7 +193,7 @@ Três tipos de meta, lado a lado:
   Futuros").
 - **[Web]** Tela acessada pela página "Mais" (`/compromissos-futuros`).
 
-## 11. Aviso proativo de risco de cartão
+## 9. Aviso proativo de risco de cartão
 
 - **[Ambas]** Banner de alerta visível direto no Dashboard (sem precisar
   abrir a tela de Cartões) quando algum cartão está em nível de risco
@@ -191,7 +203,7 @@ Três tipos de meta, lado a lado:
 - **[Ambas]** Aviso adicional quando o **mês seguinte** já tem mais de
   R$300 em parcelas de cartão previstas.
 
-## 12. Dashboard
+## 10. Dashboard
 
 - **[Ambas]** 18 widgets configuráveis, cada usuário escolhe quais quer ver
   e em que ordem:
@@ -229,7 +241,7 @@ Três tipos de meta, lado a lado:
   gráfico (não precisa passar o mouse em cima), com tooltip formatado em
   R$ ao passar o mouse.
 
-## 13. Importação de extrato bancário
+## 11. Importação de extrato bancário
 
 - **[Ambas]** Importação de extrato da conta corrente do Banco Inter em três
   formatos: OFX, CSV e PDF.
@@ -259,7 +271,7 @@ Três tipos de meta, lado a lado:
 - **[Ambas]** Detecção automática de aporte/resgate de investimento durante
   a importação.
 
-## 14. Exportação
+## 12. Exportação
 
 - **[Ambas]** Exportação do mês em **.xlsx** (Excel) formatado: cabeçalho
   com fundo escuro e texto branco em negrito, valores em moeda (R$),
@@ -279,7 +291,7 @@ Três tipos de meta, lado a lado:
   - **[Web]** gerado com `canvas` nativo (gráficos) + `jsPDF`/`jspdf-autotable`
     (PDF), carregado sob demanda.
 
-## 15. Configurações
+## 13. Configurações
 
 - **[Ambas]** Dia de corte para importação de extrato (padrão: dia 1, ou
   seja, sem deslocamento de mês) — editável pelo usuário.
@@ -287,7 +299,7 @@ Três tipos de meta, lado a lado:
   lateral (desktop) ou tela de Configurações (web).
 - **[Ambas]** Botão "Baixar Relatório Completo" (ver [Exportação](#12-exportação)).
 
-## 16. Atalho de voz (quick-tx)
+## 14. Atalho de voz (quick-tx)
 
 - **[Web/Automação]** Edge Function no Supabase (`quick-tx`) que recebe um
   texto (ex. de um atalho de voz do celular) e cria um lançamento
@@ -297,7 +309,7 @@ Três tipos de meta, lado a lado:
   function muda — não é publicado automaticamente pelo pipeline normal do
   app.
 
-## 17. Infraestrutura e sincronização
+## 15. Infraestrutura e sincronização
 
 - **[Ambas]** Um único banco Supabase Postgres com Row Level Security por
   usuário — qualquer lançamento feito no desktop aparece no site/celular e

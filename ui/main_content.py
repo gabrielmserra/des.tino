@@ -9,12 +9,11 @@ import ui.theme as T
 from ui.theme import F
 from ui.dashboard    import Dashboard
 from ui.transactions import TransactionsTab
-from ui.goals        import GoalsTab
 from ui.planning     import PlanningTab
 from utils.helpers   import TRANSACTION_TYPES, MONTHS_PT
 
 _TABS = ([("dashboard", "Dashboard"), ("planejamento", "Planejamento")]
-         + list(TRANSACTION_TYPES.items()) + [("metas", "Metas")])
+         + list(TRANSACTION_TYPES.items()))
 
 
 class MainContent(ctk.CTkFrame):
@@ -114,10 +113,6 @@ class MainContent(ctk.CTkFrame):
             frame.grid(row=0, column=0, sticky="nsew")
             self._frames[tx_type] = frame
 
-        goals_frame = GoalsTab(content, on_change=self._refresh_dashboard)
-        goals_frame.grid(row=0, column=0, sticky="nsew")
-        self._frames["metas"] = goals_frame
-
         planning_frame = PlanningTab(content, self.month_id,
                                      on_change=self._refresh_dashboard)
         planning_frame.grid(row=0, column=0, sticky="nsew")
@@ -134,8 +129,7 @@ class MainContent(ctk.CTkFrame):
             f.grid_remove()
         self._frames[tab_id].grid()
 
-        needs_refresh = (tab_id == "metas"
-                         or tab_id in self._stale_tabs
+        needs_refresh = (tab_id in self._stale_tabs
                          or tab_id in self._uninitialized_tabs)
         if needs_refresh:
             frame = self._frames[tab_id]
