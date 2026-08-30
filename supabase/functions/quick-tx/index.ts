@@ -169,6 +169,14 @@ function nowInSaoPaulo(): { year: number; month: number } {
   return { year, month };
 }
 
+// Data do lançamento: sempre o dia em que o comando de voz foi falado (não
+// entende "ontem"/"dia X" na frase — só a data real de hoje).
+function todayInSaoPaulo(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "Use POST." }, 405);
@@ -234,6 +242,7 @@ Deno.serve(async (req) => {
     amount: amt.value,
     category,
     is_expectation: expectation,
+    payment_date: todayInSaoPaulo(),
   });
   if (tErr) return json({ error: "Falha ao lançar: " + tErr.message }, 500);
 
