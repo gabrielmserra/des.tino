@@ -12,6 +12,7 @@ type AuthContextValue = {
   session: Session | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<{ error?: string }>
+  signUp: (email: string, password: string) => Promise<{ error?: string; needsConfirmation?: boolean }>
   signOut: () => Promise<void>
 }
 
@@ -37,12 +38,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message }
   }
 
+  const signUp = async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signUp({ email, password })
+    if (error) return { error: error.message }
+    // Se a confirmação de e-mail estiver ativada no projeto, o cadastro
+    // não vem com sessão — precisa confirmar pelo e-mail antes de entrar.
+    return { needsConfirmation: !data.session }
+  }
+
   const signOut = async () => {
     await supabase.auth.signOut()
   }
 
   return (
-    <AuthContext.Provider value={{ session, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ session, loading, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   )

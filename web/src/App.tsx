@@ -6,6 +6,7 @@ import { ThemeProvider } from './lib/theme'
 import { TxFormProvider } from './lib/txform'
 import { Layout } from './components/Layout'
 import { Login } from './pages/Login'
+import { SignUp } from './pages/SignUp'
 import { ForgotPassword } from './pages/ForgotPassword'
 import { ResetPassword } from './pages/ResetPassword'
 import { Dashboard } from './pages/Dashboard'
@@ -40,6 +41,10 @@ export default function App() {
         <Route
           path="/login"
           element={session ? <Navigate to="/" replace /> : <Login />}
+        />
+        <Route
+          path="/cadastro"
+          element={session ? <Navigate to="/" replace /> : <SignUp />}
         />
         <Route path="/esqueci-senha" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />

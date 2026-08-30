@@ -14,6 +14,9 @@ exe · **[Web]** só no site/PWA.
 ## 1. Conta e acesso
 
 - **[Ambas]** Login por e-mail/senha (Supabase Auth).
+- **[Ambas]** Criar conta nova por e-mail/senha (`/cadastro` no web) — se o
+  projeto tiver confirmação de e-mail ativada, mostra aviso pra confirmar
+  antes de entrar; senão, entra direto.
 - **[Web]** "Esqueci minha senha" com fluxo de redefinição por e-mail
   (`/esqueci-senha`, `/reset-password`).
 - **[Web]** Instalável como PWA no celular (ícone na tela inicial, abre em
