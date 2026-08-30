@@ -885,6 +885,7 @@ def clear_cache() -> None:
     _bill_cache.clear()
     _plan_cache.clear()
     _plan_items_cache.clear()
+    _plan_income_items_cache.clear()
     _invalidate_debts()
     _invalidate_benefits()
 
@@ -1036,6 +1037,7 @@ def get_all_investment_movements() -> List[dict]:
 
 _plan_cache:       Dict[int, Optional[dict]] = {}  # month_id → plano (ou None)
 _plan_items_cache: Dict[int, List[dict]]     = {}  # plan_id  → itens
+_plan_income_items_cache: Dict[int, List[dict]] = {}  # plan_id → entradas de renda
 
 
 def get_plan(month_id: int) -> Optional[dict]:
@@ -1061,7 +1063,20 @@ def get_plan_items(plan_id: int) -> List[dict]:
     return list(_plan_items_cache[plan_id])
 
 
-def save_plan(month_id: int, income: float, items: List[dict]) -> dict:
+def get_plan_income_items(plan_id: int) -> List[dict]:
+    """Retorna as entradas de renda (valor + dia do mês) de um plano."""
+    if plan_id not in _plan_income_items_cache:
+        resp = get_client().table("plan_income_items") \
+            .select("*") \
+            .eq("plan_id", plan_id) \
+            .order("expected_day") \
+            .execute()
+        _plan_income_items_cache[plan_id] = resp.data or []
+    return list(_plan_income_items_cache[plan_id])
+
+
+def save_plan(month_id: int, income: float, items: List[dict],
+             income_items: Optional[List[dict]] = None) -> dict:
     """Cria ou atualiza o plano do mês e substitui seus itens.
 
     Nunca duplica: se o plano já existe (constraint unique month_id),
@@ -1069,6 +1084,8 @@ def save_plan(month_id: int, income: float, items: List[dict]) -> dict:
     planos `ativo` de meses anteriores.
 
     items: [{"category", "planned_amount", "suggested_amount", "is_eventual"}]
+    income_items: [{"amount", "expected_day"}] — detalhamento da renda,
+    só uma estimativa (nunca cria lançamento real).
     """
     from datetime import datetime, timezone
     client  = get_client()
@@ -1113,8 +1130,19 @@ def save_plan(month_id: int, income: float, items: List[dict]) -> dict:
     if rows:
         client.table("monthly_plan_items").insert(rows).execute()
 
+    client.table("plan_income_items").delete().eq("plan_id", plan["id"]).execute()
+    income_rows = [{
+        "plan_id":      plan["id"],
+        "user_id":      user_id,
+        "amount":       float(it["amount"]),
+        "expected_day": int(it["expected_day"]),
+    } for it in (income_items or [])]
+    if income_rows:
+        client.table("plan_income_items").insert(income_rows).execute()
+
     _plan_cache.pop(month_id, None)
     _plan_items_cache.pop(plan["id"], None)
+    _plan_income_items_cache.pop(plan["id"], None)
     return plan
 
 

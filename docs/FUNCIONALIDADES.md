@@ -48,7 +48,9 @@ Para cada lançamento:
   Investimentos, Outros.
 - **[Ambas]** 8 formas de pagamento: Dinheiro, Pix, Débito, Crédito, VR/VA,
   Boleto, Transferência, Outro.
-- **[Ambas]** Forma de pagamento é **obrigatória** no lançamento.
+- **[Ambas]** Forma de pagamento e **data do pagamento** são obrigatórias
+  no lançamento — o campo de data já vem pré-preenchido com hoje (editável
+  antes de salvar).
 - **[Ambas]** Editar e excluir lançamentos.
 - **[Ambas]** Marcar despesa/receita como "prevista" (ainda não efetivada) —
   entra no planejamento sem contar no saldo real ainda.
@@ -84,6 +86,12 @@ Para cada lançamento:
 - **[Ambas]** Definir um valor planejado por categoria para o mês.
 - **[Ambas]** Comparação visual entre planejado x realizado por categoria.
 - **[Ambas]** Mesmas 13 categorias dos lançamentos (`PLAN_CATEGORIES`).
+- **[Ambas]** A renda do mês é montada como **uma ou mais entradas
+  esperadas**, cada uma com valor e o dia do mês em que costuma cair (ex.:
+  "R$5000 no dia 5" + "R$2860 no dia 24"), em vez de um número único —
+  botão "✎ Editar entradas" abre a lista pra adicionar/remover/ajustar.
+  Continua sendo só uma estimativa/meta do Planejamento — **nunca lança
+  nenhuma transação real**, igual Dívidas/Metas/Contas Fixas.
 
 ## 6. Compromissos (Dívidas, Metas e Contas Fixas)
 

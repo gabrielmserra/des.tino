@@ -1,7 +1,7 @@
 """Aba de Planejamento: gerar plano de alocação por categoria, revisar e acompanhar."""
 import threading
 import customtkinter as ctk
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 import database as db
 import ui.theme as T
@@ -24,6 +24,7 @@ class PlanningTab(ctk.CTkFrame):
         self.month_id   = month_id
         self._on_change = on_change
         self._review_rows: dict = {}  # categoria → widgets (modo revisão)
+        self._income_items: List[dict] = []  # entradas de renda (modo revisão)
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
@@ -56,22 +57,23 @@ class PlanningTab(ctk.CTkFrame):
             except Exception:
                 pass
             try:
-                plan     = db.get_plan(month_id)
-                items    = db.get_plan_items(plan["id"]) if plan else []
-                realized = db.get_plan_realized(month_id)
+                plan         = db.get_plan(month_id)
+                items        = db.get_plan_items(plan["id"]) if plan else []
+                income_items = db.get_plan_income_items(plan["id"]) if plan else []
+                realized     = db.get_plan_realized(month_id)
             except Exception:
-                plan, items, realized = None, [], {}
+                plan, items, income_items, realized = None, [], [], {}
             if month_id == self.month_id:
-                self.after(0, lambda: self._apply(plan, items, realized, synced))
+                self.after(0, lambda: self._apply(plan, items, income_items, realized, synced))
 
         threading.Thread(target=_fetch, daemon=True).start()
 
-    def _apply(self, plan, items, realized, synced: bool = False) -> None:
+    def _apply(self, plan, items, income_items, realized, synced: bool = False) -> None:
         self._clear()
         if plan is None:
             self._render_empty()
         else:
-            self._render_tracking(plan, items, realized, synced)
+            self._render_tracking(plan, items, income_items, realized, synced)
 
     def _clear(self) -> None:
         for w in self._header.winfo_children():
@@ -132,12 +134,18 @@ class PlanningTab(ctk.CTkFrame):
 
     def _ask_income_and_render(self, expenses_hist: list, income_hist: list,
                                income: float, debt_totals: dict = None) -> None:
-        """Mês sem entradas → pede uma estimativa de renda antes de sugerir."""
+        """Mês sem entradas → pede as entradas de renda esperadas antes de sugerir."""
         if income <= 0:
-            dlg = _IncomeDialog(self.winfo_toplevel(),
-                                suggested=estimate_income(income_hist))
+            dlg = _IncomeItemsDialog(self.winfo_toplevel(),
+                                     suggested=estimate_income(income_hist))
             self.winfo_toplevel().wait_window(dlg)
-            income = dlg.amount or 0.0
+            income_items = dlg.income_items if dlg.income_items is not None else []
+        else:
+            # Já tem entrada real na ledger — usa o total direto, sem
+            # perguntar (mesmo atalho de sempre), mas guarda como um item
+            # sintético pra manter o estado sempre "é uma lista".
+            income_items = [{"amount": income, "expected_day": 1}]
+        income = sum(i["amount"] for i in income_items)
 
         debt_totals = debt_totals or {}
         # Dívidas são reserva obrigatória: a sugestão por histórico distribui
@@ -165,23 +173,30 @@ class PlanningTab(ctk.CTkFrame):
         } for cat, s in suggestions.items() if cat not in debt_totals]
         free_rows.sort(key=lambda r: r["planned_amount"], reverse=True)
 
-        self._render_review(income, rows + free_rows, n_hist=len(expenses_hist))
+        self._render_review(income_items, rows + free_rows, n_hist=len(expenses_hist))
 
     # ==================================================================
     # Estado 2 — revisão / edição do plano
     # ==================================================================
-    def _render_review(self, income: float, rows: list, n_hist: int = -1) -> None:
+    def _render_review(self, income_items: list, rows: list, n_hist: int = -1) -> None:
         self._clear()
         self._header.grid()
+        self._income_items = list(income_items or [])
 
         ctk.CTkLabel(self._header, text="Revisão do plano",
                      font=F(14, "bold"), text_color=T.TEXT, anchor="w").grid(
             row=0, column=0, padx=18, pady=(14, 2), sticky="w")
 
-        # Renda editável + totais dinâmicos
-        ctk.CTkLabel(self._header, text="RENDA DO MÊS (R$)", font=F(11, "bold"),
-                     text_color=T.MUTED, anchor="w").grid(
-            row=1, column=0, padx=(18, 6), sticky="w")
+        # Renda (soma das entradas cadastradas) + totais dinâmicos
+        income_hdr = ctk.CTkFrame(self._header, fg_color="transparent")
+        income_hdr.grid(row=1, column=0, padx=(18, 6), sticky="w")
+        ctk.CTkLabel(income_hdr, text="RENDA DO MÊS (R$)", font=F(11, "bold"),
+                     text_color=T.MUTED, anchor="w").pack(side="left")
+        ctk.CTkButton(
+            income_hdr, text="✎ Editar entradas", command=self._edit_income_items,
+            height=18, width=110, corner_radius=6, fg_color="transparent",
+            hover_color=T.CARD2, text_color=T.BLUE, font=F(10, "bold"),
+        ).pack(side="left", padx=(6, 0))
         ctk.CTkLabel(self._header, text="TOTAL ALOCADO", font=F(11, "bold"),
                      text_color=T.MUTED, anchor="w").grid(
             row=1, column=1, padx=6, sticky="w")
@@ -189,15 +204,9 @@ class PlanningTab(ctk.CTkFrame):
                      text_color=T.MUTED, anchor="w").grid(
             row=1, column=2, padx=6, sticky="w")
 
-        self._income_entry = ctk.CTkEntry(
-            self._header, placeholder_text="0,00",
-            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
-            placeholder_text_color=T.SUBTLE, corner_radius=8,
-        )
-        self._income_entry.grid(row=2, column=0, padx=(18, 6), pady=(4, 0), sticky="ew")
-        if income > 0:
-            self._income_entry.insert(0, f"{income:.2f}".replace(".", ","))
-        self._income_entry.bind("<KeyRelease>", lambda _: self._recalc())
+        self._income_total_lbl = ctk.CTkLabel(
+            self._header, text="", font=F(16, "bold"), text_color=T.TEXT, anchor="w")
+        self._income_total_lbl.grid(row=2, column=0, padx=(18, 6), pady=(4, 0), sticky="w")
 
         self._alloc_lbl = ctk.CTkLabel(self._header, text="R$ 0,00",
                                        font=F(16, "bold"), text_color=T.BLUE, anchor="w")
@@ -365,8 +374,16 @@ class PlanningTab(ctk.CTkFrame):
         self._add_combo.configure(values=self._available_categories())
         self._recalc()
 
+    def _edit_income_items(self) -> None:
+        dlg = _IncomeItemsDialog(self.winfo_toplevel(), items=self._income_items)
+        self.winfo_toplevel().wait_window(dlg)
+        if dlg.income_items is not None:
+            self._income_items = dlg.income_items
+            self._recalc()
+
     def _recalc(self) -> None:
-        income = _parse_amount(self._income_entry.get())
+        income = sum(i["amount"] for i in self._income_items)
+        self._income_total_lbl.configure(text=format_currency(income))
         total  = sum(
             i["value"] if i.get("mandatory") else _parse_amount(i["entry"].get())
             for i in self._review_rows.values()
@@ -402,7 +419,7 @@ class PlanningTab(ctk.CTkFrame):
                 text_color=T.MUTED)
 
     def _confirm(self) -> None:
-        income = _parse_amount(self._income_entry.get())
+        income = sum(i["amount"] for i in self._income_items)
         items  = [{
             "category":         cat,
             "planned_amount":   (info["value"] if info.get("mandatory")
@@ -411,11 +428,12 @@ class PlanningTab(ctk.CTkFrame):
             "is_eventual":      info["eventual"],
             "is_mandatory":     info.get("mandatory", False),
         } for cat, info in self._review_rows.items()]
+        income_items = self._income_items
         month_id = self.month_id
 
         def _save():
             try:
-                db.save_plan(month_id, income, items)
+                db.save_plan(month_id, income, items, income_items)
             except Exception as e:
                 self.after(0, lambda err=e: self._save_failed(err))
                 return
@@ -436,8 +454,8 @@ class PlanningTab(ctk.CTkFrame):
     # ==================================================================
     # Estado 3 — acompanhamento (plano vs. realizado) / fechamento
     # ==================================================================
-    def _render_tracking(self, plan: dict, items: list, realized: dict,
-                         synced: bool = False) -> None:
+    def _render_tracking(self, plan: dict, items: list, income_items: list,
+                         realized: dict, synced: bool = False) -> None:
         self._header.grid()
         if synced:
             notice = ctk.CTkFrame(self._scroll, fg_color=T.GOLD_DIM, corner_radius=10)
@@ -476,7 +494,7 @@ class PlanningTab(ctk.CTkFrame):
         if not closed:
             ctk.CTkButton(
                 title_row, text="✎  Editar plano",
-                command=lambda: self._render_review(income, items, n_hist=-1),
+                command=lambda: self._render_review(income_items, items, n_hist=-1),
                 height=30, width=130, corner_radius=8,
                 fg_color="transparent", hover_color=T.CARD2,
                 border_width=1, border_color=T.BORDER_L,
@@ -608,17 +626,20 @@ class PlanningTab(ctk.CTkFrame):
 
 
 # ──────────────────────────────────────────────────────────────────────
-class _IncomeDialog(ctk.CTkToplevel):
-    """Pede uma estimativa de renda quando o mês ainda não tem entradas."""
+class _IncomeItemsDialog(ctk.CTkToplevel):
+    """Lista de entradas de renda esperadas no mês (valor + dia) — só uma
+    estimativa/meta do Planejamento, nunca cria lançamento real."""
 
-    def __init__(self, parent, suggested: float = 0.0):
+    def __init__(self, parent, items: Optional[List[dict]] = None,
+                suggested: float = 0.0):
         super().__init__(parent)
-        self.title("Renda do mês")
+        self.title("Entradas de renda")
         self.resizable(False, False)
         self.grab_set()
         self.configure(fg_color=T.CARD)
-        self.amount: Optional[float] = None
-        self._build(suggested)
+        self.income_items: Optional[List[dict]] = None
+        self._rows: List[Optional[dict]] = []
+        self._build(items or [], suggested)
         self._center(parent)
         self.lift()
         self.focus()
@@ -626,50 +647,128 @@ class _IncomeDialog(ctk.CTkToplevel):
 
     def _center(self, parent) -> None:
         self.update_idletasks()
-        px = parent.winfo_x() + (parent.winfo_width()  - 420) // 2
-        py = parent.winfo_y() + (parent.winfo_height() - 280) // 2
-        self.geometry(f"420x280+{px}+{py}")
+        w, h = 440, 480
+        px = parent.winfo_x() + (parent.winfo_width()  - w) // 2
+        py = parent.winfo_y() + (parent.winfo_height() - h) // 2
+        self.geometry(f"{w}x{h}+{px}+{py}")
 
-    def _build(self, suggested: float) -> None:
+    def _build(self, items: List[dict], suggested: float) -> None:
         self.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(self, text="Quanto deve entrar este mês?",
                      font=F(15, "bold"), text_color=T.TEXT).grid(
-            row=0, column=0, pady=(24, 4))
+            row=0, column=0, pady=(20, 4), padx=20)
         ctk.CTkLabel(
             self,
-            text="Ainda não há entradas registradas neste mês.\n"
-                 "Informe uma estimativa: ela será o máximo distribuível entre\n"
-                 f"as categorias, com teto de {INVESTMENT_CAP_PCT * 100:.0f}% para Investimentos.",
+            text="Uma linha por entrada esperada, com o dia em que costuma cair.\n"
+                 f"O total vira o máximo distribuível entre as categorias, com\n"
+                 f"teto de {INVESTMENT_CAP_PCT * 100:.0f}% para Investimentos.",
             font=F(11), text_color=T.MUTED, justify="center",
-        ).grid(row=1, column=0)
+        ).grid(row=1, column=0, padx=20)
 
-        ctk.CTkLabel(self, text="RENDA ESTIMADA (R$)", font=F(11, "bold"),
-                     text_color=T.MUTED).grid(row=2, column=0, pady=(12, 0))
-        self._entry = ctk.CTkEntry(
-            self, placeholder_text="0,00", width=200, justify="center",
-            fg_color=T.CARD2, border_color=T.BORDER_L,
-            text_color=T.TEXT, corner_radius=8,
-        )
-        self._entry.grid(row=3, column=0, pady=(4, 0))
-        if suggested > 0:
-            self._entry.insert(0, f"{suggested:.2f}".replace(".", ","))
-            ctk.CTkLabel(self, text="pré-preenchido com a média das suas entradas recentes",
-                         font=F(10), text_color=T.SUBTLE).grid(row=4, column=0, pady=(3, 0))
-        self._entry.bind("<Return>", lambda _: self._confirm())
-        self._entry.focus()
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.grid(row=2, column=0, sticky="ew", padx=20, pady=(14, 2))
+        ctk.CTkLabel(header, text="VALOR (R$)", font=F(10, "bold"),
+                     text_color=T.SUBTLE, width=170, anchor="w").pack(side="left", padx=(0, 6))
+        ctk.CTkLabel(header, text="DIA", font=F(10, "bold"),
+                     text_color=T.SUBTLE, width=60, anchor="w").pack(side="left")
+
+        self._rows_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self._rows_frame.grid(row=3, column=0, sticky="ew", padx=20)
+
+        for it in items:
+            self._add_row(it.get("amount"), it.get("expected_day"))
+        if not items:
+            self._add_row(suggested if suggested > 0 else None, None)
+            if suggested > 0:
+                ctk.CTkLabel(self, text="valor pré-preenchido com a média das suas entradas recentes — falta o dia",
+                             font=F(10), text_color=T.SUBTLE).grid(row=4, column=0, pady=(2, 0))
+
+        ctk.CTkButton(
+            self, text="+ Adicionar entrada", command=lambda: self._add_row(),
+            height=30, corner_radius=8, fg_color=T.GREEN_DIM, hover_color=T.GREEN,
+            text_color=T.GREEN, font=F(11, "bold"),
+        ).grid(row=5, column=0, pady=(10, 4))
+
+        self._total_lbl = ctk.CTkLabel(self, text="", font=F(13, "bold"), text_color=T.BLUE)
+        self._total_lbl.grid(row=6, column=0, pady=(2, 0))
+
+        self._error_lbl = ctk.CTkLabel(self, text="", font=F(11), text_color=T.RED)
+        self._error_lbl.grid(row=7, column=0, pady=(6, 0))
 
         btns = ctk.CTkFrame(self, fg_color="transparent")
-        btns.grid(row=5, column=0, pady=16)
-
+        btns.grid(row=8, column=0, pady=16)
         ctk.CTkButton(btns, text="Cancelar", width=110,
                       fg_color=T.CARD2, hover_color=T.BORDER_L,
                       border_width=1, border_color=T.BORDER_L,
                       text_color=T.MUTED, command=self.destroy).pack(side="left", padx=6)
-        ctk.CTkButton(btns, text="Continuar", width=120,
+        ctk.CTkButton(btns, text="Salvar", width=120,
                       fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
                       text_color="#ffffff", command=self._confirm).pack(side="left", padx=6)
 
+        self._update_total()
+
+    def _add_row(self, amount: Optional[float] = None, day: Optional[int] = None) -> None:
+        idx = len(self._rows)
+        row = ctk.CTkFrame(self._rows_frame, fg_color="transparent")
+        row.pack(fill="x", pady=3)
+
+        amount_entry = ctk.CTkEntry(
+            row, placeholder_text="0,00", width=170,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT, corner_radius=8,
+        )
+        amount_entry.pack(side="left", padx=(0, 6))
+        if amount is not None:
+            amount_entry.insert(0, f"{float(amount):.2f}".replace(".", ","))
+        amount_entry.bind("<KeyRelease>", lambda _: self._update_total())
+
+        day_entry = ctk.CTkEntry(
+            row, placeholder_text="1-31", width=60, justify="center",
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT, corner_radius=8,
+        )
+        day_entry.pack(side="left", padx=(0, 6))
+        if day is not None:
+            day_entry.insert(0, str(int(day)))
+
+        ctk.CTkButton(
+            row, text="✕", width=30, height=28, corner_radius=6,
+            fg_color="transparent", hover_color=T.RED, text_color=T.SUBTLE,
+            command=lambda i=idx: self._remove_row(i),
+        ).pack(side="left")
+
+        self._rows.append({"frame": row, "amount": amount_entry, "day": day_entry})
+
+    def _remove_row(self, idx: int) -> None:
+        entry = self._rows[idx]
+        if entry is None:
+            return
+        entry["frame"].destroy()
+        self._rows[idx] = None
+        self._update_total()
+
+    def _update_total(self) -> None:
+        total = sum(_parse_amount(r["amount"].get()) for r in self._rows if r is not None)
+        self._total_lbl.configure(text=f"Total: {format_currency(total)}")
+
     def _confirm(self) -> None:
-        self.amount = _parse_amount(self._entry.get())
+        result = []
+        for r in self._rows:
+            if r is None:
+                continue
+            amount_raw = r["amount"].get().strip()
+            day_raw    = r["day"].get().strip()
+            if not amount_raw and not day_raw:
+                continue  # linha em branco, ignora
+            amount = _parse_amount(amount_raw)
+            try:
+                day = int(day_raw)
+            except ValueError:
+                day = 0
+            if amount <= 0 or not (1 <= day <= 31):
+                self._error_lbl.configure(
+                    text="⚠  Preencha valor e dia (1-31) em todas as entradas.")
+                return
+            result.append({"amount": amount, "expected_day": day})
+
+        self.income_items = result
         self.destroy()

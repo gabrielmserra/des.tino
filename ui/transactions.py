@@ -21,6 +21,10 @@ _METHOD_LABELS = list(PAYMENT_METHODS.values())
 _LABEL_TO_METHOD_KEY = {v: k for k, v in PAYMENT_METHODS.items()}
 
 
+def _today_br() -> str:
+    return datetime.now().strftime("%d/%m/%Y")
+
+
 def _tx_display_desc(tx: dict) -> str:
     """Parcela de compra no cartão mostra '🧾 descrição (N/M)' em vez da
     descrição crua."""
@@ -404,6 +408,7 @@ class TransactionsTab(ctk.CTkFrame):
             placeholder_text_color=T.SUBTLE, corner_radius=8,
         )
         self._date_entry.grid(row=4, column=2, padx=6, pady=(0, 2), sticky="ew")
+        self._date_entry.insert(0, _today_br())
 
         self._error_lbl = ctk.CTkLabel(
             form, text="", font=F(11), text_color=T.RED, anchor="w")
@@ -608,6 +613,7 @@ class TransactionsTab(ctk.CTkFrame):
             placeholder_text_color=T.SUBTLE, corner_radius=8,
         )
         self._q_date_entry.pack(side="left", padx=6)
+        self._q_date_entry.insert(0, _today_br())
 
         self._q_expect_btn = ctk.CTkButton(
             inner, text="📋 Previsto", command=self._toggle_q_expect,
@@ -661,15 +667,17 @@ class TransactionsTab(ctk.CTkFrame):
         card_id, benefit_id, debit_card_id = self._resolve_payment_from(
             payment_method, self._q_secondary_var.get())
 
-        payment_date = None
         date_raw = self._q_date_entry.get().strip()
-        if date_raw:
-            try:
-                payment_date = datetime.strptime(date_raw, "%d/%m/%Y").date()
-            except ValueError:
-                self._q_err.configure(text="⚠  Data inválida. Use o formato dd/mm/aaaa.")
-                self._q_date_entry.focus()
-                return
+        if not date_raw:
+            self._q_err.configure(text="⚠  Informe a data do lançamento.")
+            self._q_date_entry.focus()
+            return
+        try:
+            payment_date = datetime.strptime(date_raw, "%d/%m/%Y").date()
+        except ValueError:
+            self._q_err.configure(text="⚠  Data inválida. Use o formato dd/mm/aaaa.")
+            self._q_date_entry.focus()
+            return
 
         # Previsto não debita o saldo (só ao confirmar) → não valida aqui
         if benefit_id is not None and not self._q_expect_active:
@@ -690,6 +698,7 @@ class TransactionsTab(ctk.CTkFrame):
         self._q_desc.delete(0, "end")
         self._q_amount.delete(0, "end")
         self._q_date_entry.delete(0, "end")
+        self._q_date_entry.insert(0, _today_br())
         self._q_desc.focus()
         if hasattr(self, "_benefits_bar"):
             self._benefits_bar.refresh()
@@ -749,15 +758,17 @@ class TransactionsTab(ctk.CTkFrame):
         card_id, benefit_id, debit_card_id = self._resolve_payment_from(
             payment_method, self._secondary_var.get())
 
-        payment_date = None
         date_raw = self._date_entry.get().strip()
-        if date_raw:
-            try:
-                payment_date = datetime.strptime(date_raw, "%d/%m/%Y").date()
-            except ValueError:
-                self._show_error("Data inválida. Use o formato dd/mm/aaaa.")
-                self._date_entry.focus()
-                return
+        if not date_raw:
+            self._show_error("Informe a data do lançamento.")
+            self._date_entry.focus()
+            return
+        try:
+            payment_date = datetime.strptime(date_raw, "%d/%m/%Y").date()
+        except ValueError:
+            self._show_error("Data inválida. Use o formato dd/mm/aaaa.")
+            self._date_entry.focus()
+            return
 
         # Saldo de VR/VA não pode ficar negativo — bloqueia (gastos reais, não previsões)
         if benefit_id is not None and not self._expectation_active:
@@ -793,6 +804,7 @@ class TransactionsTab(ctk.CTkFrame):
             self._desc.delete(0, "end")
             self._amount.delete(0, "end")
             self._date_entry.delete(0, "end")
+            self._date_entry.insert(0, _today_br())
             self._desc.focus()
 
         self.refresh()
@@ -844,6 +856,7 @@ class TransactionsTab(ctk.CTkFrame):
         self._method_var.set("")
         self._refresh_secondary_combo()
         self._date_entry.delete(0, "end")
+        self._date_entry.insert(0, _today_br())
         self._form_title.configure(text="Novo Lançamento")
         self._add_btn.configure(text="+ Adicionar")
         self._cancel_btn.grid_forget()

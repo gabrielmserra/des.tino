@@ -111,6 +111,19 @@ export type PlanItemInput = {
   is_mandatory: boolean
 }
 
+export type PlanIncomeItem = {
+  id: number
+  plan_id: number
+  amount: number
+  expected_day: number
+  created_at: string
+}
+
+export type PlanIncomeItemInput = {
+  amount: number
+  expected_day: number
+}
+
 export type BenefitOverview = {
   id: number
   name: string

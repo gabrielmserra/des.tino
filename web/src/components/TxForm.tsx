@@ -89,7 +89,8 @@ export function TxForm() {
     } else {
       setFlow('saida'); setFreq('variavel'); setDescription(''); setAmount('')
       setCategory('Outros'); setPrevisto(false)
-      setPaymentMethod(''); setOriginId(null); setPaymentDate('')
+      setPaymentMethod(''); setOriginId(null)
+      setPaymentDate(new Date().toISOString().slice(0, 10))
     }
     setError('')
   }, [state])
@@ -105,6 +106,7 @@ export function TxForm() {
     if (value <= 0) return setError('Digite um valor positivo.')
     if (selectedId == null) return setError('Nenhum mês selecionado.')
     if (!paymentMethod) return setError('Selecione a forma de pagamento.')
+    if (!paymentDate) return setError('Informe a data do lançamento.')
 
     const cardId = paymentMethod === 'credito' ? originId : null
     const benefitId = paymentMethod === 'vr_va' ? originId : null
@@ -136,7 +138,7 @@ export function TxForm() {
       benefit_id: benefitId,
       debit_card_id: debitCardId,
       payment_method: paymentMethod,
-      payment_date: paymentDate || null,
+      payment_date: paymentDate,
     }
     setBusy(true)
     try {
@@ -300,10 +302,11 @@ export function TxForm() {
 
         <div className="mb-3">
           <label className="mb-1 block text-xs font-bold" style={{ color: 'var(--muted)' }}>
-            DATA DO PAGAMENTO (opcional)
+            DATA DO PAGAMENTO
           </label>
           <input
             type="date"
+            required
             value={paymentDate}
             onChange={(e) => setPaymentDate(e.target.value)}
             className="w-full rounded-lg border px-3 py-3 text-base outline-none"

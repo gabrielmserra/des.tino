@@ -13,6 +13,8 @@ import type {
   Plan,
   PlanItem,
   PlanItemInput,
+  PlanIncomeItem,
+  PlanIncomeItemInput,
   DebitCard,
   Debt,
   DebtInstallment,
@@ -451,6 +453,16 @@ export async function fetchPlanItems(planId: number): Promise<PlanItem[]> {
   return data ?? []
 }
 
+export async function fetchPlanIncomeItems(planId: number): Promise<PlanIncomeItem[]> {
+  const { data, error } = await supabase
+    .from('plan_income_items')
+    .select('*')
+    .eq('plan_id', planId)
+    .order('expected_day')
+  if (error) throw error
+  return data ?? []
+}
+
 export async function fetchMonthInvestmentNet(monthId: number): Promise<number> {
   const { data, error } = await supabase.rpc('get_month_investment_net', {
     p_month_id: monthId,
@@ -539,11 +551,13 @@ export async function savePlan(
   monthId: number,
   income: number,
   items: PlanItemInput[],
+  incomeItems: PlanIncomeItemInput[],
 ): Promise<void> {
   const { error } = await supabase.rpc('save_plan', {
     p_month_id: monthId,
     p_income: income,
     p_items: items,
+    p_income_items: incomeItems,
   })
   if (error) throw error
 }

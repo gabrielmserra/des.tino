@@ -3,6 +3,7 @@ import { useMonths } from '../lib/month'
 import {
   fetchPlan,
   fetchPlanItems,
+  fetchPlanIncomeItems,
   fetchPlanRealized,
   fetchPlanHistory,
   fetchMonthIncome,
@@ -13,7 +14,7 @@ import { suggestAllocations, estimateIncome, INVESTMENT_CAP_PCT } from '../lib/p
 import { PLAN_CATEGORIES } from '../lib/constants'
 import { formatCurrency } from '../lib/format'
 import { IncomeDialog } from '../components/IncomeDialog'
-import type { Plan, PlanItem, PlanItemInput } from '../lib/types'
+import type { Plan, PlanItem, PlanItemInput, PlanIncomeItem, PlanIncomeItemInput } from '../lib/types'
 
 function parseAmount(raw: string): number {
   const s = raw.trim().replace(/\./g, '').replace(',', '.')
@@ -37,8 +38,15 @@ type ReviewRow = {
 type ViewState =
   | { kind: 'loading' }
   | { kind: 'empty' }
-  | { kind: 'review'; income: string; rows: ReviewRow[]; nHist: number }
-  | { kind: 'tracking'; plan: Plan; items: PlanItem[]; realized: Record<string, number>; synced: boolean }
+  | { kind: 'review'; incomeItems: PlanIncomeItemInput[]; rows: ReviewRow[]; nHist: number }
+  | {
+      kind: 'tracking'
+      plan: Plan
+      items: PlanItem[]
+      incomeItems: PlanIncomeItem[]
+      realized: Record<string, number>
+      synced: boolean
+    }
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
@@ -65,6 +73,7 @@ export function Planning() {
   const { months, selectedId, selected, loading: monthsLoading } = useMonths()
   const [view, setView] = useState<ViewState>({ kind: 'loading' })
   const [showIncomeDialog, setShowIncomeDialog] = useState<{ suggested: number } | null>(null)
+  const [editingIncome, setEditingIncome] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -89,11 +98,12 @@ export function Planning() {
         setView({ kind: 'empty' })
         return
       }
-      const [items, realized] = await Promise.all([
+      const [items, incomeItems, realized] = await Promise.all([
         fetchPlanItems(plan.id),
+        fetchPlanIncomeItems(plan.id),
         fetchPlanRealized(selectedId),
       ])
-      setView({ kind: 'tracking', plan, items, realized, synced })
+      setView({ kind: 'tracking', plan, items, incomeItems, realized, synced })
     } catch (e) {
       setError('Erro ao carregar: ' + (e as Error).message)
       setView({ kind: 'empty' })
@@ -110,16 +120,19 @@ export function Planning() {
         setShowIncomeDialog({ suggested: estimateIncome(incomeHistory) })
         return
       }
-      await generateWithIncome(income)
+      // Já tem entrada real na ledger — usa o total direto, sem perguntar,
+      // guardado como item sintético pra manter o estado sempre "é uma lista".
+      await generateWithIncomeItems([{ amount: income, expected_day: 1 }])
     } catch (e) {
       setError('Erro ao gerar sugestão: ' + (e as Error).message)
     }
   }
 
-  async function generateWithIncome(income: number) {
+  async function generateWithIncomeItems(incomeItems: PlanIncomeItemInput[]) {
     if (selectedId == null || !selected) return
     setShowIncomeDialog(null)
     setView({ kind: 'loading' })
+    const income = incomeItems.reduce((a, i) => a + i.amount, 0)
     try {
       const { expensesHistory, incomeHistory } = await fetchPlanHistory(months, selected)
       const suggestions = suggestAllocations(expensesHistory, incomeHistory, income)
@@ -133,7 +146,7 @@ export function Planning() {
           capped: s.capped,
         }))
         .sort((a, b) => parseAmount(b.planned) - parseAmount(a.planned))
-      setView({ kind: 'review', income: toInput(income), rows, nHist: expensesHistory.length })
+      setView({ kind: 'review', incomeItems, rows, nHist: expensesHistory.length })
     } catch (e) {
       setError('Erro ao gerar sugestão: ' + (e as Error).message)
       setView({ kind: 'empty' })
@@ -151,7 +164,11 @@ export function Planning() {
         mandatory: it.is_mandatory,
         capped: false,
       }))
-      return { kind: 'review', income: toInput(v.plan.income), rows, nHist: -1 }
+      const incomeItems: PlanIncomeItemInput[] = v.incomeItems.map((it) => ({
+        amount: it.amount,
+        expected_day: it.expected_day,
+      }))
+      return { kind: 'review', incomeItems, rows, nHist: -1 }
     })
   }
 
@@ -191,8 +208,8 @@ export function Planning() {
         {showIncomeDialog && (
           <IncomeDialog
             suggested={showIncomeDialog.suggested}
-            onCancel={() => generateWithIncome(0)}
-            onConfirm={(income) => generateWithIncome(income)}
+            onCancel={() => generateWithIncomeItems([])}
+            onConfirm={(incomeItems) => generateWithIncomeItems(incomeItems)}
           />
         )}
       </div>
@@ -201,7 +218,7 @@ export function Planning() {
 
   // ── Estado 2: revisão / edição ───────────────────────────────────────
   if (view.kind === 'review') {
-    const income = parseAmount(view.income)
+    const income = view.incomeItems.reduce((a, i) => a + i.amount, 0)
     const total = view.rows.reduce((acc, r) => acc + parseAmount(r.planned), 0)
     const spare = income - total
     const investRow = view.rows.find((r) => r.category === 'Investimentos')
@@ -249,7 +266,7 @@ export function Planning() {
           is_eventual: r.eventual,
           is_mandatory: r.mandatory,
         }))
-        await savePlan(selectedId, income, items)
+        await savePlan(selectedId, income, items, view.incomeItems)
         await load()
       } catch (e) {
         setError('Erro ao salvar: ' + (e as Error).message)
@@ -257,6 +274,9 @@ export function Planning() {
         setBusy(false)
       }
     }
+
+    const updateIncomeItems = (incomeItems: PlanIncomeItemInput[]) =>
+      setView((v) => (v.kind !== 'review' ? v : { ...v, incomeItems }))
 
     return (
       <div className="p-4 pb-8">
@@ -269,17 +289,23 @@ export function Planning() {
           className="mb-4 rounded-2xl border p-4"
           style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
         >
-          <label className="mb-1 block text-xs font-bold" style={{ color: 'var(--muted)' }}>
-            RENDA DO MÊS (R$)
-          </label>
-          <input
-            value={view.income}
-            onChange={(e) => setView({ ...view, income: e.target.value })}
-            inputMode="decimal"
-            placeholder="0,00"
-            className="mb-3 w-full rounded-lg border px-3 py-2 text-base outline-none"
-            style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
-          />
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold" style={{ color: 'var(--muted)' }}>
+                RENDA DO MÊS (R$)
+              </p>
+              <p className="text-lg font-bold" style={{ color: 'var(--text)' }}>
+                {formatCurrency(income)}
+              </p>
+            </div>
+            <button
+              onClick={() => setEditingIncome(true)}
+              className="rounded-lg border px-3 py-1.5 text-xs font-bold"
+              style={{ borderColor: 'var(--border-l)', color: 'var(--primary)' }}
+            >
+              ✎ Editar entradas
+            </button>
+          </div>
           <div className="flex justify-between">
             <div>
               <p className="text-[10px] font-bold" style={{ color: 'var(--muted)' }}>
@@ -435,6 +461,17 @@ export function Planning() {
             {busy ? 'Salvando…' : '✓ Confirmar plano'}
           </button>
         </div>
+
+        {editingIncome && (
+          <IncomeDialog
+            items={view.incomeItems}
+            onCancel={() => setEditingIncome(false)}
+            onConfirm={(incomeItems) => {
+              updateIncomeItems(incomeItems)
+              setEditingIncome(false)
+            }}
+          />
+        )}
       </div>
     )
   }
