@@ -58,14 +58,14 @@ def _cycle_start(closing_day: int) -> date:
     return date(y, m, min(closing_day, max_day))
 
 
-def _card_spending(card_id: int, month_id: int, closing_day: int) -> float:
-    """Soma dos gastos deste cartão desde o início do ciclo atual."""
+def _card_spending(card_id: int, closing_day: int) -> float:
+    """Soma dos gastos deste cartão desde o início do ciclo atual — o
+    ciclo de fatura é independente do mês do app (month_id), então olha
+    todas as compras do cartão em qualquer mês."""
     start = _cycle_start(closing_day)
-    txs   = db.get_transactions(month_id)
+    txs   = db.get_card_transactions_since([card_id])
     total = 0.0
     for tx in txs:
-        if tx.get("card_id") != card_id or tx["type"] != "saida_variavel":
-            continue
         raw = str(tx.get("created_at") or "")[:10]
         try:
             tx_date = date.fromisoformat(raw)
@@ -76,18 +76,18 @@ def _card_spending(card_id: int, month_id: int, closing_day: int) -> float:
     return total
 
 
-def _all_card_spendings(cards: list, month_id: int) -> dict:
+def _all_card_spendings(cards: list) -> dict:
     """Calcula gastos de todos os cartões em uma única passagem — O(n+m) em vez de O(n×m)."""
     if not cards:
         return {}
     cycle_starts = {c["id"]: _cycle_start(c.get("closing_day", 1)) for c in cards}
-    card_ids     = set(cycle_starts)
+    card_ids     = list(cycle_starts)
     totals       = {cid: 0.0 for cid in card_ids}
 
-    for tx in db.get_transactions(month_id):
-        if tx["type"] != "saida_variavel" or tx.get("card_id") not in card_ids:
+    for tx in db.get_card_transactions_since(card_ids):
+        cid   = tx.get("card_id")
+        if cid not in cycle_starts:
             continue
-        cid   = tx["card_id"]
         start = cycle_starts[cid]
         raw   = str(tx.get("created_at") or "")[:10]
         try:
@@ -192,7 +192,7 @@ class CardPresetsBar(ctk.CTkFrame):
         limit      = float(card.get("limit") or 0)
         best       = _best_buy_day(closing)
         days_cls   = _days_until(closing)
-        spent      = _card_spending(card["id"], self.month_id, closing)
+        spent      = _card_spending(card["id"], closing)
         avail      = max(0.0, limit - spent) if limit > 0 else None
         cycle_open = date.today().day < closing
         unpaid     = max(0.0, spent - paid)

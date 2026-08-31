@@ -789,6 +789,22 @@ def delete_card_transaction(tx_id: int, card_id: int, month_id: int) -> None:
     _card_tx_cache.pop(f"{card_id}_{month_id}", None)
 
 
+def get_card_transactions_since(card_ids: List[int]) -> List[dict]:
+    """Todas as compras (saida_variavel) desses cartões, em qualquer mês do
+    app — o ciclo de fatura do cartão é independente do month_id (mês do
+    app é uma organização à parte, sujeita ao dia de corte). O filtro por
+    início de ciclo é aplicado por quem chama, igual já fazia antes com
+    o resultado (agora sem escopo) de get_transactions(month_id)."""
+    if not card_ids:
+        return []
+    resp = get_client().table("transactions") \
+        .select("*") \
+        .in_("card_id", card_ids) \
+        .eq("type", "saida_variavel") \
+        .execute()
+    return resp.data or []
+
+
 def get_card_payments(month_id: int) -> List[dict]:
     """Retorna os pagamentos de fatura registrados no mês."""
     if month_id not in _bill_cache:
@@ -843,9 +859,8 @@ def settle_card_bill(card_id: int, month_id: int, closing_day: int,
     start   = _card_cycle_start(closing_day)
 
     to_settle = []
-    for tx in get_transactions(month_id):
-        if (tx.get("card_id") != card_id or tx["type"] != "saida_variavel"
-                or tx.get("is_expectation")):
+    for tx in get_card_transactions_since([card_id]):
+        if tx.get("is_expectation"):
             continue
         raw = str(tx.get("created_at") or "")[:10]
         try:
@@ -858,8 +873,11 @@ def settle_card_bill(card_id: int, month_id: int, closing_day: int,
     if total <= 0:
         return 0.0
 
+    affected_months = {month_id}
     for t in to_settle:
         client.table("transactions").delete().eq("id", t["id"]).execute()
+        if t.get("month_id"):
+            affected_months.add(t["month_id"])
 
     client.table("transactions").insert({
         "month_id":    month_id,
@@ -870,7 +888,8 @@ def settle_card_bill(card_id: int, month_id: int, closing_day: int,
         "category":    "Outros",
     }).execute()
 
-    _invalidate(month_id)
+    for m in affected_months:
+        _invalidate(m)
     return total
 
 

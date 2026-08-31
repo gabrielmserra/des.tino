@@ -576,7 +576,7 @@ class Dashboard(ctk.CTkScrollableFrame):
                 history, investments = [], []
             try:
                 from ui.credit_cards import _all_card_spendings
-                spendings    = _all_card_spendings(cards, self.month_id) if cards else {}
+                spendings    = _all_card_spendings(cards) if cards else {}
                 paid_by_card = {}
                 for p in card_payments:
                     cid = p.get("card_id")
@@ -1161,7 +1161,7 @@ class Dashboard(ctk.CTkScrollableFrame):
             return
 
         saldo          = s.get("saldo", 0)
-        card_spendings = _all_card_spendings(cards, self.month_id)
+        card_spendings = _all_card_spendings(cards)
         paid_by_card: dict = {}
         for p in (card_payments or []):
             cid = p.get("card_id")
