@@ -1,7 +1,7 @@
 """Interface comum dos parsers de extrato/fatura bancária."""
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, time as _time
 from typing import List, Optional, Protocol
 
 
@@ -18,6 +18,7 @@ class NormalizedRow:
     description:             str
     amount:                  float          # sempre positivo; direction carrega o sinal
     direction:                str            # "entrada" | "saida"
+    time:                    Optional[_time] = None  # só OFX pode trazer isso
     suggested_category:      str  = "Outros"
     suggested_payment_method: str = "outro"
     is_investment_like:      bool = False   # aporte/resgate — sugerido fora por padrão

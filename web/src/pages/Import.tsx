@@ -162,6 +162,7 @@ export function Import() {
           category: c.category || 'Outros',
           payment_method: c.isCreditCardCharge ? 'credito' : c.paymentMethod,
           payment_date: c.date,
+          payment_time: c.time ?? null,
           card_id: c.isCreditCardCharge ? cardId : null,
         })),
       )

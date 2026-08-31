@@ -20,6 +20,17 @@ def _parse_ofx_date(raw: str):
     return datetime.strptime(digits, "%Y%m%d").date()
 
 
+def _parse_ofx_time(raw: str):
+    # HHMMSS logo após os 8 dígitos da data, quando o banco inclui a hora.
+    hhmmss = raw.strip()[8:14]
+    if len(hhmmss) != 6 or not hhmmss.isdigit():
+        return None
+    try:
+        return datetime.strptime(hhmmss, "%H%M%S").time()
+    except ValueError:
+        return None
+
+
 class InterOfxParser:
     bank_id   = "inter"
     format_id = "ofx"
@@ -62,6 +73,7 @@ class InterOfxParser:
                 description=desc or "Lançamento importado",
                 amount=amount,
                 direction=direction,
+                time=_parse_ofx_time(dtposted),
                 suggested_category="Investimentos" if is_inv else guess_category(desc),
                 suggested_payment_method=guess_payment_method(memo),
                 is_investment_like=is_inv,

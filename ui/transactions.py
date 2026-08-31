@@ -27,7 +27,7 @@ def _today_br() -> str:
 
 def _tx_date(tx: dict):
     """Data real do lançamento (payment_date, ou created_at se não tiver)
-    como objeto date — usado pra ordenar e filtrar por data."""
+    como objeto date — usado pelo filtro de data."""
     raw = tx.get("payment_date") or tx.get("created_at")
     if not raw:
         return None
@@ -45,6 +45,27 @@ def _parse_filter_date(text: str):
         return datetime.strptime(text, "%d/%m/%Y").date()
     except ValueError:
         return None
+
+
+def _parse_time(text: str):
+    text = (text or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.strptime(text, "%H:%M").time()
+    except ValueError:
+        return None
+
+
+def _tx_sort_key(tx: dict) -> str:
+    """Chave de ordenação: data+hora reais do lançamento quando há
+    payment_date (hora ausente conta como 00:00, empatando por data e
+    caindo pra ordem natural do banco entre lançamentos do mesmo dia
+    sem hora); cai pra created_at nos lançamentos antigos sem payment_date."""
+    pd = tx.get("payment_date")
+    if pd:
+        return f"{str(pd)[:10]} {tx.get('payment_time') or '00:00:00'}"
+    return str(tx.get("created_at") or "")
 
 
 def _tx_display_desc(tx: dict) -> str:
@@ -395,14 +416,17 @@ class TransactionsTab(ctk.CTkFrame):
         )
 
         # Forma de pagamento (obrigatória) + origem específica (opcional,
-        # só quando é crédito/débito/VR-VA) + data de pagamento (opcional) —
-        # presente em todas as abas.
+        # só quando é crédito/débito/VR-VA) + data de pagamento (obrigatória)
+        # + hora (opcional) — presente em todas as abas.
         ctk.CTkLabel(form, text="FORMA DE PAGAMENTO", font=F(11, "bold"),
                      text_color=T.MUTED, anchor="w").grid(
             row=3, column=0, padx=(18, 6), pady=(10, 2), sticky="w")
-        ctk.CTkLabel(form, text="DATA DO PAGAMENTO (opcional)", font=F(11, "bold"),
+        ctk.CTkLabel(form, text="DATA DO PAGAMENTO", font=F(11, "bold"),
                      text_color=T.MUTED, anchor="w").grid(
             row=3, column=2, padx=6, pady=(10, 2), sticky="w")
+        ctk.CTkLabel(form, text="HORA (opcional)", font=F(11, "bold"),
+                     text_color=T.MUTED, anchor="w").grid(
+            row=3, column=3, padx=(6, 18), pady=(10, 2), sticky="w")
 
         self._method_var = ctk.StringVar(value="")
         self._method_combo = ctk.CTkComboBox(
@@ -431,6 +455,13 @@ class TransactionsTab(ctk.CTkFrame):
         )
         self._date_entry.grid(row=4, column=2, padx=6, pady=(0, 2), sticky="ew")
         self._date_entry.insert(0, _today_br())
+
+        self._time_entry = ctk.CTkEntry(
+            form, placeholder_text="hh:mm",
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            placeholder_text_color=T.SUBTLE, corner_radius=8,
+        )
+        self._time_entry.grid(row=4, column=3, padx=(6, 18), pady=(0, 2), sticky="ew")
 
         self._error_lbl = ctk.CTkLabel(
             form, text="", font=F(11), text_color=T.RED, anchor="w")
@@ -843,6 +874,15 @@ class TransactionsTab(ctk.CTkFrame):
             self._date_entry.focus()
             return
 
+        time_raw = self._time_entry.get().strip()
+        payment_time = None
+        if time_raw:
+            payment_time = _parse_time(time_raw)
+            if payment_time is None:
+                self._show_error("Hora inválida. Use o formato hh:mm.")
+                self._time_entry.focus()
+                return
+
         # Saldo de VR/VA não pode ficar negativo — bloqueia (gastos reais, não previsões)
         if benefit_id is not None and not self._expectation_active:
             info  = self._benefit_info.get(benefit_id, {})
@@ -866,18 +906,21 @@ class TransactionsTab(ctk.CTkFrame):
                 self._editing_id, self.month_id, desc, amount, category,
                 card_id=card_id, is_expectation=self._expectation_active,
                 benefit_id=benefit_id, debit_card_id=debit_card_id,
-                payment_method=payment_method, payment_date=payment_date)
+                payment_method=payment_method, payment_date=payment_date,
+                payment_time=payment_time)
             self._cancel_edit()
         else:
             db.add_transaction(
                 self.month_id, self.tx_type, desc, amount, category,
                 card_id=card_id, is_expectation=self._expectation_active,
                 benefit_id=benefit_id, debit_card_id=debit_card_id,
-                payment_method=payment_method, payment_date=payment_date)
+                payment_method=payment_method, payment_date=payment_date,
+                payment_time=payment_time)
             self._desc.delete(0, "end")
             self._amount.delete(0, "end")
             self._date_entry.delete(0, "end")
             self._date_entry.insert(0, _today_br())
+            self._time_entry.delete(0, "end")
             self._desc.focus()
 
         self.refresh()
@@ -914,6 +957,9 @@ class TransactionsTab(ctk.CTkFrame):
                 self._date_entry.insert(0, format_date_br(d))
             except ValueError:
                 pass
+        self._time_entry.delete(0, "end")
+        if tx.get("payment_time"):
+            self._time_entry.insert(0, str(tx["payment_time"])[:5])
         self._form_title.configure(text="✏  Editando lançamento")
         self._add_btn.configure(text="✓ Salvar")
         self._cancel_btn.grid(row=1, column=0, sticky="ew", pady=(4, 0))
@@ -930,6 +976,7 @@ class TransactionsTab(ctk.CTkFrame):
         self._refresh_secondary_combo()
         self._date_entry.delete(0, "end")
         self._date_entry.insert(0, _today_br())
+        self._time_entry.delete(0, "end")
         self._form_title.configure(text="Novo Lançamento")
         self._add_btn.configure(text="+ Adicionar")
         self._cancel_btn.grid_forget()
@@ -974,7 +1021,7 @@ class TransactionsTab(ctk.CTkFrame):
         reverse = self._sort_order == "recentes"
         txs = sorted(
             txs,
-            key=lambda t: str(t.get("payment_date") or t.get("created_at") or ""),
+            key=_tx_sort_key,
             reverse=reverse,
         )
         color = self._style["color"]
@@ -1059,6 +1106,8 @@ class TransactionsTab(ctk.CTkFrame):
                         date_str = format_date_br(d)
                     except ValueError:
                         date_str = str(pay_date)
+                    if tx.get("payment_time"):
+                        date_str = f"{date_str} {str(tx['payment_time'])[:5]}"
                     label = f"{label} · {date_str}" if label else date_str
                 if label:
                     w["badge_lbl"].configure(text=f"  {label} ", text_color=badge_color)

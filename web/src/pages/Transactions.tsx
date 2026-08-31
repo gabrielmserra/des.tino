@@ -25,6 +25,14 @@ function txDate(t: Transaction): string {
   return (t.payment_date || t.created_at || '').slice(0, 10)
 }
 
+// Chave de ordenação: data+hora reais quando há payment_date (hora
+// ausente conta como 00:00, empatando por data); cai pra created_at
+// nos lançamentos antigos sem payment_date.
+function txSortKey(t: Transaction): string {
+  if (t.payment_date) return `${t.payment_date} ${t.payment_time || '00:00:00'}`
+  return t.created_at || ''
+}
+
 // Parcela de compra no cartão mostra "🧾 descrição (N/M)" em vez da
 // descrição crua.
 function txDisplayDesc(t: Transaction): string {
@@ -95,8 +103,8 @@ export function Transactions() {
       return true
     })
     .sort((a, b) => {
-      const da = txDate(a)
-      const db_ = txDate(b)
+      const da = txSortKey(a)
+      const db_ = txSortKey(b)
       return sortOrder === 'recentes' ? (da < db_ ? 1 : da > db_ ? -1 : 0) : da < db_ ? -1 : da > db_ ? 1 : 0
     })
 
@@ -303,6 +311,7 @@ export function Transactions() {
                     {t.payment_date && (
                       <span className="text-[10px]" style={{ color: 'var(--muted)' }}>
                         {formatDate(t.payment_date)}
+                        {t.payment_time && ` ${t.payment_time.slice(0, 5)}`}
                       </span>
                     )}
                   </div>

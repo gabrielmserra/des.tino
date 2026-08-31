@@ -2,6 +2,7 @@ export type Direction = 'entrada' | 'saida'
 
 export type NormalizedRow = {
   date: string // "YYYY-MM-DD"
+  time?: string | null // "HH:MM:SS" — só OFX pode trazer isso
   description: string
   amount: number // sempre positivo — direction carrega o sinal
   direction: Direction

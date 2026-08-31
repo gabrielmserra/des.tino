@@ -64,6 +64,7 @@ export function TxForm() {
   const [paymentMethod, setPaymentMethod] = useState('')
   const [originId, setOriginId] = useState<number | null>(null)
   const [paymentDate, setPaymentDate] = useState('')
+  const [paymentTime, setPaymentTime] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -86,11 +87,13 @@ export function TxForm() {
       setPaymentMethod(t.payment_method || '')
       setOriginId(t.benefit_id ?? t.card_id ?? t.debit_card_id ?? null)
       setPaymentDate(t.payment_date ?? '')
+      setPaymentTime(t.payment_time?.slice(0, 5) ?? '')
     } else {
       setFlow('saida'); setFreq('variavel'); setDescription(''); setAmount('')
       setCategory('Outros'); setPrevisto(false)
       setPaymentMethod(''); setOriginId(null)
       setPaymentDate(new Date().toISOString().slice(0, 10))
+      setPaymentTime('')
     }
     setError('')
   }, [state])
@@ -139,6 +142,7 @@ export function TxForm() {
       debit_card_id: debitCardId,
       payment_method: paymentMethod,
       payment_date: paymentDate,
+      payment_time: paymentTime || null,
     }
     setBusy(true)
     try {
@@ -300,18 +304,32 @@ export function TxForm() {
           </select>
         )}
 
-        <div className="mb-3">
-          <label className="mb-1 block text-xs font-bold" style={{ color: 'var(--muted)' }}>
-            DATA DO PAGAMENTO
-          </label>
-          <input
-            type="date"
-            required
-            value={paymentDate}
-            onChange={(e) => setPaymentDate(e.target.value)}
-            className="w-full rounded-lg border px-3 py-3 text-base outline-none"
-            style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
-          />
+        <div className="mb-3 flex gap-3">
+          <div className="flex-1">
+            <label className="mb-1 block text-xs font-bold" style={{ color: 'var(--muted)' }}>
+              DATA DO PAGAMENTO
+            </label>
+            <input
+              type="date"
+              required
+              value={paymentDate}
+              onChange={(e) => setPaymentDate(e.target.value)}
+              className="w-full rounded-lg border px-3 py-3 text-base outline-none"
+              style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+            />
+          </div>
+          <div className="flex-1">
+            <label className="mb-1 block text-xs font-bold" style={{ color: 'var(--muted)' }}>
+              HORA (opcional)
+            </label>
+            <input
+              type="time"
+              value={paymentTime}
+              onChange={(e) => setPaymentTime(e.target.value)}
+              className="w-full rounded-lg border px-3 py-3 text-base outline-none"
+              style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+            />
+          </div>
         </div>
 
         <label className="mb-4 flex items-center gap-2 text-sm" style={{ color: 'var(--text)' }}>

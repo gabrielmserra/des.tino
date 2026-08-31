@@ -4,7 +4,7 @@ Cada usuário vê apenas os próprios dados via Row Level Security (RLS).
 """
 
 from typing import Optional, List, Dict
-from datetime import date
+from datetime import date, time
 from config import get_client
 
 # Cache em memória: evita re-buscar transações do mesmo mês a cada ação
@@ -105,6 +105,7 @@ def add_transaction(
     payment_method: Optional[str] = None,
     payment_date: Optional[date] = None,
     imported: bool = False,
+    payment_time: Optional[time] = None,
 ) -> None:
     client  = get_client()
     user_id = client.auth.get_user().user.id
@@ -128,6 +129,8 @@ def add_transaction(
         row["payment_method"] = payment_method
     if payment_date is not None:
         row["payment_date"] = payment_date.isoformat()
+    if payment_time is not None:
+        row["payment_time"] = payment_time.isoformat()
     client.table("transactions").insert(row).execute()
     # Gasto pago com benefício debita o saldo na hora (previsões não debitam)
     if benefit_id is not None and not is_expectation:
@@ -152,6 +155,7 @@ def update_transaction(
     debit_card_id: Optional[int] = None,
     payment_method: Optional[str] = None,
     payment_date: Optional[date] = None,
+    payment_time: Optional[time] = None,
 ) -> None:
     # Estorna o efeito antigo no saldo do benefício antes de aplicar o novo
     old = _find_tx(month_id, transaction_id)
@@ -167,6 +171,7 @@ def update_transaction(
         "debit_card_id":  debit_card_id,
         "payment_method": payment_method,
         "payment_date":   payment_date.isoformat() if payment_date else None,
+        "payment_time":   payment_time.isoformat() if payment_time else None,
     }
     if is_expectation is not None:
         update["is_expectation"] = is_expectation
@@ -199,6 +204,7 @@ def import_transactions_bulk(rows: List[dict]) -> None:
             debit_card_id=r.get("debit_card_id"),
             payment_method=r.get("payment_method"),
             payment_date=r.get("payment_date"),
+            payment_time=r.get("payment_time"),
             imported=True,
         )
 

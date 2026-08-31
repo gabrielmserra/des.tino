@@ -225,6 +225,7 @@ export type TxInput = {
   debit_card_id?: number | null
   payment_method?: string | null
   payment_date?: string | null
+  payment_time?: string | null
 }
 
 export async function addTransaction(monthId: number, tx: TxInput): Promise<void> {
@@ -240,6 +241,7 @@ export async function addTransaction(monthId: number, tx: TxInput): Promise<void
     p_debit_card_id: tx.debit_card_id ?? null,
     p_payment_method: tx.payment_method ?? null,
     p_payment_date: tx.payment_date ?? null,
+    p_payment_time: tx.payment_time ?? null,
   })
   if (error) throw error
 }
@@ -256,6 +258,7 @@ export async function updateTransaction(id: number, tx: TxInput): Promise<void> 
     p_debit_card_id: tx.debit_card_id ?? null,
     p_payment_method: tx.payment_method ?? null,
     p_payment_date: tx.payment_date ?? null,
+    p_payment_time: tx.payment_time ?? null,
   })
   if (error) throw error
 }
@@ -989,6 +992,7 @@ export type ImportRow = {
   category?: string | null
   payment_method?: string | null
   payment_date?: string | null
+  payment_time?: string | null
   card_id?: number | null
   benefit_id?: number | null
   debit_card_id?: number | null

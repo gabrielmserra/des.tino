@@ -340,6 +340,7 @@ class ImportTab(ctk.CTkFrame):
                 "category":       c.cat_var.get() or "Outros",
                 "payment_method": method_key,
                 "payment_date":   c.row.date,
+                "payment_time":   c.row.time,
                 "card_id":        card_id,
             })
 

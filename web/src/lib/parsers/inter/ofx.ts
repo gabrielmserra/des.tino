@@ -16,6 +16,15 @@ function parseOfxDate(raw: string): string | null {
   return `${m[1]}-${m[2]}-${m[3]}`
 }
 
+function parseOfxTime(raw: string): string | null {
+  const digits = raw.trim().slice(8, 14)
+  const m = digits.match(/^(\d{2})(\d{2})(\d{2})$/)
+  if (!m) return null
+  const [, hh, mm, ss] = m
+  if (Number(hh) > 23 || Number(mm) > 59 || Number(ss) > 59) return null
+  return `${hh}:${mm}:${ss}`
+}
+
 export class InterOfxParser implements BankParser {
   bankId = 'inter'
   formatId = 'ofx'
@@ -59,6 +68,7 @@ export class InterOfxParser implements BankParser {
       const isInv = looksLikeInvestment(memo)
       rows.push({
         date: isoDate,
+        time: parseOfxTime(dtposted),
         description: desc || 'Lançamento importado',
         amount,
         direction,

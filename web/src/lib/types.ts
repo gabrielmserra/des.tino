@@ -29,6 +29,7 @@ export type Transaction = {
   debit_card_id: number | null
   payment_method: string | null
   payment_date: string | null
+  payment_time: string | null
   is_expectation: boolean
   created_at: string
   card_purchase_id: number | null

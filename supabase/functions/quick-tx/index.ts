@@ -177,6 +177,15 @@ function todayInSaoPaulo(): string {
   }).format(new Date());
 }
 
+// Hora exata em que o comando de voz foi processado (fuso de São Paulo) —
+// usada só pra ordenar/exibir com mais precisão, nunca pedida na frase.
+function nowTimeInSaoPaulo(): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false,
+  }).format(new Date());
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "Use POST." }, 405);
@@ -243,6 +252,7 @@ Deno.serve(async (req) => {
     category,
     is_expectation: expectation,
     payment_date: todayInSaoPaulo(),
+    payment_time: nowTimeInSaoPaulo(),
   });
   if (tErr) return json({ error: "Falha ao lançar: " + tErr.message }, 500);
 
