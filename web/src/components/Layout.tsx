@@ -30,12 +30,12 @@ function MonthSelector({ onAdd, onEdit }: { onAdd: () => void; onEdit: () => voi
   const { months, selectedId, setSelectedId } = useMonths()
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex min-w-0 items-center gap-1 sm:gap-1.5">
       {months.length > 0 && (
         <select
           value={selectedId ?? ''}
           onChange={(e) => setSelectedId(Number(e.target.value))}
-          className="rounded-lg border px-3 py-2 text-sm font-semibold outline-none"
+          className="min-w-0 rounded-lg border px-1.5 py-1.5 text-xs font-semibold outline-none sm:px-3 sm:py-2 sm:text-sm"
           style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
         >
           {months.map((m) => (
@@ -49,19 +49,21 @@ function MonthSelector({ onAdd, onEdit }: { onAdd: () => void; onEdit: () => voi
         <button
           onClick={onEdit}
           aria-label="Editar período"
-          className="flex items-center justify-center rounded-lg border p-2"
+          className="flex shrink-0 items-center justify-center rounded-lg border p-1.5 sm:p-2"
           style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
         >
-          <Pencil size={16} strokeWidth={2} />
+          <Pencil size={14} strokeWidth={2} className="sm:hidden" />
+          <Pencil size={16} strokeWidth={2} className="hidden sm:block" />
         </button>
       )}
       <button
         onClick={onAdd}
         aria-label="Novo período"
-        className="flex items-center justify-center rounded-lg border p-2"
+        className="flex shrink-0 items-center justify-center rounded-lg border p-1.5 sm:p-2"
         style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
       >
-        <Plus size={16} strokeWidth={2} />
+        <Plus size={14} strokeWidth={2} className="sm:hidden" />
+        <Plus size={16} strokeWidth={2} className="hidden sm:block" />
       </button>
     </div>
   )
@@ -154,29 +156,31 @@ export function Layout() {
     <div className="flex min-h-full flex-col">
       {/* Header */}
       <header
-        className="sticky top-0 z-10 flex items-center justify-between border-b px-4 py-3"
+        className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b px-3 py-3 sm:px-4"
         style={{ background: 'var(--bg)', borderColor: 'var(--border)' }}
       >
-        <span className="text-lg font-bold">
+        <span className="shrink-0 text-base font-bold sm:text-lg">
           des<span style={{ color: 'var(--primary)' }}>.</span>tino
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-1 sm:gap-2">
           <MonthSelector onAdd={() => setShowAddMonth(true)} onEdit={() => setShowEditMonth(true)} />
           <button
             onClick={() => setShowTheme(true)}
             aria-label="Escolher tema"
-            className="flex items-center justify-center rounded-lg border p-2"
+            className="flex shrink-0 items-center justify-center rounded-lg border p-1.5 sm:p-2"
             style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
           >
-            <Palette size={16} strokeWidth={2} />
+            <Palette size={14} strokeWidth={2} className="sm:hidden" />
+            <Palette size={16} strokeWidth={2} className="hidden sm:block" />
           </button>
           <button
             onClick={() => signOut()}
             aria-label="Sair"
-            className="flex items-center justify-center rounded-lg border p-2"
+            className="flex shrink-0 items-center justify-center rounded-lg border p-1.5 sm:p-2"
             style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
           >
-            <LogOut size={16} strokeWidth={2} />
+            <LogOut size={14} strokeWidth={2} className="sm:hidden" />
+            <LogOut size={16} strokeWidth={2} className="hidden sm:block" />
           </button>
         </div>
       </header>
