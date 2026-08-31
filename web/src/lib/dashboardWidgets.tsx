@@ -284,35 +284,42 @@ function PieWidget({ title, empty, data }: { title: string; empty: string; data:
           {empty}
         </p>
       ) : (
-        <ResponsiveContainer width="100%" height={260}>
-          <PieChart>
-            <Pie
-              data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90}
-              strokeWidth={2} stroke="var(--card)"
-              label={renderLabel}
-              labelLine={false}
-            >
-              {data.map((_, i) => (
-                <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip
-              formatter={(v) => formatCurrency(Number(v))}
-              contentStyle={{ background: 'var(--card2)', border: '1px solid var(--border-l)', borderRadius: 8, color: 'var(--text)' }}
-            />
-            <Legend
-              wrapperStyle={{ fontSize: 11, color: 'var(--muted)' }}
-              formatter={(v: string, entry) => {
-                const val = Number((entry?.payload as { value?: number } | undefined)?.value ?? 0)
-                return (
-                  <span style={{ color: 'var(--muted)' }}>
-                    {v} · {((val / total) * 100).toFixed(1)}%
-                  </span>
-                )
-              }}
-            />
-          </PieChart>
-        </ResponsiveContainer>
+        <>
+          {/* Legenda é HTML normal (não o <Legend> do recharts) — o recharts
+              reserva uma altura fixa/estimada pra ela dentro do mesmo SVG do
+              gráfico, e com muitas categorias ela quebra em mais linhas do
+              que o estimado, sobrepondo os rótulos da pizza. Como HTML solto
+              abaixo do gráfico, cresce livre sem disputar espaço com a pizza. */}
+          <ResponsiveContainer width="100%" height={220}>
+            <PieChart margin={{ top: 20, right: 12, bottom: 4, left: 12 }}>
+              <Pie
+                data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={75}
+                strokeWidth={2} stroke="var(--card)"
+                label={renderLabel}
+                labelLine={false}
+              >
+                {data.map((_, i) => (
+                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip
+                formatter={(v) => formatCurrency(Number(v))}
+                contentStyle={{ background: 'var(--card2)', border: '1px solid var(--border-l)', borderRadius: 8, color: 'var(--text)' }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+            {data.map((d, i) => (
+              <span key={d.name} className="text-[11px]" style={{ color: 'var(--muted)' }}>
+                <span
+                  className="mr-1 inline-block h-2 w-2 rounded-full align-middle"
+                  style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}
+                />
+                {d.name} · {((d.value / total) * 100).toFixed(1)}%
+              </span>
+            ))}
+          </div>
+        </>
       )}
     </div>
   )
