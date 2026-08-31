@@ -25,6 +25,28 @@ def _today_br() -> str:
     return datetime.now().strftime("%d/%m/%Y")
 
 
+def _tx_date(tx: dict):
+    """Data real do lançamento (payment_date, ou created_at se não tiver)
+    como objeto date — usado pra ordenar e filtrar por data."""
+    raw = tx.get("payment_date") or tx.get("created_at")
+    if not raw:
+        return None
+    try:
+        return datetime.strptime(str(raw)[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _parse_filter_date(text: str):
+    text = (text or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.strptime(text, "%d/%m/%Y").date()
+    except ValueError:
+        return None
+
+
 def _tx_display_desc(tx: dict) -> str:
     """Parcela de compra no cartão mostra '🧾 descrição (N/M)' em vez da
     descrição crua."""
@@ -537,6 +559,39 @@ class TransactionsTab(ctk.CTkFrame):
             dropdown_text_color=T.TEXT, font=F(11), state="readonly",
         ).pack(side="left", padx=(0, 8))
 
+        self._date_filter_mode_var = ctk.StringVar(value="Todas as datas")
+        ctk.CTkComboBox(
+            bar, values=["Todas as datas", "Período", "Dia específico"],
+            variable=self._date_filter_mode_var,
+            command=lambda _=None: self._on_date_filter_mode_change(),
+            width=150, height=28, corner_radius=7,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.MUTED,
+            button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
+            dropdown_text_color=T.TEXT, font=F(11), state="readonly",
+        ).pack(side="left", padx=(0, 8))
+
+        self._date_fields_frame = ctk.CTkFrame(bar, fg_color="transparent")
+        self._date_fields_frame.pack(side="left", padx=(0, 8))
+
+        def _entry(placeholder: str) -> ctk.CTkEntry:
+            e = ctk.CTkEntry(
+                self._date_fields_frame, placeholder_text=placeholder,
+                width=90, height=28, corner_radius=7,
+                fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+                placeholder_text_color=T.SUBTLE, font=F(11),
+            )
+            e.bind("<Return>", lambda _=None: self.refresh())
+            e.bind("<FocusOut>", lambda _=None: self.refresh())
+            return e
+
+        self._date_from_lbl = ctk.CTkLabel(self._date_fields_frame, text="De", font=F(11), text_color=T.MUTED)
+        self._date_from_entry = _entry("dd/mm/aaaa")
+        self._date_to_lbl = ctk.CTkLabel(self._date_fields_frame, text="Até", font=F(11), text_color=T.MUTED)
+        self._date_to_entry = _entry("dd/mm/aaaa")
+        self._date_single_entry = _entry("dd/mm/aaaa")
+        # nenhum widget packed ainda — _on_date_filter_mode_change() decide
+        # o que aparece dentro de _date_fields_frame conforme o modo
+
         self._clear_filters_btn = ctk.CTkButton(
             bar, text="✕ Limpar filtros", command=self._clear_filters,
             height=24, width=110, corner_radius=6,
@@ -546,10 +601,28 @@ class TransactionsTab(ctk.CTkFrame):
         # packed/esquecido em refresh() — só aparece quando algum filtro
         # está ativo (diferente do valor "Todas...")
 
+    def _on_date_filter_mode_change(self) -> None:
+        mode = self._date_filter_mode_var.get()
+        for w in (self._date_from_lbl, self._date_from_entry,
+                  self._date_to_lbl, self._date_to_entry, self._date_single_entry):
+            w.pack_forget()
+        if mode == "Período":
+            self._date_from_lbl.pack(side="left", padx=(0, 2))
+            self._date_from_entry.pack(side="left", padx=(0, 6))
+            self._date_to_lbl.pack(side="left", padx=(0, 2))
+            self._date_to_entry.pack(side="left")
+        elif mode == "Dia específico":
+            self._date_single_entry.pack(side="left")
+        self.refresh()
+
     def _clear_filters(self) -> None:
         self._cat_filter_var.set("Todas as categorias")
         self._method_filter_var.set("Todas as formas")
-        self.refresh()
+        self._date_filter_mode_var.set("Todas as datas")
+        self._date_from_entry.delete(0, "end")
+        self._date_to_entry.delete(0, "end")
+        self._date_single_entry.delete(0, "end")
+        self._on_date_filter_mode_change()
 
     # ------------------------------------------------------------------
     def _build_quick_add(self, parent, row: int) -> None:
@@ -874,8 +947,23 @@ class TransactionsTab(ctk.CTkFrame):
         if method_filter != "Todas as formas":
             method_key = _LABEL_TO_METHOD_KEY.get(method_filter)
             txs = [t for t in txs if t.get("payment_method") == method_key]
+
+        date_mode = self._date_filter_mode_var.get() if hasattr(self, "_date_filter_mode_var") else "Todas as datas"
+        if date_mode == "Dia específico":
+            d = _parse_filter_date(self._date_single_entry.get())
+            if d:
+                txs = [t for t in txs if _tx_date(t) == d]
+        elif date_mode == "Período":
+            d_from = _parse_filter_date(self._date_from_entry.get())
+            d_to   = _parse_filter_date(self._date_to_entry.get())
+            if d_from:
+                txs = [t for t in txs if _tx_date(t) and _tx_date(t) >= d_from]
+            if d_to:
+                txs = [t for t in txs if _tx_date(t) and _tx_date(t) <= d_to]
+
         if hasattr(self, "_clear_filters_btn"):
-            active = cat_filter != "Todas as categorias" or method_filter != "Todas as formas"
+            active = (cat_filter != "Todas as categorias" or method_filter != "Todas as formas"
+                      or date_mode != "Todas as datas")
             if active:
                 self._clear_filters_btn.pack(side="left")
             else:

@@ -18,6 +18,7 @@ const IS_INCOME: Record<TxType, boolean> = {
 
 type Filter = 'todos' | 'entradas' | 'saidas'
 type SortOrder = 'recentes' | 'antigos'
+type DateFilterMode = 'todas' | 'periodo' | 'dia'
 
 // Data real do pagamento — não a ordem de importação/criação no banco.
 function txDate(t: Transaction): string {
@@ -59,6 +60,10 @@ export function Transactions() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('recentes')
   const [categoryFilter, setCategoryFilter] = useState<string>('')
   const [methodFilter, setMethodFilter] = useState<string>('')
+  const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('todas')
+  const [dateFrom, setDateFrom] = useState<string>('')
+  const [dateTo, setDateTo] = useState<string>('')
+  const [dateSingle, setDateSingle] = useState<string>('')
   const [exporting, setExporting] = useState(false)
 
   const { data, isLoading } = useQuery({
@@ -71,7 +76,8 @@ export function Transactions() {
   const benefitsQ = useQuery({ queryKey: ['benefitsBasic'], queryFn: fetchBenefitsBasic })
 
   const all = data ?? []
-  const hasActiveFilters = filter !== 'todos' || categoryFilter !== '' || methodFilter !== ''
+  const hasActiveFilters =
+    filter !== 'todos' || categoryFilter !== '' || methodFilter !== '' || dateFilterMode !== 'todas'
   const txs = all
     .filter((t) => {
       if (filter === 'entradas') return IS_INCOME[t.type]
@@ -80,6 +86,14 @@ export function Transactions() {
     })
     .filter((t) => !categoryFilter || (t.category || 'Outros') === categoryFilter)
     .filter((t) => !methodFilter || t.payment_method === methodFilter)
+    .filter((t) => {
+      if (dateFilterMode === 'dia') return !dateSingle || txDate(t) === dateSingle
+      if (dateFilterMode === 'periodo') {
+        if (dateFrom && txDate(t) < dateFrom) return false
+        if (dateTo && txDate(t) > dateTo) return false
+      }
+      return true
+    })
     .sort((a, b) => {
       const da = txDate(a)
       const db_ = txDate(b)
@@ -173,9 +187,60 @@ export function Transactions() {
             <option key={k} value={k}>{label}</option>
           ))}
         </select>
+        <select
+          value={dateFilterMode}
+          onChange={(e) => setDateFilterMode(e.target.value as DateFilterMode)}
+          className="rounded-lg border px-2.5 py-1.5 text-xs font-semibold outline-none"
+          style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+        >
+          <option value="todas">Todas as datas</option>
+          <option value="periodo">Período</option>
+          <option value="dia">Dia específico</option>
+        </select>
+        {dateFilterMode === 'periodo' && (
+          <>
+            <label className="flex items-center gap-1 text-xs" style={{ color: 'var(--muted)' }}>
+              De
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="rounded-lg border px-2 py-1.5 text-xs font-semibold outline-none"
+                style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+              />
+            </label>
+            <label className="flex items-center gap-1 text-xs" style={{ color: 'var(--muted)' }}>
+              Até
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="rounded-lg border px-2 py-1.5 text-xs font-semibold outline-none"
+                style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+              />
+            </label>
+          </>
+        )}
+        {dateFilterMode === 'dia' && (
+          <input
+            type="date"
+            value={dateSingle}
+            onChange={(e) => setDateSingle(e.target.value)}
+            className="rounded-lg border px-2 py-1.5 text-xs font-semibold outline-none"
+            style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+          />
+        )}
         {hasActiveFilters && (
           <button
-            onClick={() => { setFilter('todos'); setCategoryFilter(''); setMethodFilter('') }}
+            onClick={() => {
+              setFilter('todos')
+              setCategoryFilter('')
+              setMethodFilter('')
+              setDateFilterMode('todas')
+              setDateFrom('')
+              setDateTo('')
+              setDateSingle('')
+            }}
             className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"
             style={{ color: 'var(--muted)' }}
           >
