@@ -1,4 +1,6 @@
 """Modal de Configurações do usuário."""
+import threading
+
 import customtkinter as ctk
 import ui.theme as T
 from ui.theme import F
@@ -86,12 +88,13 @@ class SettingsDialog(ctk.CTkToplevel):
         btn_row = ctk.CTkFrame(self, fg_color="transparent")
         btn_row.grid(row=7, column=0, pady=(20, 24))
 
-        ctk.CTkButton(
+        self._save_btn = ctk.CTkButton(
             btn_row, text="Salvar", command=self._save,
             height=36, width=110, corner_radius=8,
             fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
             text_color="#ffffff", font=F(13, "bold"),
-        ).pack(side="left", padx=(0, 8))
+        )
+        self._save_btn.pack(side="left", padx=(0, 8))
 
         ctk.CTkButton(
             btn_row, text="Fechar", command=self.destroy,
@@ -115,16 +118,31 @@ class SettingsDialog(ctk.CTkToplevel):
 
     def _save(self) -> None:
         day = int(self._day_var.get())
-        try:
-            moved = db.save_import_cutoff_day(day)
-            self._current_day = day
-            if moved > 0:
-                self._status_lbl.configure(
-                    text=f"✓ Salvo — {moved} lançamento(s) reclassificado(s).",
-                    text_color=T.GREEN,
-                )
-                self._on_recompute()
-            else:
-                self._status_lbl.configure(text="✓ Salvo", text_color=T.GREEN)
-        except Exception as e:
-            self._status_lbl.configure(text=f"Erro ao salvar: {str(e)[:60]}", text_color=T.RED)
+        self._save_btn.configure(state="disabled", text="Salvando…")
+        self._status_lbl.configure(text="")
+
+        def _work():
+            try:
+                moved = db.save_import_cutoff_day(day)
+                self.after(0, lambda: self._on_saved(day, moved))
+            except Exception as e:
+                msg = str(e)[:60]
+                self.after(0, lambda: self._on_save_error(msg))
+
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _on_saved(self, day: int, moved: int) -> None:
+        self._current_day = day
+        self._save_btn.configure(state="normal", text="Salvar")
+        if moved > 0:
+            self._status_lbl.configure(
+                text=f"✓ Salvo — {moved} lançamento(s) reclassificado(s).",
+                text_color=T.GREEN,
+            )
+            self._on_recompute()
+        else:
+            self._status_lbl.configure(text="✓ Salvo", text_color=T.GREEN)
+
+    def _on_save_error(self, msg: str) -> None:
+        self._save_btn.configure(state="normal", text="Salvar")
+        self._status_lbl.configure(text=f"Erro ao salvar: {msg}", text_color=T.RED)
