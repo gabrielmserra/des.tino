@@ -60,6 +60,7 @@ class FinanceApp(ctk.CTkFrame):
             on_commitments = self._show_commitments,
             on_import      = self._show_import,
             on_future_commitments = self._show_future_commitments,
+            on_cutoff_recompute = self._on_cutoff_recomputed,
             user_email     = self.user_email,
         )
         self._sidebar.grid(row=0, column=0, sticky="nsew")
@@ -394,6 +395,10 @@ class FinanceApp(ctk.CTkFrame):
     def _on_theme_change(self, theme_name: str) -> None:
         """Recria toda a UI com o novo tema."""
         self.after(30, lambda: self._rebuild_ui())
+
+    def _on_cutoff_recomputed(self) -> None:
+        """Recria toda a UI depois que lançamentos mudaram de mês (dia de corte)."""
+        self.after(30, self._rebuild_ui)
 
     def _rebuild_ui(self) -> None:
         saved_id = self._current_id

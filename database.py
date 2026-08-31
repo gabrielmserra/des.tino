@@ -104,6 +104,7 @@ def add_transaction(
     debit_card_id: Optional[int] = None,
     payment_method: Optional[str] = None,
     payment_date: Optional[date] = None,
+    imported: bool = False,
 ) -> None:
     client  = get_client()
     user_id = client.auth.get_user().user.id
@@ -115,6 +116,7 @@ def add_transaction(
         "amount":         amount,
         "category":       category,
         "is_expectation": is_expectation,
+        "imported":       imported,
     }
     if card_id is not None:
         row["card_id"] = card_id
@@ -197,6 +199,7 @@ def import_transactions_bulk(rows: List[dict]) -> None:
             debit_card_id=r.get("debit_card_id"),
             payment_method=r.get("payment_method"),
             payment_date=r.get("payment_date"),
+            imported=True,
         )
 
 
@@ -436,6 +439,7 @@ def copy_transactions_to_month(from_month_id: int, to_month_id: int) -> int:
             "description": r["description"],
             "amount":      float(r["amount"]),
             "category":    r["category"] or "Outros",
+            "imported":    r.get("imported", False),
         }
         if r.get("card_id"):
             row["card_id"] = r["card_id"]
@@ -1943,7 +1947,10 @@ def get_import_cutoff_day() -> int:
     return resp.data[0]["import_cutoff_day"]
 
 
-def save_import_cutoff_day(day: int) -> None:
+def save_import_cutoff_day(day: int) -> int:
+    """Salva o dia de corte e recalcula o mês dos lançamentos importados
+    que ficaram desalinhados com a regra nova. Retorna quantos lançamentos
+    foram movidos."""
     client  = get_client()
     user_id = client.auth.get_user().user.id
     existing = client.table("user_settings").select("user_id").eq("user_id", user_id).execute()
@@ -1951,3 +1958,8 @@ def save_import_cutoff_day(day: int) -> None:
         client.table("user_settings").update({"import_cutoff_day": day}).eq("user_id", user_id).execute()
     else:
         client.table("user_settings").insert({"user_id": user_id, "import_cutoff_day": day}).execute()
+
+    resp  = client.rpc("recompute_cutoff_months", {"p_cutoff_day": day}).execute()
+    moved = resp.data or 0
+    clear_cache()
+    return moved

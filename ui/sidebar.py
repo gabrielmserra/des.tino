@@ -20,6 +20,7 @@ class Sidebar(ctk.CTkFrame):
         on_commitments:  Callable = None,
         on_import:       Callable = None,
         on_future_commitments: Callable = None,
+        on_cutoff_recompute: Callable = None,
         user_email:      str = "",
     ):
         super().__init__(parent, width=270, corner_radius=0, fg_color=T.SIDEBAR)
@@ -37,6 +38,7 @@ class Sidebar(ctk.CTkFrame):
         self.on_commitments = on_commitments or (lambda: None)
         self.on_import      = on_import or (lambda: None)
         self.on_future_commitments = on_future_commitments or (lambda: None)
+        self.on_cutoff_recompute = on_cutoff_recompute or (lambda: None)
         self.user_email     = user_email
 
         self._active_id: int | None         = None
@@ -202,7 +204,7 @@ class Sidebar(ctk.CTkFrame):
 
     def _open_settings(self) -> None:
         from ui.settings_dialog import SettingsDialog
-        SettingsDialog(self.winfo_toplevel())
+        SettingsDialog(self.winfo_toplevel(), on_recompute=self.on_cutoff_recompute)
 
     # ------------------------------------------------------------------
     def update_months(self, months) -> None:

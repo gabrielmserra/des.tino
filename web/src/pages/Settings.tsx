@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Download, FileText } from 'lucide-react'
 import { fetchImportCutoffDay, saveImportCutoffDay } from '../lib/api'
 import { useMonths } from '../lib/month'
@@ -20,6 +21,7 @@ export function Settings() {
   const [status, setStatus] = useState('')
   const [isMobile] = useState(isMobileDevice)
   const { months } = useMonths()
+  const qc = useQueryClient()
 
   const monthsAsc = useMemo(
     () => [...months].sort((a, b) => a.year * 100 + a.month - (b.year * 100 + b.month)),
@@ -69,8 +71,13 @@ export function Settings() {
     setSaving(true)
     setStatus('')
     try {
-      await saveImportCutoffDay(value)
-      setStatus('✓ Salvo')
+      const moved = await saveImportCutoffDay(value)
+      if (moved > 0) {
+        setStatus(`✓ Salvo — ${moved} lançamento(s) reclassificado(s).`)
+        qc.invalidateQueries()
+      } else {
+        setStatus('✓ Salvo')
+      }
     } catch {
       setStatus('Erro ao salvar')
     } finally {

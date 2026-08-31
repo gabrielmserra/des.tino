@@ -103,11 +103,15 @@ export async function fetchImportCutoffDay(): Promise<number> {
   }
 }
 
-export async function saveImportCutoffDay(day: number): Promise<void> {
+export async function saveImportCutoffDay(day: number): Promise<number> {
   const { error } = await supabase
     .from('user_settings')
     .upsert({ import_cutoff_day: day }, { onConflict: 'user_id' })
   if (error) throw error
+
+  const { data, error: rpcError } = await supabase.rpc('recompute_cutoff_months', { p_cutoff_day: day })
+  if (rpcError) throw rpcError
+  return (data as number) ?? 0
 }
 
 export async function fetchMonthSummary(monthId: number): Promise<MonthSummary> {

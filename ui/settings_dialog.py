@@ -7,13 +7,14 @@ import database as db
 
 
 class SettingsDialog(ctk.CTkToplevel):
-    def __init__(self, parent):
+    def __init__(self, parent, on_recompute=None):
         super().__init__(parent)
         self.title("Configurações")
         self.resizable(False, False)
         self.grab_set()
         self.configure(fg_color=T.CARD)
         self._current_day = 1
+        self._on_recompute = on_recompute or (lambda: None)
         self._build()
         self._center(parent)
         self.lift()
@@ -115,8 +116,15 @@ class SettingsDialog(ctk.CTkToplevel):
     def _save(self) -> None:
         day = int(self._day_var.get())
         try:
-            db.save_import_cutoff_day(day)
+            moved = db.save_import_cutoff_day(day)
             self._current_day = day
-            self._status_lbl.configure(text="✓ Salvo", text_color=T.GREEN)
+            if moved > 0:
+                self._status_lbl.configure(
+                    text=f"✓ Salvo — {moved} lançamento(s) reclassificado(s).",
+                    text_color=T.GREEN,
+                )
+                self._on_recompute()
+            else:
+                self._status_lbl.configure(text="✓ Salvo", text_color=T.GREEN)
         except Exception as e:
             self._status_lbl.configure(text=f"Erro ao salvar: {str(e)[:60]}", text_color=T.RED)
