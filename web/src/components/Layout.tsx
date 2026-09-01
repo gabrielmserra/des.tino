@@ -81,11 +81,11 @@ function NavTab({
   label: string
 }) {
   return (
-    <NavLink to={to} end={end} className="flex flex-1 flex-col items-center gap-1 py-2.5">
+    <NavLink to={to} end={end} className="flex flex-1 flex-col items-center gap-1 py-3">
       {({ isActive }) => (
         <>
-          <Icon size={20} strokeWidth={2} color={isActive ? 'var(--primary)' : 'var(--muted)'} />
-          <span style={{ color: isActive ? 'var(--primary)' : 'var(--muted)', fontSize: 11, fontWeight: 600 }}>
+          <Icon size={23} strokeWidth={2} color={isActive ? 'var(--primary)' : 'var(--muted)'} />
+          <span style={{ color: isActive ? 'var(--primary)' : 'var(--muted)', fontSize: 10.5, fontWeight: 600 }}>
             {label}
           </span>
         </>
@@ -240,8 +240,8 @@ export function Layout() {
       <button
         onClick={openNew}
         aria-label="Novo lançamento"
-        className="fixed bottom-20 right-5 z-20 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg"
-        style={{ background: 'var(--primary)' }}
+        className="fixed right-5 z-20 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg"
+        style={{ background: 'var(--primary)', bottom: 'calc(env(safe-area-inset-bottom) + 80px)' }}
       >
         <Plus size={26} strokeWidth={2.5} />
       </button>
