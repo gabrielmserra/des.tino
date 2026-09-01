@@ -131,8 +131,13 @@ function RenewalToast({ summary, onDismiss }: { summary: RenewalSummary[]; onDis
 
   return (
     <div
-      className="fixed left-1/2 top-16 z-30 w-[92%] max-w-md -translate-x-1/2 rounded-xl border p-3 text-center text-xs font-bold shadow-lg"
-      style={{ background: 'var(--primary)', borderColor: 'var(--primary)', color: '#fff' }}
+      className="fixed left-1/2 z-30 w-[92%] max-w-md -translate-x-1/2 rounded-xl border p-3 text-center text-xs font-bold shadow-lg"
+      style={{
+        background: 'var(--primary)',
+        borderColor: 'var(--primary)',
+        color: '#fff',
+        top: 'calc(env(safe-area-inset-top) + 64px)',
+      }}
       onClick={onDismiss}
     >
       🔄 Benefício renovado: {text}
@@ -157,7 +162,11 @@ export function Layout() {
       {/* Header */}
       <header
         className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b px-3 py-3 sm:px-4"
-        style={{ background: 'var(--bg)', borderColor: 'var(--border)' }}
+        style={{
+          background: 'var(--bg)',
+          borderColor: 'var(--border)',
+          paddingTop: 'calc(env(safe-area-inset-top) + 12px)',
+        }}
       >
         <span className="shrink-0 text-base font-bold sm:text-lg">
           des<span style={{ color: 'var(--primary)' }}>.</span>tino
