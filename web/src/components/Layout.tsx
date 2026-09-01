@@ -30,12 +30,12 @@ function MonthSelector({ onAdd, onEdit }: { onAdd: () => void; onEdit: () => voi
   const { months, selectedId, setSelectedId } = useMonths()
 
   return (
-    <div className="flex min-w-0 items-center gap-1 sm:gap-1.5">
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
       {months.length > 0 && (
         <select
           value={selectedId ?? ''}
           onChange={(e) => setSelectedId(Number(e.target.value))}
-          className="min-w-0 rounded-lg border px-1.5 py-1.5 text-xs font-semibold outline-none sm:px-3 sm:py-2 sm:text-sm"
+          className="min-w-0 rounded-lg border px-2.5 py-2 text-sm font-semibold outline-none"
           style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
         >
           {months.map((m) => (
@@ -49,21 +49,19 @@ function MonthSelector({ onAdd, onEdit }: { onAdd: () => void; onEdit: () => voi
         <button
           onClick={onEdit}
           aria-label="Editar período"
-          className="flex shrink-0 items-center justify-center rounded-lg border p-1.5 sm:p-2"
+          className="flex shrink-0 items-center justify-center rounded-lg border p-2.5"
           style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
         >
-          <Pencil size={14} strokeWidth={2} className="sm:hidden" />
-          <Pencil size={16} strokeWidth={2} className="hidden sm:block" />
+          <Pencil size={18} strokeWidth={2} />
         </button>
       )}
       <button
         onClick={onAdd}
         aria-label="Novo período"
-        className="flex shrink-0 items-center justify-center rounded-lg border p-1.5 sm:p-2"
+        className="flex shrink-0 items-center justify-center rounded-lg border p-2.5"
         style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
       >
-        <Plus size={14} strokeWidth={2} className="sm:hidden" />
-        <Plus size={16} strokeWidth={2} className="hidden sm:block" />
+        <Plus size={18} strokeWidth={2} />
       </button>
     </div>
   )
@@ -161,7 +159,7 @@ export function Layout() {
     <div className="flex min-h-full flex-col">
       {/* Header */}
       <header
-        className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b px-3 py-3 sm:px-4"
+        className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-x-2 gap-y-2 border-b px-3 py-3 sm:px-4"
         style={{
           background: 'var(--bg)',
           borderColor: 'var(--border)',
@@ -171,25 +169,23 @@ export function Layout() {
         <span className="shrink-0 text-base font-bold sm:text-lg">
           des<span style={{ color: 'var(--primary)' }}>.</span>tino
         </span>
-        <div className="flex min-w-0 items-center gap-1 sm:gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <MonthSelector onAdd={() => setShowAddMonth(true)} onEdit={() => setShowEditMonth(true)} />
           <button
             onClick={() => setShowTheme(true)}
             aria-label="Escolher tema"
-            className="flex shrink-0 items-center justify-center rounded-lg border p-1.5 sm:p-2"
+            className="flex shrink-0 items-center justify-center rounded-lg border p-2.5"
             style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
           >
-            <Palette size={14} strokeWidth={2} className="sm:hidden" />
-            <Palette size={16} strokeWidth={2} className="hidden sm:block" />
+            <Palette size={18} strokeWidth={2} />
           </button>
           <button
             onClick={() => signOut()}
             aria-label="Sair"
-            className="flex shrink-0 items-center justify-center rounded-lg border p-1.5 sm:p-2"
+            className="flex shrink-0 items-center justify-center rounded-lg border p-2.5"
             style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
           >
-            <LogOut size={14} strokeWidth={2} className="sm:hidden" />
-            <LogOut size={16} strokeWidth={2} className="hidden sm:block" />
+            <LogOut size={18} strokeWidth={2} />
           </button>
         </div>
       </header>

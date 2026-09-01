@@ -51,6 +51,12 @@ html,
 body,
 #root {
   height: 100%;
+  /* No Safari do iPhone, height:100% se comporta como a viewport "grande"
+     (barra do navegador escondida). Em páginas curtas, sem rolagem, a
+     barra fica visível/expandida e o rodapé fixo (calculado pra altura
+     grande) sobra um vão embaixo. 100dvh acompanha a altura visível real,
+     ajustando ao vivo conforme a barra do navegador aparece/some. */
+  height: 100dvh;
 }
 
 body {
