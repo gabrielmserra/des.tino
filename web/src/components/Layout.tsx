@@ -159,17 +159,17 @@ export function Layout() {
     <div className="flex min-h-full flex-col">
       {/* Header */}
       <header
-        className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-x-2 gap-y-2 border-b px-3 py-3 sm:px-4"
+        className="sticky top-0 z-10 flex flex-wrap items-center justify-center gap-x-2 gap-y-2 border-b px-3 py-3 sm:justify-between sm:px-4"
         style={{
           background: 'var(--bg)',
           borderColor: 'var(--border)',
           paddingTop: 'calc(env(safe-area-inset-top) + 12px)',
         }}
       >
-        <span className="shrink-0 text-base font-bold sm:text-lg">
+        <span className="shrink-0 text-xl font-bold sm:text-2xl">
           des<span style={{ color: 'var(--primary)' }}>.</span>tino
         </span>
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        <div className="flex min-w-0 flex-wrap items-center justify-center gap-1.5">
           <MonthSelector onAdd={() => setShowAddMonth(true)} onEdit={() => setShowEditMonth(true)} />
           <button
             onClick={() => setShowTheme(true)}
