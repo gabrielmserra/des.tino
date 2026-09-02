@@ -1,11 +1,32 @@
-"""Frame de login e cadastro."""
+"""Frame de login, cadastro e recuperação de senha.
+
+Layout de dois painéis (marca à esquerda + formulário à direita),
+espelhando o redesign feito na versão web (web/src/pages/Auth.css):
+painel de marca com glow radial, título/parágrafo e (só no login) a
+ilustração do "caminho"; formulário com campos estilo sublinhado.
+"""
 from __future__ import annotations
+import tkinter as tk
 from typing import Callable
 
 import customtkinter as ctk
+from PIL import Image, ImageTk
+
 import ui.theme as T
 from ui.theme import F
 from utils.helpers import APP_VERSION
+
+
+def _hex_to_rgb(h: str) -> tuple[int, int, int]:
+    h = h.lstrip("#")
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _blend(hex_a: str, hex_b: str, t: float) -> str:
+    """Mistura hex_a com hex_b (t=0 -> hex_a, t=1 -> hex_b)."""
+    a, b = _hex_to_rgb(hex_a), _hex_to_rgb(hex_b)
+    mixed = tuple(round(a[i] + (b[i] - a[i]) * t) for i in range(3))
+    return "#%02x%02x%02x" % mixed
 
 
 class LoginFrame(ctk.CTkFrame):
@@ -13,10 +34,18 @@ class LoginFrame(ctk.CTkFrame):
         super().__init__(parent, fg_color=T.BG)
         self._on_login = on_login
         self._current_page = "login"
+        self._glow_job = None
+        self._glow_img_ref = None
         self._build_login()
 
     # ------------------------------------------------------------------
     def _clear(self) -> None:
+        if self._glow_job:
+            try:
+                self.after_cancel(self._glow_job)
+            except Exception:
+                pass
+            self._glow_job = None
         for w in self.winfo_children():
             w.destroy()
 
@@ -31,17 +60,9 @@ class LoginFrame(ctk.CTkFrame):
         )
         btn.place(relx=1.0, rely=1.0, anchor="se", x=-16, y=-16)
 
-    def _add_logo(self, parent, subtitle: str) -> None:
-        logo = ctk.CTkFrame(parent, fg_color="transparent")
-        logo.pack(pady=(0, 32))
-
-        name_row = ctk.CTkFrame(logo, fg_color="transparent")
-        name_row.pack()
-        ctk.CTkLabel(name_row, text="des", font=F(32, "bold"), text_color=T.TEXT).pack(side="left")
-        ctk.CTkLabel(name_row, text=".", font=F(32, "bold"), text_color=T.GREEN).pack(side="left")
-        ctk.CTkLabel(name_row, text="tino", font=F(32), text_color=T.TEXT).pack(side="left")
-
-        ctk.CTkLabel(logo, text=subtitle, font=F(11), text_color=T.MUTED).pack(pady=(6, 0))
+        ctk.CTkLabel(
+            self, text=f"v{APP_VERSION}", font=F(10), text_color=T.SUBTLE,
+        ).place(relx=0.0, rely=1.0, anchor="sw", x=16, y=-16)
 
     def _open_theme_picker(self) -> None:
         from ui.theme_picker import ThemePickerDialog
@@ -56,76 +77,199 @@ class LoginFrame(ctk.CTkFrame):
         ThemePickerDialog(self.winfo_toplevel(), _on_select)
 
     # ------------------------------------------------------------------
+    # Painel de marca (esquerda): logo no topo, título+parágrafo no meio,
+    # ilustração do caminho embaixo (só quando show_route=True).
+    def _build_brand_panel(self, parent, title_lines, paragraph, show_route=False):
+        panel = ctk.CTkFrame(parent, fg_color=T.SIDEBAR, corner_radius=0)
+
+        bg_label = tk.Label(panel, bd=0, highlightthickness=0, bg=T.SIDEBAR)
+        bg_label.place(relx=0, rely=0, relwidth=1, relheight=1)
+
+        def _redraw_glow(_event=None):
+            w, h = panel.winfo_width(), panel.winfo_height()
+            if w < 2 or h < 2:
+                return
+            img = self._make_glow(w, h)
+            self._glow_img_ref = ImageTk.PhotoImage(img)
+            bg_label.configure(image=self._glow_img_ref)
+
+        def _on_configure(_event):
+            if self._glow_job:
+                panel.after_cancel(self._glow_job)
+            self._glow_job = panel.after(80, _redraw_glow)
+
+        panel.bind("<Configure>", _on_configure)
+
+        content = ctk.CTkFrame(panel, fg_color="transparent")
+        content.place(relx=0, rely=0, relwidth=1, relheight=1)
+        content.grid_rowconfigure(1, weight=1)
+        content.grid_columnconfigure(0, weight=1)
+
+        top = ctk.CTkFrame(content, fg_color="transparent")
+        top.grid(row=0, column=0, sticky="new", padx=56, pady=(48, 0))
+        name_row = ctk.CTkFrame(top, fg_color="transparent")
+        name_row.pack(anchor="w")
+        ctk.CTkLabel(name_row, text="des", font=F(19, "bold"), text_color=T.TEXT).pack(side="left")
+        ctk.CTkLabel(name_row, text=".", font=F(19, "bold"), text_color=T.GREEN).pack(side="left")
+        ctk.CTkLabel(name_row, text="tino", font=F(19), text_color=T.TEXT).pack(side="left")
+
+        mid = ctk.CTkFrame(content, fg_color="transparent")
+        mid.grid(row=1, column=0, sticky="nsew", padx=56)
+        mid_inner = ctk.CTkFrame(mid, fg_color="transparent")
+        mid_inner.place(relx=0, rely=0.5, anchor="w")
+        for text, bold in title_lines:
+            ctk.CTkLabel(
+                mid_inner, text=text, font=F(28, "bold" if bold else "normal"),
+                text_color=T.GREEN if bold else T.TEXT, anchor="w", justify="left",
+            ).pack(anchor="w")
+        ctk.CTkLabel(
+            mid_inner, text=paragraph, font=F(13), text_color=T.MUTED,
+            anchor="w", justify="left", wraplength=340,
+        ).pack(anchor="w", pady=(16, 0))
+
+        if show_route:
+            route = tk.Canvas(content, width=280, height=70, bg=T.SIDEBAR, highlightthickness=0)
+            route.grid(row=2, column=0, sticky="sw", padx=56, pady=(0, 48))
+            self._draw_route(route)
+
+        panel.after(30, _redraw_glow)
+        return panel
+
+    def _make_glow(self, w: int, h: int) -> Image.Image:
+        base = Image.new("RGBA", (w, h), _hex_to_rgb(T.SIDEBAR) + (255,))
+        for cx, cy, radius_ratio, color, alpha in (
+            (0.2, 0.15, 0.65, T.GREEN, 65),
+            (0.9, 0.9, 0.55, T.BORDER_L, 70),
+        ):
+            size = int(max(w, h) * radius_ratio)
+            if size < 2:
+                continue
+            grad = Image.radial_gradient("L").resize((size, size), Image.BICUBIC)
+            glow = Image.new("RGBA", (size, size), _hex_to_rgb(color) + (0,))
+            glow.putalpha(grad.point(lambda p, a=alpha: int(p * a / 255)))
+            base.alpha_composite(glow, (int(w * cx - size / 2), int(h * cy - size / 2)))
+        return base
+
+    def _draw_route(self, canvas: tk.Canvas) -> None:
+        muted = _blend(T.GREEN, T.SIDEBAR, 0.6)
+        pts = self._bezier_points((10, 50), (70, 15), (140, 35))
+        pts += self._bezier_points((140, 35), (210, 55), (270, 20))[1:]
+        canvas.create_line(*[c for p in pts for c in p], fill=muted, width=1, smooth=True)
+        canvas.create_oval(6, 46, 14, 54, fill=muted, outline="")
+        canvas.create_oval(133, 28, 147, 42, outline=muted, width=2)
+        canvas.create_oval(136, 31, 144, 39, fill=T.GREEN, outline="")
+        canvas.create_oval(266, 16, 274, 24, fill=T.GOLD, outline="")
+
+    @staticmethod
+    def _bezier_points(p0, p1, p2, steps: int = 16) -> list[tuple[float, float]]:
+        pts = []
+        for i in range(steps + 1):
+            t = i / steps
+            x = (1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * p1[0] + t ** 2 * p2[0]
+            y = (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t ** 2 * p2[1]
+            pts.append((x, y))
+        return pts
+
+    # ------------------------------------------------------------------
+    # Campo estilo "sublinhado" (label + entry sem borda + barra que
+    # acende na cor primária ao focar), igual ao .ld-field do site.
+    def _field(self, parent, label_text: str, placeholder: str, secret: bool = False):
+        wrap = ctk.CTkFrame(parent, fg_color="transparent")
+        ctk.CTkLabel(wrap, text=label_text, font=F(10, "bold"), text_color=T.SUBTLE, anchor="w").pack(fill="x")
+        entry = ctk.CTkEntry(
+            wrap, placeholder_text=placeholder, show="•" if secret else "",
+            fg_color=T.BG, border_width=0, corner_radius=0,
+            text_color=T.TEXT, placeholder_text_color=T.SUBTLE, font=F(14),
+        )
+        entry.pack(fill="x", pady=(8, 0))
+        bar = ctk.CTkFrame(wrap, height=1, fg_color=T.BORDER_L, corner_radius=0)
+        bar.pack(fill="x")
+        # CTkEntry delega o foco de teclado pro tkinter.Entry interno (_entry) —
+        # bind direto na CTkEntry nunca recebe FocusIn/FocusOut.
+        entry._entry.bind("<FocusIn>", lambda _e: bar.configure(fg_color=T.GREEN), add="+")
+        entry._entry.bind("<FocusOut>", lambda _e: bar.configure(fg_color=T.BORDER_L), add="+")
+        return wrap, entry
+
+    def _divider(self, parent, text: str = "OU") -> None:
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", pady=22)
+        ctk.CTkFrame(row, height=1, fg_color=T.BORDER).pack(side="left", fill="x", expand=True)
+        ctk.CTkLabel(row, text=text, font=F(10), text_color=T.SUBTLE).pack(side="left", padx=10)
+        ctk.CTkFrame(row, height=1, fg_color=T.BORDER).pack(side="left", fill="x", expand=True)
+
+    def _footer_link(self, parent, prefix: str, link_text: str, command: Callable[[], None]) -> None:
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x")
+        inner = ctk.CTkFrame(row, fg_color="transparent")
+        inner.pack(anchor="center")
+        ctk.CTkLabel(inner, text=prefix, font=F(13), text_color=T.MUTED).pack(side="left")
+        link = ctk.CTkLabel(inner, text=link_text, font=F(13, "bold"), text_color=T.GREEN, cursor="hand2")
+        link.pack(side="left", padx=(4, 0))
+        link.bind("<Button-1>", lambda _e: command())
+
+    def _back_link(self, parent, command: Callable[[], None]) -> None:
+        link = ctk.CTkLabel(
+            parent, text="← Voltar para login", font=F(13),
+            text_color=T.MUTED, cursor="hand2",
+        )
+        link.pack(pady=(28, 0))
+        link.bind("<Button-1>", lambda _e: command())
+
+    def _primary_btn(self, parent, text: str, command: Callable[[], None]) -> ctk.CTkButton:
+        return ctk.CTkButton(
+            parent, text=text, command=command,
+            height=46, corner_radius=8,
+            fg_color=T.GREEN, hover_color=T.BLUE_HOVER,
+            text_color="#ffffff", font=F(14, "bold"),
+        )
+
+    def _split_screen(self, brand_kwargs: dict):
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=115)
+        self.grid_columnconfigure(1, weight=100)
+
+        brand = self._build_brand_panel(self, **brand_kwargs)
+        brand.grid(row=0, column=0, sticky="nsew")
+
+        form_side = ctk.CTkFrame(self, fg_color=T.BG, corner_radius=0)
+        form_side.grid(row=0, column=1, sticky="nsew")
+
+        box = ctk.CTkFrame(form_side, fg_color="transparent", width=340)
+        box.place(relx=0.5, rely=0.5, anchor="center")
+        return box
+
+    # ------------------------------------------------------------------
     def _build_login(self) -> None:
         self._clear()
 
-        outer = ctk.CTkFrame(self, fg_color="transparent")
-        outer.place(relx=0.5, rely=0.5, anchor="center")
+        box = self._split_screen({
+            "title_lines": [("Organize seu dinheiro", False), ("com destino certo.", True)],
+            "paragraph": "Acompanhe entradas, saídas e investimentos em um só lugar, mês após mês.",
+            "show_route": True,
+        })
 
-        # ── Logo ──────────────────────────────────────────────────────
-        self._add_logo(outer, f"CONTROLE FINANCEIRO  ·  v{APP_VERSION}")
+        ctk.CTkLabel(box, text="Entrar na conta", font=F(21, "bold"), text_color=T.TEXT, anchor="w").pack(fill="x")
+        ctk.CTkLabel(box, text="Bem-vindo de volta", font=F(13), text_color=T.MUTED, anchor="w").pack(
+            fill="x", pady=(4, 28))
 
-        # ── Card ──────────────────────────────────────────────────────
-        card = ctk.CTkFrame(outer, width=420, corner_radius=20, fg_color=T.CARD,
-                            border_width=1, border_color=T.BORDER)
-        card.pack()
-        card.grid_columnconfigure(0, weight=1)
+        _, self._email = self._field(box, "E-MAIL", "seu@email.com")
+        self._email.master.pack(fill="x", pady=(0, 22))
 
-        ctk.CTkLabel(card, text="Entrar na conta", font=F(18, "bold"),
-                     text_color=T.TEXT, anchor="w").grid(
-            row=0, column=0, sticky="w", padx=32, pady=(32, 4))
-        ctk.CTkLabel(card, text="Bem-vindo de volta", font=F(13),
-                     text_color=T.MUTED, anchor="w").grid(
-            row=1, column=0, sticky="w", padx=32, pady=(0, 24))
-
-        ctk.CTkLabel(card, text="E-MAIL", font=F(11, "bold"),
-                     text_color=T.MUTED, anchor="w").grid(
-            row=2, column=0, sticky="w", padx=32)
-        self._email = ctk.CTkEntry(
-            card, placeholder_text="seu@email.com", width=356,
-            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
-            placeholder_text_color=T.SUBTLE, corner_radius=10,
-        )
-        self._email.grid(row=3, column=0, padx=32, pady=(6, 0))
-
-        ctk.CTkLabel(card, text="SENHA", font=F(11, "bold"),
-                     text_color=T.MUTED, anchor="w").grid(
-            row=4, column=0, sticky="w", padx=32, pady=(16, 0))
-        self._password = ctk.CTkEntry(
-            card, placeholder_text="••••••••", show="•", width=356,
-            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
-            placeholder_text_color=T.SUBTLE, corner_radius=10,
-        )
-        self._password.grid(row=5, column=0, padx=32, pady=(6, 0))
+        _, self._password = self._field(box, "SENHA", "••••••••", secret=True)
+        self._password.master.pack(fill="x")
         self._password.bind("<Return>", lambda _: self._login())
 
-        self._login_error = ctk.CTkLabel(
-            card, text="", font=F(12), text_color=T.RED, anchor="w")
-        self._login_error.grid(row=6, column=0, padx=32, pady=(10, 0), sticky="w")
+        self._login_error = ctk.CTkLabel(box, text="", font=F(12), text_color=T.RED, anchor="w")
+        self._login_error.pack(fill="x", pady=(10, 0))
 
-        ctk.CTkButton(
-            card, text="Entrar", command=self._login,
-            height=44, width=356, corner_radius=10,
-            fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
-            text_color="#ffffff", font=F(15, "bold"),
-        ).grid(row=7, column=0, padx=32, pady=(4, 0))
+        self._primary_btn(box, "Entrar", self._login).pack(fill="x", pady=(14, 10))
 
-        ctk.CTkButton(
-            card, text="Esqueci minha senha",
-            command=self._build_forgot_password,
-            height=30, width=356, corner_radius=8,
-            fg_color="transparent", hover_color=T.CARD2,
-            border_width=0, text_color=T.MUTED, font=F(13),
-        ).grid(row=8, column=0, padx=32, pady=(8, 0))
+        forgot = ctk.CTkLabel(box, text="Esqueci minha senha", font=F(13), text_color=T.MUTED, cursor="hand2")
+        forgot.pack()
+        forgot.bind("<Button-1>", lambda _e: self._build_forgot_password())
 
-        ctk.CTkButton(
-            card, text="Criar nova conta →",
-            command=self._build_register,
-            height=42, width=356, corner_radius=10,
-            fg_color="transparent", hover_color=T.CARD2,
-            border_width=1, border_color=T.BORDER_L,
-            text_color=T.TEXT, font=F(14, "bold"),
-        ).grid(row=9, column=0, padx=32, pady=(8, 32))
+        self._divider(box)
+        self._footer_link(box, "Ainda não tem conta?", "Criar conta", self._build_register)
 
         self._current_page = "login"
         self._add_theme_btn()
@@ -165,61 +309,32 @@ class LoginFrame(ctk.CTkFrame):
     def _build_register(self) -> None:
         self._clear()
 
-        outer = ctk.CTkFrame(self, fg_color="transparent")
-        outer.place(relx=0.5, rely=0.5, anchor="center")
+        box = self._split_screen({
+            "title_lines": [("Comece a organizar", False), ("suas finanças hoje.", True)],
+            "paragraph": "Crie sua conta gratuita e acompanhe entradas, saídas e investimentos em um só lugar.",
+        })
 
-        self._add_logo(outer, "CRIAR NOVA CONTA")
+        ctk.CTkLabel(box, text="Criar conta", font=F(21, "bold"), text_color=T.TEXT, anchor="w").pack(fill="x")
+        ctk.CTkLabel(box, text="Comece a usar o des.tino gratuitamente", font=F(13), text_color=T.MUTED,
+                     anchor="w").pack(fill="x", pady=(4, 28))
 
-        card = ctk.CTkFrame(outer, width=420, corner_radius=20, fg_color=T.CARD,
-                            border_width=1, border_color=T.BORDER)
-        card.pack()
-        card.grid_columnconfigure(0, weight=1)
+        _, self._reg_email = self._field(box, "E-MAIL", "seu@email.com")
+        self._reg_email.master.pack(fill="x", pady=(0, 22))
 
-        ctk.CTkLabel(card, text="Nova conta", font=F(18, "bold"),
-                     text_color=T.TEXT, anchor="w").grid(
-            row=0, column=0, sticky="w", padx=32, pady=(32, 24))
+        _, self._reg_pass = self._field(box, "SENHA", "mínimo 6 caracteres", secret=True)
+        self._reg_pass.master.pack(fill="x", pady=(0, 22))
 
-        fields = [
-            ("E-MAIL",          "seu@email.com",        False, "_reg_email"),
-            ("SENHA",           "mínimo 6 caracteres",  True,  "_reg_pass"),
-            ("CONFIRMAR SENHA", "repita a senha",        True,  "_reg_confirm"),
-        ]
-        for i, (lbl, ph, secret, attr) in enumerate(fields):
-            row_offset = i * 3
-            ctk.CTkLabel(card, text=lbl, font=F(11, "bold"),
-                         text_color=T.MUTED, anchor="w").grid(
-                row=1 + row_offset, column=0, sticky="w", padx=32,
-                pady=(0 if i == 0 else 14, 0))
-            entry = ctk.CTkEntry(
-                card, placeholder_text=ph, width=356,
-                show="•" if secret else "",
-                fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
-                placeholder_text_color=T.SUBTLE, corner_radius=10,
-            )
-            entry.grid(row=2 + row_offset, column=0, padx=32, pady=(6, 0))
-            setattr(self, attr, entry)
-
+        _, self._reg_confirm = self._field(box, "CONFIRMAR SENHA", "repita a senha", secret=True)
+        self._reg_confirm.master.pack(fill="x")
         self._reg_confirm.bind("<Return>", lambda _: self._criar_conta())
 
-        self._reg_error = ctk.CTkLabel(
-            card, text="", font=F(12), text_color=T.RED, anchor="w")
-        self._reg_error.grid(row=10, column=0, padx=32, pady=(10, 0), sticky="w")
+        self._reg_error = ctk.CTkLabel(box, text="", font=F(12), text_color=T.RED, anchor="w")
+        self._reg_error.pack(fill="x", pady=(10, 0))
 
-        ctk.CTkButton(
-            card, text="Criar Conta", command=self._criar_conta,
-            height=44, width=356, corner_radius=10,
-            fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
-            text_color="#ffffff", font=F(15, "bold"),
-        ).grid(row=11, column=0, padx=32, pady=(4, 0))
+        self._primary_btn(box, "Criar Conta", self._criar_conta).pack(fill="x", pady=(14, 0))
 
-        ctk.CTkButton(
-            card, text="← Voltar para login",
-            command=self._build_login,
-            height=42, width=356, corner_radius=10,
-            fg_color="transparent", hover_color=T.CARD2,
-            border_width=1, border_color=T.BORDER_L,
-            text_color=T.TEXT, font=F(14, "bold"),
-        ).grid(row=12, column=0, padx=32, pady=(8, 32))
+        self._divider(box)
+        self._footer_link(box, "Já tem conta?", "Entrar", self._build_login)
 
         self._current_page = "register"
         self._add_theme_btn()
@@ -271,56 +386,27 @@ class LoginFrame(ctk.CTkFrame):
     def _build_forgot_password(self) -> None:
         self._clear()
 
-        outer = ctk.CTkFrame(self, fg_color="transparent")
-        outer.place(relx=0.5, rely=0.5, anchor="center")
+        box = self._split_screen({
+            "title_lines": [("Sem problemas,", False), ("vamos recuperar.", True)],
+            "paragraph": "Digite seu e-mail cadastrado e enviaremos um link para você criar uma nova senha.",
+        })
 
-        self._add_logo(outer, "REDEFINIÇÃO DE SENHA")
-
-        card = ctk.CTkFrame(outer, width=420, corner_radius=20, fg_color=T.CARD,
-                            border_width=1, border_color=T.BORDER)
-        card.pack()
-        card.grid_columnconfigure(0, weight=1)
-
-        ctk.CTkLabel(card, text="Esqueceu sua senha?", font=F(18, "bold"),
-                     text_color=T.TEXT, anchor="w").grid(
-            row=0, column=0, sticky="w", padx=32, pady=(32, 6))
+        ctk.CTkLabel(box, text="Esqueceu sua senha?", font=F(21, "bold"), text_color=T.TEXT, anchor="w").pack(fill="x")
         ctk.CTkLabel(
-            card,
-            text="Digite seu e-mail e enviaremos um link\npara criar uma nova senha.",
+            box, text="Digite seu e-mail e enviaremos um link\npara criar uma nova senha.",
             font=F(13), text_color=T.MUTED, anchor="w", justify="left",
-        ).grid(row=1, column=0, sticky="w", padx=32, pady=(0, 20))
+        ).pack(fill="x", pady=(4, 28))
 
-        ctk.CTkLabel(card, text="E-MAIL", font=F(11, "bold"),
-                     text_color=T.MUTED, anchor="w").grid(
-            row=2, column=0, sticky="w", padx=32)
-        self._reset_email = ctk.CTkEntry(
-            card, placeholder_text="seu@email.com", width=356,
-            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
-            placeholder_text_color=T.SUBTLE, corner_radius=10,
-        )
-        self._reset_email.grid(row=3, column=0, padx=32, pady=(6, 0))
+        _, self._reset_email = self._field(box, "E-MAIL", "seu@email.com")
+        self._reset_email.master.pack(fill="x")
         self._reset_email.bind("<Return>", lambda _: self._send_reset_email())
 
-        self._reset_msg = ctk.CTkLabel(
-            card, text="", font=F(12), text_color=T.RED, anchor="w")
-        self._reset_msg.grid(row=4, column=0, padx=32, pady=(10, 0), sticky="w")
+        self._reset_msg = ctk.CTkLabel(box, text="", font=F(12), text_color=T.RED, anchor="w")
+        self._reset_msg.pack(fill="x", pady=(10, 0))
 
-        ctk.CTkButton(
-            card, text="Enviar link de redefinição",
-            command=self._send_reset_email,
-            height=44, width=356, corner_radius=10,
-            fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
-            text_color="#ffffff", font=F(15, "bold"),
-        ).grid(row=5, column=0, padx=32, pady=(4, 0))
+        self._primary_btn(box, "Enviar link de redefinição", self._send_reset_email).pack(fill="x", pady=(14, 0))
 
-        ctk.CTkButton(
-            card, text="← Voltar para login",
-            command=self._build_login,
-            height=42, width=356, corner_radius=10,
-            fg_color="transparent", hover_color=T.CARD2,
-            border_width=1, border_color=T.BORDER_L,
-            text_color=T.TEXT, font=F(14, "bold"),
-        ).grid(row=6, column=0, padx=32, pady=(8, 32))
+        self._back_link(box, self._build_login)
 
         self._current_page = "forgot"
         self._add_theme_btn()
