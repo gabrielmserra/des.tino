@@ -5,7 +5,7 @@ from typing import Callable
 import customtkinter as ctk
 import ui.theme as T
 from ui.theme import F
-from utils.helpers import APP_NAME, APP_VERSION
+from utils.helpers import APP_VERSION
 
 
 class LoginFrame(ctk.CTkFrame):
@@ -31,6 +31,18 @@ class LoginFrame(ctk.CTkFrame):
         )
         btn.place(relx=1.0, rely=1.0, anchor="se", x=-16, y=-16)
 
+    def _add_logo(self, parent, subtitle: str) -> None:
+        logo = ctk.CTkFrame(parent, fg_color="transparent")
+        logo.pack(pady=(0, 32))
+
+        name_row = ctk.CTkFrame(logo, fg_color="transparent")
+        name_row.pack()
+        ctk.CTkLabel(name_row, text="des", font=F(32, "bold"), text_color=T.TEXT).pack(side="left")
+        ctk.CTkLabel(name_row, text=".", font=F(32, "bold"), text_color=T.GREEN).pack(side="left")
+        ctk.CTkLabel(name_row, text="tino", font=F(32), text_color=T.TEXT).pack(side="left")
+
+        ctk.CTkLabel(logo, text=subtitle, font=F(11), text_color=T.MUTED).pack(pady=(6, 0))
+
     def _open_theme_picker(self) -> None:
         from ui.theme_picker import ThemePickerDialog
         def _on_select(_name):
@@ -51,21 +63,7 @@ class LoginFrame(ctk.CTkFrame):
         outer.place(relx=0.5, rely=0.5, anchor="center")
 
         # ── Logo ──────────────────────────────────────────────────────
-        logo = ctk.CTkFrame(outer, fg_color="transparent")
-        logo.pack(pady=(0, 32))
-
-        icon_box = ctk.CTkFrame(logo, width=52, height=52, corner_radius=14,
-                                fg_color=T.BLUE)
-        icon_box.pack(pady=(0, 10))
-        icon_box.pack_propagate(False)
-        ctk.CTkLabel(icon_box, text="💳", font=F(22)).place(relx=0.5, rely=0.5, anchor="center")
-
-        ctk.CTkLabel(logo, text=APP_NAME, font=F(24, "bold"), text_color=T.TEXT).pack()
-        ctk.CTkLabel(
-            logo,
-            text=f"CONTROLE FINANCEIRO  ·  v{APP_VERSION}",
-            font=F(11), text_color=T.MUTED,
-        ).pack(pady=(3, 0))
+        self._add_logo(outer, f"CONTROLE FINANCEIRO  ·  v{APP_VERSION}")
 
         # ── Card ──────────────────────────────────────────────────────
         card = ctk.CTkFrame(outer, width=420, corner_radius=20, fg_color=T.CARD,
@@ -170,17 +168,7 @@ class LoginFrame(ctk.CTkFrame):
         outer = ctk.CTkFrame(self, fg_color="transparent")
         outer.place(relx=0.5, rely=0.5, anchor="center")
 
-        logo = ctk.CTkFrame(outer, fg_color="transparent")
-        logo.pack(pady=(0, 32))
-
-        icon_box = ctk.CTkFrame(logo, width=52, height=52, corner_radius=14,
-                                fg_color=T.BLUE)
-        icon_box.pack(pady=(0, 10))
-        icon_box.pack_propagate(False)
-        ctk.CTkLabel(icon_box, text="💳", font=F(22)).place(relx=0.5, rely=0.5, anchor="center")
-
-        ctk.CTkLabel(logo, text=APP_NAME, font=F(24, "bold"), text_color=T.TEXT).pack()
-        ctk.CTkLabel(logo, text="CRIAR NOVA CONTA", font=F(11), text_color=T.MUTED).pack(pady=(3, 0))
+        self._add_logo(outer, "CRIAR NOVA CONTA")
 
         card = ctk.CTkFrame(outer, width=420, corner_radius=20, fg_color=T.CARD,
                             border_width=1, border_color=T.BORDER)
@@ -286,15 +274,7 @@ class LoginFrame(ctk.CTkFrame):
         outer = ctk.CTkFrame(self, fg_color="transparent")
         outer.place(relx=0.5, rely=0.5, anchor="center")
 
-        logo = ctk.CTkFrame(outer, fg_color="transparent")
-        logo.pack(pady=(0, 32))
-        icon_box = ctk.CTkFrame(logo, width=52, height=52, corner_radius=14,
-                                fg_color=T.BLUE)
-        icon_box.pack(pady=(0, 10))
-        icon_box.pack_propagate(False)
-        ctk.CTkLabel(icon_box, text="💳", font=F(22)).place(relx=0.5, rely=0.5, anchor="center")
-        ctk.CTkLabel(logo, text=APP_NAME, font=F(24, "bold"), text_color=T.TEXT).pack()
-        ctk.CTkLabel(logo, text="REDEFINIÇÃO DE SENHA", font=F(11), text_color=T.MUTED).pack(pady=(3, 0))
+        self._add_logo(outer, "REDEFINIÇÃO DE SENHA")
 
         card = ctk.CTkFrame(outer, width=420, corner_radius=20, fg_color=T.CARD,
                             border_width=1, border_color=T.BORDER)
