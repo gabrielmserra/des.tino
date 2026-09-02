@@ -23,7 +23,7 @@ const ITEMS: { to: string; end?: boolean; icon: LucideIcon; label: string }[] = 
   { to: '/planejamento', icon: ClipboardList, label: 'Planejamento' },
   { to: '/compromissos', icon: HandCoins, label: 'Compromissos' },
   { to: '/investimentos', icon: TrendingUp, label: 'Investimentos' },
-  { to: '/compromissos-futuros', icon: CalendarClock, label: 'Resumo dos Compromissos' },
+  { to: '/compromissos-futuros', icon: CalendarClock, label: 'Resumo dos\nCompromissos' },
   { to: '/importar', icon: Upload, label: 'Importar Extrato' },
   { to: '/configuracoes', icon: Settings, label: 'Configurações' },
 ]
@@ -38,17 +38,39 @@ export function getInitialSidebarCollapsed(): boolean {
   }
 }
 
-// Rótulo com fade + encolhimento suave (em vez de sumir na hora) ao recolher —
-// max-width (não nowrap) permite quebrar em 2 linhas quando expandido.
+// Rótulo com fade + encolhimento suave (em vez de sumir na hora) ao recolher.
+// whitespace-nowrap é FIXO (nunca alterna com o estado collapsed): a
+// quebra em 2 linhas de "Resumo dos Compromissos" é manual (ver LabelText),
+// não por wrap automático. Alternar whitespace normal/nowrap durante a
+// transição de largura causava um "pulo": white-space muda instantaneamente
+// no início da animação (é uma propriedade discreta, não interpolável),
+// então por uma fração de segundo o texto ficava com whitespace:normal e
+// max-width ainda quase 0 — quebrando em 3 linhas até a largura crescer o
+// suficiente pra caber em 2, empurrando os itens de baixo temporariamente.
 function FadeLabel({ collapsed, children }: { collapsed: boolean; children: React.ReactNode }) {
   return (
     <span
-      className={`overflow-hidden text-sm font-semibold leading-tight transition-all duration-200 ease-in-out ${
-        collapsed ? 'max-w-0 whitespace-nowrap opacity-0' : 'max-w-[170px] whitespace-normal opacity-100'
+      className={`overflow-hidden whitespace-nowrap text-sm font-semibold leading-tight transition-all duration-200 ease-in-out ${
+        collapsed ? 'max-w-0 opacity-0' : 'max-w-[170px] opacity-100'
       }`}
     >
       {children}
     </span>
+  )
+}
+
+// Quebra manual de linha via "\n" no label (ver "Resumo dos\nCompromissos"
+// em ITEMS) — cada linha vira um bloco próprio, independente de wrap
+// automático por largura (ver comentário em FadeLabel).
+function LabelText({ text }: { text: string }) {
+  return (
+    <>
+      {text.split('\n').map((line, i) => (
+        <span key={i} className="block">
+          {line}
+        </span>
+      ))}
+    </>
   )
 }
 
@@ -94,7 +116,9 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
               <>
                 <Icon size={20} strokeWidth={2} color={isActive ? 'var(--primary)' : 'var(--muted)'} className="shrink-0" />
                 <FadeLabel collapsed={collapsed}>
-                  <span style={{ color: isActive ? 'var(--primary)' : 'var(--text)' }}>{label}</span>
+                  <span style={{ color: isActive ? 'var(--primary)' : 'var(--text)' }}>
+                    <LabelText text={label} />
+                  </span>
                 </FadeLabel>
               </>
             )}
