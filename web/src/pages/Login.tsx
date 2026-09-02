@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import { getRememberMe, setRememberMe as persistRememberMe } from '../lib/supabase'
 import './LoginDesktop.css'
 
 export function Login() {
   const { signIn } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [rememberMe, setRememberMe] = useState(true)
+  const [rememberMe, setRememberMe] = useState(getRememberMe)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -15,6 +16,7 @@ export function Login() {
     e.preventDefault()
     setError('')
     setLoading(true)
+    persistRememberMe(rememberMe)
     const { error } = await signIn(email.trim(), password)
     setLoading(false)
     if (error) {
