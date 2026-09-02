@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
-import './AuthDesktop.css'
+import './Auth.css'
 
 export function SignUp() {
   const { signUp } = useAuth()
@@ -40,20 +40,20 @@ export function SignUp() {
   if (confirmationSent) {
     return (
       <>
-        {/* Mobile (<860px) — layout atual, sem alterações */}
-        <div className="flex min-h-full items-center justify-center p-6 min-[860px]:hidden">
-          <div className="w-full max-w-sm text-center">
-            <h1 className="mb-4 text-3xl font-bold">
-              des<span style={{ color: 'var(--primary)' }}>.</span>tino
-            </h1>
-            <div className="rounded-2xl border p-6" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
-              <p className="mb-2 text-lg font-bold">Quase lá!</p>
-              <p className="text-sm" style={{ color: 'var(--muted)' }}>
-                Enviamos um link de confirmação para <strong>{email}</strong>. Abra seu e-mail
-                e confirme pra poder entrar.
-              </p>
-            </div>
-            <Link to="/login" className="mt-4 block text-center text-sm" style={{ color: 'var(--muted)' }}>
+        {/* Mobile (<860px) — mesmo sistema visual do handoff, sem tela própria definida pro handoff */}
+        <div className="auth-mobile min-[860px]:hidden">
+          <div className="am-top">
+            <img className="am-logo" src="/destino-logo.png" alt="des.tino" />
+          </div>
+          <div className="am-head">
+            <h1>Quase lá!</h1>
+            <p>
+              Enviamos um link de confirmação para <strong>{email}</strong>. Abra seu e-mail e
+              confirme pra poder entrar.
+            </p>
+          </div>
+          <div className="am-form">
+            <Link to="/login" className="am-back-link">
               ← Voltar para login
             </Link>
           </div>
@@ -95,85 +95,67 @@ export function SignUp() {
 
   return (
     <>
-    {/* Mobile (<860px) — layout atual, sem alterações */}
-    <div className="flex min-h-full items-center justify-center p-6 min-[860px]:hidden">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold">
-            des<span style={{ color: 'var(--primary)' }}>.</span>tino
-          </h1>
-          <p className="mt-1 text-sm" style={{ color: 'var(--muted)' }}>
-            Crie sua conta.
-          </p>
-        </div>
-
-        <form
-          onSubmit={onSubmit}
-          className="rounded-2xl border p-6"
-          style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
-        >
-          <label className="mb-1 block text-xs font-bold" style={{ color: 'var(--muted)' }}>
-            E-MAIL
-          </label>
+    {/* Mobile (<860px) — handoff de design */}
+    <div className="auth-mobile min-[860px]:hidden">
+      <div className="am-top">
+        <Link to="/login" className="am-back" aria-label="Voltar">
+          ←
+        </Link>
+        <img className="am-logo" src="/destino-logo.png" alt="des.tino" />
+      </div>
+      <div className="am-head">
+        <h1>Criar conta</h1>
+        <p>Comece a usar o des.tino gratuitamente</p>
+      </div>
+      <form onSubmit={onSubmit} className="am-form">
+        <div className="am-field">
+          <label>E-mail</label>
           <input
             type="email"
             autoComplete="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="mb-4 w-full rounded-lg border px-3 py-3 text-base outline-none"
-            style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
             placeholder="voce@email.com"
           />
+        </div>
 
-          <label className="mb-1 block text-xs font-bold" style={{ color: 'var(--muted)' }}>
-            SENHA
-          </label>
+        <div className="am-field">
+          <label>Senha</label>
           <input
             type="password"
             autoComplete="new-password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="mb-4 w-full rounded-lg border px-3 py-3 text-base outline-none"
-            style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
             placeholder="Mínimo 6 caracteres"
           />
+        </div>
 
-          <label className="mb-1 block text-xs font-bold" style={{ color: 'var(--muted)' }}>
-            CONFIRMAR SENHA
-          </label>
+        <div className="am-field">
+          <label>Confirmar senha</label>
           <input
             type="password"
             autoComplete="new-password"
             required
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
-            className="mb-4 w-full rounded-lg border px-3 py-3 text-base outline-none"
-            style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
-            placeholder="••••••••"
+            placeholder="••••••••••"
           />
+        </div>
 
-          {error && (
-            <p className="mb-3 text-sm" style={{ color: 'var(--red)' }}>
-              {error}
-            </p>
-          )}
+        {error && <p className="am-error">{error}</p>}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg py-3 font-bold text-white disabled:opacity-60"
-            style={{ background: 'var(--primary)' }}
-          >
-            {loading ? 'Criando conta…' : 'Criar conta'}
-          </button>
-        </form>
+        <button type="submit" disabled={loading} className="am-btn">
+          {loading ? 'Criando conta…' : 'Criar conta'}
+        </button>
 
-        <Link to="/login" className="mt-4 block text-center text-sm" style={{ color: 'var(--muted)' }}>
-          Já tem conta? Entrar
-        </Link>
-      </div>
+        <div className="am-divider">OU</div>
+
+        <div className="am-footer-line">
+          Já tem conta? <Link to="/login">Entrar</Link>
+        </div>
+      </form>
     </div>
 
     {/* Desktop (>=860px) — handoff de design: mesmo sistema visual do Login, sem ilustração de rota */}

@@ -1,0 +1,476 @@
+/* Telas de login, cadastro e esqueci-senha — handoff de design (desktop
+   >=860px com .login-desktop/.ld-*, mobile <860px com .auth-mobile/.am-*).
+   Compartilhado entre Login.tsx, SignUp.tsx e ForgotPassword.tsx (mesmo
+   sistema visual, mesmos tokens). Tokens próprios (não usam as variáveis
+   globais do app porque o design define uma paleta ligeiramente diferente
+   do tema padrão atual). */
+.login-desktop {
+  --ld-bg: #0d1f1a;
+  --ld-panel: #0a1913;
+  --ld-border: #1d3a2a;
+  --ld-border-light: #2a4e38;
+  --ld-text: #edf5f0;
+  --ld-text-muted: #7fa791;
+  --ld-text-subtle: #4c6e5a;
+  --ld-primary: #2eaf7d;
+  --ld-accent: #f5a623;
+  min-height: 100%;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  color: var(--ld-text);
+}
+
+.login-desktop .ld-brand {
+  flex: 1.15;
+  position: relative;
+  overflow: hidden;
+  background: var(--ld-panel);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 56px 64px;
+}
+.login-desktop .ld-brand::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(600px 500px at 20% 15%, #1b4c33 0%, transparent 60%),
+    radial-gradient(500px 400px at 90% 90%, #1d3e2a 0%, transparent 55%);
+  opacity: 0.7;
+  pointer-events: none;
+}
+.login-desktop .ld-brand-top,
+.login-desktop .ld-brand-mid,
+.login-desktop .ld-route {
+  position: relative;
+  z-index: 1;
+}
+.login-desktop .ld-brand-mid {
+  max-width: 420px;
+}
+.login-desktop .ld-brand-mid h1 {
+  font-size: 44px;
+  line-height: 1.15;
+  font-weight: 300;
+  letter-spacing: -0.01em;
+  color: var(--ld-text);
+  margin: 0 0 20px;
+}
+.login-desktop .ld-brand-mid h1 b {
+  font-weight: 700;
+  color: var(--ld-primary);
+}
+.login-desktop .ld-brand-mid p {
+  font-size: 15px;
+  color: var(--ld-text-muted);
+  line-height: 1.6;
+  max-width: 360px;
+  margin: 0;
+}
+.login-desktop .ld-route {
+  margin-top: 44px;
+}
+.login-desktop .ld-route svg {
+  display: block;
+}
+
+.login-desktop .ld-form-side {
+  flex: 1;
+  background: var(--ld-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+.login-desktop .ld-form-box {
+  width: 100%;
+  max-width: 340px;
+}
+.login-desktop .ld-form-box h2 {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 6px;
+  letter-spacing: -0.01em;
+}
+.login-desktop .ld-form-box .ld-sub {
+  font-size: 13.5px;
+  color: var(--ld-text-muted);
+  margin-bottom: 36px;
+}
+
+.login-desktop .ld-field {
+  margin-bottom: 24px;
+  position: relative;
+}
+.login-desktop .ld-field label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ld-text-subtle);
+  letter-spacing: 0.8px;
+  display: block;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+.login-desktop .ld-field input {
+  width: 100%;
+  padding: 0 0 12px 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--ld-border-light);
+  color: var(--ld-text);
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.login-desktop .ld-field input::placeholder {
+  color: var(--ld-text-subtle);
+}
+.login-desktop .ld-field input:focus {
+  border-bottom-color: var(--ld-primary);
+}
+.login-desktop .ld-field .ld-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  width: 0;
+  background: var(--ld-primary);
+  transition: width 0.25s ease;
+}
+.login-desktop .ld-field input:focus ~ .ld-bar {
+  width: 100%;
+}
+
+.login-desktop .ld-row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  margin-top: -6px;
+}
+.login-desktop .ld-remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--ld-text-muted);
+  cursor: pointer;
+}
+.login-desktop .ld-remember input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--ld-primary);
+}
+.login-desktop .ld-forgot {
+  font-size: 12.5px;
+  color: var(--ld-text-muted);
+  text-decoration: none;
+}
+.login-desktop .ld-forgot:hover {
+  color: var(--ld-primary);
+}
+
+.login-desktop .ld-btn {
+  width: 100%;
+  padding: 15px;
+  background: var(--ld-primary);
+  border: none;
+  border-radius: 6px;
+  color: #08160f;
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.2px;
+  transition: background 0.2s, transform 0.05s;
+}
+.login-desktop .ld-btn:hover {
+  background: #3ec792;
+}
+.login-desktop .ld-btn:active {
+  transform: scale(0.99);
+}
+.login-desktop .ld-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.login-desktop .ld-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 28px 0;
+  color: var(--ld-text-subtle);
+  font-size: 11px;
+}
+.login-desktop .ld-divider::before,
+.login-desktop .ld-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--ld-border);
+}
+
+.login-desktop .ld-footer-line {
+  text-align: center;
+  font-size: 13px;
+  color: var(--ld-text-muted);
+}
+.login-desktop .ld-footer-line a {
+  color: var(--ld-primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+.login-desktop .ld-footer-line a:hover {
+  text-decoration: underline;
+}
+
+.login-desktop .ld-error {
+  font-size: 13px;
+  color: #e05252;
+  margin: -8px 0 16px;
+}
+
+.login-desktop .ld-success {
+  font-size: 13px;
+  color: var(--ld-primary);
+  margin: -8px 0 16px;
+}
+
+.login-desktop .ld-back-link {
+  display: block;
+  text-align: center;
+  margin-top: 28px;
+  font-size: 13px;
+  color: var(--ld-text-muted);
+  text-decoration: none;
+}
+.login-desktop .ld-back-link:hover {
+  color: var(--ld-primary);
+}
+
+/* ===================================================================
+   Mobile (<860px), handoff de design — telas cheias, coluna única.
+   =================================================================== */
+.auth-mobile {
+  --am-bg: #0d1f1a;
+  --am-panel: #0a1913;
+  --am-border: #1d3a2a;
+  --am-border-light: #2a4e38;
+  --am-text: #edf5f0;
+  --am-text-muted: #7fa791;
+  --am-text-subtle: #4c6e5a;
+  --am-primary: #2eaf7d;
+  --am-accent: #f5a623;
+  position: relative;
+  overflow: hidden;
+  min-height: 100dvh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--am-bg);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  color: var(--am-text);
+}
+/* Escondido a partir de 860px (vira a versão desktop) — em regra própria
+   (não só a classe utilitária min-[860px]:hidden do Tailwind) porque a
+   ordem de carregamento entre este arquivo e o Tailwind não é garantida;
+   com display:flex fixo acima, as duas regras têm a mesma especificidade
+   e dependeriam dessa ordem pra decidir quem vence. */
+@media (min-width: 860px) {
+  .auth-mobile {
+    display: none;
+  }
+}
+.auth-mobile::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(400px 300px at 30% 0%, #1b4c33 0%, transparent 60%);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.auth-mobile .am-top {
+  position: relative;
+  z-index: 1;
+  padding: calc(env(safe-area-inset-top) + 56px) 24px 0;
+}
+.auth-mobile .am-logo {
+  height: 22px;
+  display: block;
+  margin-bottom: 32px;
+}
+.auth-mobile .am-back {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--am-panel);
+  border: 1px solid var(--am-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--am-text-muted);
+  font-size: 16px;
+  margin-bottom: 24px;
+  text-decoration: none;
+}
+
+.auth-mobile .am-head {
+  position: relative;
+  z-index: 1;
+  padding: 0 24px;
+  margin-bottom: 20px;
+}
+.auth-mobile .am-head h1 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-bottom: 6px;
+  color: var(--am-text);
+}
+.auth-mobile .am-head p {
+  font-size: 13.5px;
+  color: var(--am-text-muted);
+  line-height: 1.5;
+}
+
+.auth-mobile .am-route {
+  position: relative;
+  z-index: 1;
+  padding: 0 24px;
+  margin: 14px 0;
+}
+.auth-mobile .am-route svg {
+  display: block;
+}
+
+.auth-mobile .am-form {
+  position: relative;
+  z-index: 1;
+  padding: 0 24px;
+  flex: 1;
+}
+
+.auth-mobile .am-field {
+  margin-bottom: 22px;
+  position: relative;
+}
+.auth-mobile .am-field label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--am-text-subtle);
+  letter-spacing: 0.8px;
+  display: block;
+  margin-bottom: 9px;
+  text-transform: uppercase;
+}
+.auth-mobile .am-field input {
+  width: 100%;
+  padding: 0 0 11px 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--am-border-light);
+  color: var(--am-text);
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.auth-mobile .am-field input::placeholder {
+  color: var(--am-text-subtle);
+}
+.auth-mobile .am-field input:focus {
+  border-bottom-color: var(--am-primary);
+}
+
+.auth-mobile .am-row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+  margin-top: -4px;
+  font-size: 12px;
+}
+.auth-mobile .am-remember {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--am-text-muted);
+}
+.auth-mobile .am-remember input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--am-primary);
+}
+.auth-mobile .am-forgot {
+  color: var(--am-text-muted);
+  text-decoration: none;
+}
+
+.auth-mobile .am-btn {
+  width: 100%;
+  padding: 15px;
+  background: var(--am-primary);
+  border: none;
+  border-radius: 6px;
+  color: #08160f;
+  font-size: 14.5px;
+  font-weight: 700;
+  font-family: inherit;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+}
+.auth-mobile .am-btn:disabled {
+  opacity: 0.6;
+}
+
+.auth-mobile .am-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 24px 0;
+  color: var(--am-text-subtle);
+  font-size: 11px;
+}
+.auth-mobile .am-divider::before,
+.auth-mobile .am-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--am-border);
+}
+
+.auth-mobile .am-footer-line {
+  text-align: center;
+  font-size: 13px;
+  color: var(--am-text-muted);
+  padding-bottom: 24px;
+}
+.auth-mobile .am-footer-line a {
+  color: var(--am-primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.auth-mobile .am-back-link {
+  display: block;
+  text-align: center;
+  margin-top: 24px;
+  font-size: 13px;
+  color: var(--am-text-muted);
+  text-decoration: none;
+}
+
+.auth-mobile .am-error {
+  font-size: 13px;
+  color: #e05252;
+  margin: -10px 0 16px;
+}
+
+.auth-mobile .am-success {
+  font-size: 13px;
+  color: var(--am-primary);
+  margin: -10px 0 16px;
+}

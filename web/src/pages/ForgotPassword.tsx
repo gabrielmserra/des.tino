@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import './AuthDesktop.css'
+import './Auth.css'
 
 export function ForgotPassword() {
   const [email, setEmail] = useState('')
@@ -26,55 +26,37 @@ export function ForgotPassword() {
 
   return (
     <>
-    {/* Mobile (<860px) — layout atual, sem alterações */}
-    <div className="flex min-h-full items-center justify-center p-6 min-[860px]:hidden">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold">
-            des<span style={{ color: 'var(--primary)' }}>.</span>tino
-          </h1>
-        </div>
-
-        <div className="rounded-2xl border p-6" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
-          <h2 className="mb-1 text-lg font-bold">Esqueceu sua senha?</h2>
-          <p className="mb-4 text-sm" style={{ color: 'var(--muted)' }}>
-            Digite seu e-mail e enviaremos um link para criar uma nova senha.
-          </p>
-
-          <label className="mb-1 block text-xs font-bold" style={{ color: 'var(--muted)' }}>
-            E-MAIL
-          </label>
+    {/* Mobile (<860px) — handoff de design */}
+    <div className="auth-mobile min-[860px]:hidden">
+      <div className="am-top">
+        <Link to="/login" className="am-back" aria-label="Voltar">
+          ←
+        </Link>
+        <img className="am-logo" src="/destino-logo.png" alt="des.tino" />
+      </div>
+      <div className="am-head">
+        <h1>Esqueceu sua senha?</h1>
+        <p>Digite seu e-mail e enviaremos um link para criar uma nova senha.</p>
+      </div>
+      <div className="am-form">
+        <div className="am-field">
+          <label>E-mail</label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="voce@email.com"
-            className="mb-4 w-full rounded-lg border px-3 py-3 text-base outline-none"
-            style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
           />
-
-          {status === 'sent' && (
-            <p className="mb-3 text-sm" style={{ color: 'var(--primary)' }}>
-              Link enviado! Verifique seu e-mail.
-            </p>
-          )}
-          {error && (
-            <p className="mb-3 text-sm" style={{ color: 'var(--red)' }}>
-              {error}
-            </p>
-          )}
-
-          <button
-            onClick={submit}
-            disabled={status === 'sending'}
-            className="w-full rounded-lg py-3 font-bold text-white disabled:opacity-60"
-            style={{ background: 'var(--primary)' }}
-          >
-            {status === 'sending' ? 'Enviando…' : 'Enviar link de redefinição'}
-          </button>
         </div>
 
-        <Link to="/login" className="mt-4 block text-center text-sm" style={{ color: 'var(--muted)' }}>
+        {status === 'sent' && <p className="am-success">Link enviado! Verifique seu e-mail.</p>}
+        {error && <p className="am-error">{error}</p>}
+
+        <button onClick={submit} disabled={status === 'sending'} className="am-btn">
+          {status === 'sending' ? 'Enviando…' : 'Enviar link de redefinição'}
+        </button>
+
+        <Link to="/login" className="am-back-link">
           ← Voltar para login
         </Link>
       </div>
