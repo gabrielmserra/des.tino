@@ -1,5 +1,4 @@
 import { NavLink } from 'react-router-dom'
-import { useState } from 'react'
 import {
   LayoutDashboard,
   ClipboardList,
@@ -24,50 +23,55 @@ const ITEMS: { to: string; end?: boolean; icon: LucideIcon; label: string }[] = 
   { to: '/planejamento', icon: ClipboardList, label: 'Planejamento' },
   { to: '/compromissos', icon: HandCoins, label: 'Compromissos' },
   { to: '/investimentos', icon: TrendingUp, label: 'Investimentos' },
-  { to: '/compromissos-futuros', icon: CalendarClock, label: 'Compromissos Futuros' },
+  { to: '/compromissos-futuros', icon: CalendarClock, label: 'Resumo dos Compromissos' },
   { to: '/importar', icon: Upload, label: 'Importar Extrato' },
   { to: '/configuracoes', icon: Settings, label: 'Configurações' },
 ]
 
-const STORAGE_KEY = 'sidebar_collapsed'
+export const SIDEBAR_STORAGE_KEY = 'sidebar_collapsed'
 
-function getInitialCollapsed(): boolean {
+export function getInitialSidebarCollapsed(): boolean {
   try {
-    return localStorage.getItem(STORAGE_KEY) === '1'
+    return localStorage.getItem(SIDEBAR_STORAGE_KEY) === '1'
   } catch {
     return false
   }
 }
 
-export function Sidebar() {
-  const { signOut } = useAuth()
-  const [collapsed, setCollapsed] = useState(getInitialCollapsed)
+// Rótulo com fade + encolhimento suave (em vez de sumir na hora) ao recolher —
+// max-width (não nowrap) permite quebrar em 2 linhas quando expandido.
+function FadeLabel({ collapsed, children }: { collapsed: boolean; children: React.ReactNode }) {
+  return (
+    <span
+      className={`overflow-hidden whitespace-normal text-sm font-semibold leading-tight transition-all duration-200 ease-in-out ${
+        collapsed ? 'max-w-0 opacity-0' : 'max-w-[170px] opacity-100'
+      }`}
+    >
+      {children}
+    </span>
+  )
+}
 
-  const toggle = () => {
-    setCollapsed((prev) => {
-      const next = !prev
-      try {
-        localStorage.setItem(STORAGE_KEY, next ? '1' : '0')
-      } catch {
-        // ignora — só uma conveniência local
-      }
-      return next
-    })
-  }
+export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+  const { signOut } = useAuth()
 
   return (
     <aside
-      className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r lg:flex ${collapsed ? 'w-[72px]' : 'w-56'}`}
+      className={`sticky top-0 hidden h-screen shrink-0 flex-col overflow-hidden border-r transition-[width] duration-200 ease-in-out lg:flex ${
+        collapsed ? 'w-[72px]' : 'w-56'
+      }`}
       style={{ background: 'var(--bg)', borderColor: 'var(--border)' }}
     >
       <div className={`flex items-center gap-2 px-4 pt-5 pb-4 ${collapsed ? 'justify-center px-0' : 'justify-between'}`}>
-        {!collapsed && (
-          <span className="text-lg font-bold">
-            des<span style={{ color: 'var(--primary)' }}>.</span>tino
-          </span>
-        )}
+        <span
+          className={`overflow-hidden whitespace-nowrap text-lg font-bold transition-all duration-200 ease-in-out ${
+            collapsed ? 'max-w-0 opacity-0' : 'max-w-[140px] opacity-100'
+          }`}
+        >
+          des<span style={{ color: 'var(--primary)' }}>.</span>tino
+        </span>
         <button
-          onClick={toggle}
+          onClick={onToggle}
           aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border"
           style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
@@ -76,27 +80,22 @@ export function Sidebar() {
         </button>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3">
+      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-3">
         {ITEMS.map(({ to, end, icon: Icon, label }) => (
           <NavLink
             key={to}
             to={to}
             end={end}
             title={collapsed ? label : undefined}
-            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${collapsed ? 'justify-center' : ''}`}
+            className={`flex items-center rounded-xl px-3 py-2.5 ${collapsed ? 'justify-center gap-0' : 'gap-3'}`}
             style={({ isActive }) => (isActive ? { background: 'var(--card2)' } : undefined)}
           >
             {({ isActive }) => (
               <>
                 <Icon size={20} strokeWidth={2} color={isActive ? 'var(--primary)' : 'var(--muted)'} className="shrink-0" />
-                {!collapsed && (
-                  <span
-                    className="truncate text-sm font-semibold"
-                    style={{ color: isActive ? 'var(--primary)' : 'var(--text)' }}
-                  >
-                    {label}
-                  </span>
-                )}
+                <FadeLabel collapsed={collapsed}>
+                  <span style={{ color: isActive ? 'var(--primary)' : 'var(--text)' }}>{label}</span>
+                </FadeLabel>
               </>
             )}
           </NavLink>
@@ -106,12 +105,12 @@ export function Sidebar() {
       <div className="px-3 pb-5 pt-2">
         <button
           onClick={() => signOut()}
-          className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 ${collapsed ? 'justify-center' : ''}`}
+          className={`flex w-full items-center rounded-xl px-3 py-2.5 ${collapsed ? 'justify-center gap-0' : 'gap-3'}`}
           style={{ color: 'var(--muted)' }}
           title={collapsed ? 'Sair' : undefined}
         >
           <LogOut size={20} strokeWidth={2} className="shrink-0" />
-          {!collapsed && <span className="text-sm font-semibold">Sair</span>}
+          <FadeLabel collapsed={collapsed}>Sair</FadeLabel>
         </button>
       </div>
     </aside>

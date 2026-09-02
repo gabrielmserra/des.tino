@@ -49,7 +49,7 @@ export function FutureCommitments() {
 
   return (
     <div className="p-4 pb-8">
-      <h1 className="text-2xl font-bold">Compromissos Futuros</h1>
+      <h1 className="text-2xl font-bold">Resumo dos Compromissos</h1>
       <p className="mb-4 text-sm" style={{ color: 'var(--muted)' }}>
         Tudo que já está comprometido pra frente: parcelas de cartão, dívidas em aberto e contas fixas pendentes.
       </p>

@@ -19,7 +19,7 @@ import { useAuth } from '../lib/auth'
 import { useTxForm } from '../lib/txform'
 import { useTheme } from '../lib/theme'
 import { TxForm } from './TxForm'
-import { Sidebar } from './Sidebar'
+import { Sidebar, SIDEBAR_STORAGE_KEY, getInitialSidebarCollapsed } from './Sidebar'
 import { AddMonthDialog } from './AddMonthDialog'
 import { EditMonthDialog } from './EditMonthDialog'
 import { ThemeDialog } from './ThemeDialog'
@@ -155,21 +155,36 @@ export function Layout() {
   const [showTheme, setShowTheme] = useState(false)
   const [showAddMonth, setShowAddMonth] = useState(false)
   const [showEditMonth, setShowEditMonth] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarCollapsed)
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem(SIDEBAR_STORAGE_KEY, next ? '1' : '0')
+      } catch {
+        // ignora — só uma conveniência local
+      }
+      return next
+    })
+  }
 
   return (
     <div className="flex min-h-full flex-col lg:flex-row">
-      <Sidebar />
+      <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
       <div className="flex min-h-full min-w-0 flex-1 flex-col">
       {/* Header */}
       <header
-        className="sticky top-0 z-10 flex flex-wrap items-center justify-center gap-x-2 gap-y-2 border-b px-3 py-3 sm:justify-between sm:px-4 lg:justify-end"
+        className={`sticky top-0 z-10 flex flex-wrap items-center justify-center gap-x-2 gap-y-2 border-b px-3 py-3 sm:justify-between sm:px-4 ${
+          sidebarCollapsed ? 'lg:justify-between' : 'lg:justify-end'
+        }`}
         style={{
           background: 'var(--bg)',
           borderColor: 'var(--border)',
           paddingTop: 'calc(env(safe-area-inset-top) + 12px)',
         }}
       >
-        <span className="shrink-0 text-xl font-bold sm:text-2xl lg:hidden">
+        <span className={`shrink-0 text-xl font-bold sm:text-2xl ${sidebarCollapsed ? 'lg:inline' : 'lg:hidden'}`}>
           des<span style={{ color: 'var(--primary)' }}>.</span>tino
         </span>
         <div className="flex min-w-0 flex-wrap items-center justify-center gap-1.5">
