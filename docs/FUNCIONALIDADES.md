@@ -14,6 +14,10 @@ exe · **[Web]** só no site/PWA.
 ## 1. Conta e acesso
 
 - **[Ambas]** Login por e-mail/senha (Supabase Auth).
+- **[Web]** "Lembrar de mim" no login controla onde a sessão fica salva:
+  marcado, guarda no `localStorage` e mantém o login entre fechamentos do
+  navegador; desmarcado, guarda só no `sessionStorage` e expira ao fechar a
+  aba/navegador.
 - **[Ambas]** Criar conta nova por e-mail/senha (`/cadastro` no web) — se o
   projeto tiver confirmação de e-mail ativada, mostra aviso pra confirmar
   antes de entrar; senão, entra direto.
@@ -106,9 +110,10 @@ Para cada lançamento:
   controle).
 - **[Desktop]** Tela acessada pela barra lateral ("📋 Compromissos"), com
   as 3 abas dentro.
-- **[Web]** Aba "Compromissos" na barra inferior (`/compromissos`), com
-  seletor de sub-aba (`?tab=dividas|metas|contas-fixas`). As rotas
-  antigas (`/dividas`, `/metas`, `/contas-fixas`) redirecionam pra cá.
+- **[Web]** Aba "Compromissos" (`/compromissos`) — na barra inferior no
+  celular, ou direto na barra lateral no desktop —, com seletor de sub-aba
+  (`?tab=dividas|metas|contas-fixas`). As rotas antigas (`/dividas`,
+  `/metas`, `/contas-fixas`) redirecionam pra cá.
 
 ### 6.1 Dívidas
 
@@ -200,9 +205,11 @@ Três tipos de meta, lado a lado:
   partir de 04/09 é "a de Setembro". Isso é independente do dia de corte
   global da importação de extrato (Configurações), que só decide em qual
   mês um lançamento importado cai — os dois não têm relação entre si.
-- **[Desktop]** Tela acessada pela barra lateral ("💳 Compromissos
+- **[Desktop]** Tela acessada pela barra lateral do app ("💳 Compromissos
   Futuros").
-- **[Web]** Tela acessada pela página "Mais" (`/compromissos-futuros`).
+- **[Web]** Tela acessada direto pela barra lateral no desktop, ou pela
+  página "Mais" no celular (`/compromissos-futuros`) — rotulada "Resumo
+  dos Compromissos" no site (mesma tela do desktop, nome mais claro).
 
 ## 9. Aviso proativo de risco de cartão
 
@@ -251,6 +258,12 @@ Três tipos de meta, lado a lado:
 - **[Web]** Gráficos de linha mostram o valor de cada ponto direto no
   gráfico (não precisa passar o mouse em cima), com tooltip formatado em
   R$ ao passar o mouse.
+- **[Ambas]** No widget "Gastos por categoria ao longo do tempo", as
+  categorias menos usadas no mês são agrupadas num grupo à parte pra não
+  poluir o gráfico com muitas linhas — separado da categoria "Outros" de
+  verdade, que continua aparecendo do seu próprio jeito quando usada.
+  **[Web]** esse grupo é rotulado "Demais categorias" (evita confundir
+  com a categoria "Outros" real).
 
 ## 11. Importação de extrato bancário
 
@@ -330,3 +343,19 @@ Três tipos de meta, lado a lado:
   (versionado, ex. `v3.9.2`).
 - **[Web]** Hospedado na Vercel, deploy automático a cada push na branch
   principal; PWA instalável.
+
+## 16. Navegação do site
+
+- **[Web]** A partir de 1024px de largura de tela (telas de computador),
+  a navegação vira uma **barra lateral fixa** à esquerda, com os 9
+  destinos direto na barra (Dashboard, Lançamentos, Cartões,
+  Planejamento, Compromissos, Investimentos, Resumo dos Compromissos,
+  Importar Extrato, Configurações) — não precisa mais passar pela página
+  "Mais".
+- **[Web]** Barra lateral **retrátil/expansível**: um botão no topo
+  recolhe pra só ícones (útil pra ganhar espaço de conteúdo) ou expande
+  de volta mostrando os rótulos; o estado escolhido fica salvo no
+  navegador entre sessões.
+- **[Web]** Abaixo de 1024px (celular e tablets estreitos), a navegação
+  continua sendo a barra inferior fixa com "Mais" reunindo os destinos
+  extras — sem nenhuma mudança nessas larguras.
