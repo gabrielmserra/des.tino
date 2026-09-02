@@ -619,10 +619,14 @@ class Dashboard(ctk.CTkScrollableFrame):
                                 for c in cats:
                                     total_by_cat[c["category"]] = (
                                         total_by_cat.get(c["category"], 0.0) + float(c["total"] or 0))
+                            # Rótulo do grupo "demais categorias" — separado do nome
+                            # "Outros" (categoria de verdade), senão os dois aparecem
+                            # juntos no gráfico parecendo duplicados.
+                            OUTRAS_BUCKET = "Demais categorias"
                             top_cats = [c for c, _ in sorted(total_by_cat.items(), key=lambda kv: -kv[1])[:4]]
                             has_outras = any(c["category"] not in top_cats
                                              for cats in cats_per_month for c in cats)
-                            keys = top_cats + (["Outras"] if has_outras else [])
+                            keys = top_cats + ([OUTRAS_BUCKET] if has_outras else [])
                             series_data = {k: [] for k in keys}
                             for cats in cats_per_month:
                                 by_cat = {c["category"]: float(c["total"] or 0) for c in cats}
@@ -630,7 +634,7 @@ class Dashboard(ctk.CTkScrollableFrame):
                                 for k in top_cats:
                                     series_data[k].append(by_cat.get(k, 0.0))
                                 if has_outras:
-                                    series_data["Outras"].append(outras)
+                                    series_data[OUTRAS_BUCKET].append(outras)
                             if keys and any(any(v > 0 for v in vals) for vals in series_data.values()):
                                 cat_evo_fig = self._build_stacked_bar_figure(labels, series_data)
                         except Exception:

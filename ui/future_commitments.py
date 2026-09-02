@@ -27,7 +27,7 @@ class FutureCommitmentsTab(ctk.CTkFrame):
         header.grid(row=0, column=0, sticky="ew", padx=28, pady=(20, 0))
         header.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(header, text="Compromissos Futuros", font=F(26, "bold"),
+        ctk.CTkLabel(header, text="Resumo dos Compromissos", font=F(26, "bold"),
                      text_color=T.TEXT, anchor="w").grid(row=0, column=0, sticky="w")
         ctk.CTkLabel(
             header,

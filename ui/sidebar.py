@@ -103,7 +103,7 @@ class Sidebar(ctk.CTkFrame):
         self._import_btn.grid(row=2, column=0, sticky="ew", pady=(2, 0))
 
         self._future_commitments_btn = ctk.CTkButton(
-            nav, text="  💳  Compromissos Futuros",
+            nav, text="  💳  Resumo dos Compromissos",
             command=self.on_future_commitments,
             height=36, corner_radius=8, anchor="w",
             fg_color="transparent", hover_color=T.CARD2,
