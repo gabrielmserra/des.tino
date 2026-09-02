@@ -190,7 +190,7 @@ Três tipos de meta, lado a lado:
   "LCA", "Fundo de Investimento") — sugerido como investimento, fora do
   fluxo normal de despesa/receita, mas confirmado pelo usuário na revisão.
 
-## 8. Compromissos Futuros
+## 8. Resumo dos Compromissos (Compromissos Futuros)
 
 - **[Ambas]** Tela dedicada que soma, mês a mês (próximos 6 meses a partir
   do mês corrente), **tudo** que já está comprometido pra frente: parcelas
@@ -205,11 +205,12 @@ Três tipos de meta, lado a lado:
   partir de 04/09 é "a de Setembro". Isso é independente do dia de corte
   global da importação de extrato (Configurações), que só decide em qual
   mês um lançamento importado cai — os dois não têm relação entre si.
-- **[Desktop]** Tela acessada pela barra lateral do app ("💳 Compromissos
-  Futuros").
+- **[Ambas]** Rotulada "Resumo dos Compromissos" em toda a interface
+  (barra lateral e título da tela) — mesmo nome nas duas versões.
+- **[Desktop]** Tela acessada pela barra lateral do app ("💳 Resumo dos
+  Compromissos").
 - **[Web]** Tela acessada direto pela barra lateral no desktop, ou pela
-  página "Mais" no celular (`/compromissos-futuros`) — rotulada "Resumo
-  dos Compromissos" no site (mesma tela do desktop, nome mais claro).
+  página "Mais" no celular (`/compromissos-futuros`).
 
 ## 9. Aviso proativo de risco de cartão
 
@@ -259,11 +260,10 @@ Três tipos de meta, lado a lado:
   gráfico (não precisa passar o mouse em cima), com tooltip formatado em
   R$ ao passar o mouse.
 - **[Ambas]** No widget "Gastos por categoria ao longo do tempo", as
-  categorias menos usadas no mês são agrupadas num grupo à parte pra não
-  poluir o gráfico com muitas linhas — separado da categoria "Outros" de
-  verdade, que continua aparecendo do seu próprio jeito quando usada.
-  **[Web]** esse grupo é rotulado "Demais categorias" (evita confundir
-  com a categoria "Outros" real).
+  categorias menos usadas no mês são agrupadas num grupo à parte,
+  rotulado "Demais categorias" pra não confundir com a categoria
+  "Outros" de verdade (que continua aparecendo do seu próprio jeito
+  quando usada) — evita poluir o gráfico com muitas linhas/barras.
 
 ## 11. Importação de extrato bancário
 
