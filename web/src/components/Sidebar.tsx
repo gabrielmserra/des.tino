@@ -43,8 +43,8 @@ export function getInitialSidebarCollapsed(): boolean {
 function FadeLabel({ collapsed, children }: { collapsed: boolean; children: React.ReactNode }) {
   return (
     <span
-      className={`overflow-hidden whitespace-normal text-sm font-semibold leading-tight transition-all duration-200 ease-in-out ${
-        collapsed ? 'max-w-0 opacity-0' : 'max-w-[170px] opacity-100'
+      className={`overflow-hidden text-sm font-semibold leading-tight transition-all duration-200 ease-in-out ${
+        collapsed ? 'max-w-0 whitespace-nowrap opacity-0' : 'max-w-[170px] whitespace-normal opacity-100'
       }`}
     >
       {children}
