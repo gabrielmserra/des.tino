@@ -369,12 +369,18 @@ class ImportTab(ctk.CTkFrame):
             self.on_change()
 
 
+_DUPLICATE_DESC_RATIO_MIN = 0.6
+
+
 def _find_duplicate(row: NormalizedRow, existing: List[dict]) -> str:
     """Retorna uma descrição curta da transação existente que parece ser a
-    mesma (mesmo valor, mesmo dia exato), ou "" se não achar. Não usa
-    tolerância de dias — gastos recorrentes no mesmo lugar e valor (ex: café
-    todo dia no trabalho) não podem virar falso positivo só por caírem em
-    dias diferentes."""
+    mesma (mesmo valor, mesmo dia exato, e descrição parecida), ou "" se não
+    achar. Não usa tolerância de dias — gastos recorrentes no mesmo lugar e
+    valor (ex: café todo dia no trabalho) não podem virar falso positivo só
+    por caírem em dias diferentes. A descrição PRECISA ser parecida (ratio
+    >= 0.6) — sem isso, dois Pix de mesmo valor/dia mas pra pessoas
+    diferentes (ex: "Cp :123-Fulano" vs "Cp :456-Ciclano") eram marcados
+    como duplicata só por coincidência de valor."""
     for tx in existing:
         if abs(float(tx.get("amount") or 0) - row.amount) > 0.01:
             continue
@@ -389,8 +395,9 @@ def _find_duplicate(row: NormalizedRow, existing: List[dict]) -> str:
             continue
         ratio = difflib.SequenceMatcher(
             None, tx.get("description", "").lower(), row.description.lower()).ratio()
-        confidence = "alta" if ratio >= 0.6 else "baixa"
+        if ratio < _DUPLICATE_DESC_RATIO_MIN:
+            continue
         date_str = format_date_br(tx_date)
         return (f'"{tx.get("description", "")}" ({format_currency(float(tx["amount"]))} '
-                f'em {date_str}, confiança {confidence})')
+                f'em {date_str})')
     return ""

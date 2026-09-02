@@ -82,8 +82,18 @@ const INVESTMENT_KEYWORDS = [
   'CDB', 'LCI', 'LCA', 'FUNDO DE INVESTIMENTO', 'SELIC',
 ]
 
+// Siglas curtas demais pra virar substring simples (colidiriam com qualquer
+// palavra que contenha essas letras juntas) — só contam quando aparecem como
+// palavra isolada. "IFD" é abreviação comum de iFood em lançamentos de cartão.
+const ISOLATED_KEYWORDS: [RegExp, string][] = [
+  [/\bIFD\b/, 'Alimentação'],
+]
+
 export function guessCategory(description: string): string {
   const upper = stripAccents(description).toUpperCase()
+  for (const [pattern, category] of ISOLATED_KEYWORDS) {
+    if (pattern.test(upper)) return category
+  }
   for (const [keywords, category] of CATEGORY_KEYWORDS) {
     if (keywords.some((k) => upper.includes(k))) return category
   }

@@ -1,4 +1,5 @@
 """Interface comum dos parsers de extrato/fatura bancária."""
+import re
 import unicodedata
 from dataclasses import dataclass, field
 from datetime import date, time as _time
@@ -121,9 +122,19 @@ _CATEGORY_KEYWORDS = [
 _INVESTMENT_KEYWORDS = ("TESOURO DIRETO", "APLICACAO", "APLICAÇÃO", "RESGATE",
                          "CDB", "LCI", "LCA", "FUNDO DE INVESTIMENTO", "SELIC")
 
+# Siglas curtas demais pra virar substring simples (colidiriam com qualquer
+# palavra que contenha essas letras juntas) — só contam quando aparecem como
+# palavra isolada. "IFD" é abreviação comum de iFood em lançamentos de cartão.
+_ISOLATED_KEYWORDS = [
+    (re.compile(r"\bIFD\b"), "Alimentação"),
+]
+
 
 def guess_category(description: str) -> str:
     upper = _strip_accents(description).upper()
+    for pattern, category in _ISOLATED_KEYWORDS:
+        if pattern.search(upper):
+            return category
     for keywords, category in _CATEGORY_KEYWORDS:
         if any(k in upper for k in keywords):
             return category

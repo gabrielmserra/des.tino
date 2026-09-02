@@ -131,9 +131,19 @@ function extractSpelledAmount(text: string): { value: number; match: string } | 
   return { value, match: tokens.slice(start, end).join(" ") };
 }
 
+// Siglas curtas demais pra virar substring simples (colidiriam com qualquer
+// palavra que contenha essas letras juntas) — só contam quando aparecem como
+// palavra isolada. "IFD" é abreviação comum de iFood em lançamentos de cartão.
+const ISOLATED_KEYWORDS: [string, RegExp][] = [
+  ["Alimentação", /\bifd\b/],
+];
+
 // ── Categoria ─────────────────────────────────────────────────────────
 function detectCategory(text: string): string {
   const s = strip(text);
+  for (const [cat, pattern] of ISOLATED_KEYWORDS) {
+    if (pattern.test(s)) return cat;
+  }
   for (const [cat, words] of CATEGORY_KEYWORDS) {
     for (const w of words) {
       if (s.includes(strip(w))) return cat;

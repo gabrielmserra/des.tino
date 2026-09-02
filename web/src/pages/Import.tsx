@@ -17,9 +17,34 @@ type Candidate = NormalizedRow & {
   description: string
 }
 
+// Razão de similaridade baseada em maior subsequência comum (LCS) — mesmo
+// espírito do difflib.SequenceMatcher usado no desktop: 1 = idênticas, 0 =
+// nada em comum.
+function descriptionSimilarity(a: string, b: string): number {
+  const s1 = a.toLowerCase()
+  const s2 = b.toLowerCase()
+  const n = s1.length
+  const m = s2.length
+  if (n === 0 || m === 0) return n === m ? 1 : 0
+  let prev = new Array(m + 1).fill(0)
+  for (let i = 1; i <= n; i++) {
+    const cur = new Array(m + 1).fill(0)
+    for (let j = 1; j <= m; j++) {
+      cur[j] = s1[i - 1] === s2[j - 1] ? prev[j - 1] + 1 : Math.max(prev[j], cur[j - 1])
+    }
+    prev = cur
+  }
+  return (2 * prev[m]) / (n + m)
+}
+
+const DUPLICATE_DESC_RATIO_MIN = 0.6
+
 // Mesmo valor + mesmo dia exato (sem tolerância) — gastos recorrentes no
 // mesmo lugar e valor (ex: café todo dia no trabalho) não podem virar
-// falso positivo só por caírem em dias diferentes.
+// falso positivo só por caírem em dias diferentes. A descrição também
+// precisa ser parecida (ratio >= 0.6): sem isso, dois Pix de mesmo valor/dia
+// pra pessoas diferentes (ex: "Cp :123-Fulano" vs "Cp :456-Ciclano") eram
+// marcados como duplicata só por coincidência de valor.
 function findDuplicate(row: NormalizedRow, existing: Transaction[]): string {
   for (const tx of existing) {
     if (Math.abs(tx.amount - row.amount) > 0.01) continue
@@ -27,6 +52,7 @@ function findDuplicate(row: NormalizedRow, existing: Transaction[]): string {
     if (!txDateRaw) continue
     const txDate = txDateRaw.slice(0, 10)
     if (txDate !== row.date) continue
+    if (descriptionSimilarity(tx.description, row.description) < DUPLICATE_DESC_RATIO_MIN) continue
     return `"${tx.description}" (${formatCurrency(tx.amount)} em ${formatDate(txDate)})`
   }
   return ''
