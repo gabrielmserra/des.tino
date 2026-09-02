@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import './AuthDesktop.css'
 
 export function SignUp() {
   const { signUp } = useAuth()
@@ -38,28 +39,64 @@ export function SignUp() {
 
   if (confirmationSent) {
     return (
-      <div className="flex min-h-full items-center justify-center p-6">
-        <div className="w-full max-w-sm text-center">
-          <h1 className="mb-4 text-3xl font-bold">
-            des<span style={{ color: 'var(--primary)' }}>.</span>tino
-          </h1>
-          <div className="rounded-2xl border p-6" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
-            <p className="mb-2 text-lg font-bold">Quase lá!</p>
-            <p className="text-sm" style={{ color: 'var(--muted)' }}>
-              Enviamos um link de confirmação para <strong>{email}</strong>. Abra seu e-mail
-              e confirme pra poder entrar.
-            </p>
+      <>
+        {/* Mobile (<860px) — layout atual, sem alterações */}
+        <div className="flex min-h-full items-center justify-center p-6 min-[860px]:hidden">
+          <div className="w-full max-w-sm text-center">
+            <h1 className="mb-4 text-3xl font-bold">
+              des<span style={{ color: 'var(--primary)' }}>.</span>tino
+            </h1>
+            <div className="rounded-2xl border p-6" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
+              <p className="mb-2 text-lg font-bold">Quase lá!</p>
+              <p className="text-sm" style={{ color: 'var(--muted)' }}>
+                Enviamos um link de confirmação para <strong>{email}</strong>. Abra seu e-mail
+                e confirme pra poder entrar.
+              </p>
+            </div>
+            <Link to="/login" className="mt-4 block text-center text-sm" style={{ color: 'var(--muted)' }}>
+              ← Voltar para login
+            </Link>
           </div>
-          <Link to="/login" className="mt-4 block text-center text-sm" style={{ color: 'var(--muted)' }}>
-            ← Voltar para login
-          </Link>
         </div>
-      </div>
+
+        {/* Desktop (>=860px) — mesmo sistema visual do handoff, sem tela própria definida pro handoff */}
+        <div className="login-desktop hidden min-[860px]:flex">
+          <div className="ld-brand">
+            <div className="ld-brand-top">
+              <img src="/destino-logo.png" alt="des.tino" style={{ height: 26, display: 'block' }} />
+            </div>
+            <div className="ld-brand-mid">
+              <h1>
+                Comece a organizar
+                <br />
+                <b>suas finanças hoje.</b>
+              </h1>
+              <p>Crie sua conta gratuita e acompanhe entradas, saídas e investimentos em um só lugar.</p>
+            </div>
+            <div />
+          </div>
+
+          <div className="ld-form-side">
+            <div className="ld-form-box">
+              <h2>Quase lá!</h2>
+              <div className="ld-sub">
+                Enviamos um link de confirmação para <strong>{email}</strong>. Abra seu e-mail e
+                confirme pra poder entrar.
+              </div>
+              <Link to="/login" className="ld-back-link">
+                ← Voltar para login
+              </Link>
+            </div>
+          </div>
+        </div>
+      </>
     )
   }
 
   return (
-    <div className="flex min-h-full items-center justify-center p-6">
+    <>
+    {/* Mobile (<860px) — layout atual, sem alterações */}
+    <div className="flex min-h-full items-center justify-center p-6 min-[860px]:hidden">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold">
@@ -138,5 +175,84 @@ export function SignUp() {
         </Link>
       </div>
     </div>
+
+    {/* Desktop (>=860px) — handoff de design: mesmo sistema visual do Login, sem ilustração de rota */}
+    <div className="login-desktop hidden min-[860px]:flex">
+      <div className="ld-brand">
+        <div className="ld-brand-top">
+          <img src="/destino-logo.png" alt="des.tino" style={{ height: 26, display: 'block' }} />
+        </div>
+
+        <div className="ld-brand-mid">
+          <h1>
+            Comece a organizar
+            <br />
+            <b>suas finanças hoje.</b>
+          </h1>
+          <p>Crie sua conta gratuita e acompanhe entradas, saídas e investimentos em um só lugar.</p>
+        </div>
+
+        <div />
+      </div>
+
+      <div className="ld-form-side">
+        <form onSubmit={onSubmit} className="ld-form-box">
+          <h2>Criar conta</h2>
+          <div className="ld-sub">Comece a usar o des.tino gratuitamente</div>
+
+          <div className="ld-field">
+            <label>E-mail</label>
+            <input
+              type="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="voce@email.com"
+            />
+            <div className="ld-bar" />
+          </div>
+
+          <div className="ld-field">
+            <label>Senha</label>
+            <input
+              type="password"
+              autoComplete="new-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Mínimo 6 caracteres"
+            />
+            <div className="ld-bar" />
+          </div>
+
+          <div className="ld-field">
+            <label>Confirmar senha</label>
+            <input
+              type="password"
+              autoComplete="new-password"
+              required
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              placeholder="••••••••••"
+            />
+            <div className="ld-bar" />
+          </div>
+
+          {error && <p className="ld-error">{error}</p>}
+
+          <button type="submit" disabled={loading} className="ld-btn">
+            {loading ? 'Criando conta…' : 'Criar conta'}
+          </button>
+
+          <div className="ld-divider">OU</div>
+
+          <div className="ld-footer-line">
+            Já tem conta? <Link to="/login">Entrar</Link>
+          </div>
+        </form>
+      </div>
+    </div>
+    </>
   )
 }

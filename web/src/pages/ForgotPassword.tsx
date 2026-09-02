@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import './AuthDesktop.css'
 
 export function ForgotPassword() {
   const [email, setEmail] = useState('')
@@ -24,7 +25,9 @@ export function ForgotPassword() {
   }
 
   return (
-    <div className="flex min-h-full items-center justify-center p-6">
+    <>
+    {/* Mobile (<860px) — layout atual, sem alterações */}
+    <div className="flex min-h-full items-center justify-center p-6 min-[860px]:hidden">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold">
@@ -76,5 +79,55 @@ export function ForgotPassword() {
         </Link>
       </div>
     </div>
+
+    {/* Desktop (>=860px) — handoff de design: mesmo sistema visual do Login/Cadastro */}
+    <div className="login-desktop hidden min-[860px]:flex">
+      <div className="ld-brand">
+        <div className="ld-brand-top">
+          <img src="/destino-logo.png" alt="des.tino" style={{ height: 26, display: 'block' }} />
+        </div>
+
+        <div className="ld-brand-mid">
+          <h1>
+            Sem problemas,
+            <br />
+            <b>vamos recuperar.</b>
+          </h1>
+          <p>Digite seu e-mail cadastrado e enviaremos um link para você criar uma nova senha.</p>
+        </div>
+
+        <div />
+      </div>
+
+      <div className="ld-form-side">
+        <div className="ld-form-box">
+          <h2>Esqueceu sua senha?</h2>
+          <div className="ld-sub">Digite seu e-mail e enviaremos um link para criar uma nova senha.</div>
+
+          <div className="ld-field">
+            <label>E-mail</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="voce@email.com"
+            />
+            <div className="ld-bar" />
+          </div>
+
+          {status === 'sent' && <p className="ld-success">Link enviado! Verifique seu e-mail.</p>}
+          {error && <p className="ld-error">{error}</p>}
+
+          <button onClick={submit} disabled={status === 'sending'} className="ld-btn">
+            {status === 'sending' ? 'Enviando…' : 'Enviar link de redefinição'}
+          </button>
+
+          <Link to="/login" className="ld-back-link">
+            ← Voltar para login
+          </Link>
+        </div>
+      </div>
+    </div>
+    </>
   )
 }

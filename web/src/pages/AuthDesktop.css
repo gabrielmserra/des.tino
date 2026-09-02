@@ -1,6 +1,8 @@
-/* Tela de login — versão desktop (>=860px), handoff de design.
-   Tokens próprios (não usam as variáveis globais do app porque o design
-   define uma paleta ligeiramente diferente do tema padrão atual). */
+/* Telas de login e cadastro — versão desktop (>=860px), handoff de design.
+   Compartilhado entre Login.tsx e SignUp.tsx (mesmo sistema visual, mesmos
+   tokens/proporções). Tokens próprios (não usam as variáveis globais do
+   app porque o design define uma paleta ligeiramente diferente do tema
+   padrão atual). */
 .login-desktop {
   --ld-bg: #0d1f1a;
   --ld-panel: #0a1913;
@@ -227,4 +229,22 @@
   font-size: 13px;
   color: #e05252;
   margin: -8px 0 16px;
+}
+
+.login-desktop .ld-success {
+  font-size: 13px;
+  color: var(--ld-primary);
+  margin: -8px 0 16px;
+}
+
+.login-desktop .ld-back-link {
+  display: block;
+  text-align: center;
+  margin-top: 28px;
+  font-size: 13px;
+  color: var(--ld-text-muted);
+  text-decoration: none;
+}
+.login-desktop .ld-back-link:hover {
+  color: var(--ld-primary);
 }

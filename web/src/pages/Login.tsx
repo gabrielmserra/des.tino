@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { getRememberMe, setRememberMe as persistRememberMe } from '../lib/supabase'
-import './LoginDesktop.css'
+import './AuthDesktop.css'
 
 export function Login() {
   const { signIn } = useAuth()
