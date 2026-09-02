@@ -686,8 +686,13 @@ function ChartGastosCategoriaEvolucaoWidget() {
   const totalByCat = new Map<string, number>()
   for (const r of rows) for (const c of r.categories) totalByCat.set(c.category, (totalByCat.get(c.category) ?? 0) + c.total)
   const topCats = [...totalByCat.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([c]) => c)
+  // Balde sintético pras categorias que não entraram no top 4 — nome
+  // deliberadamente diferente da categoria real "Outros" (usada em
+  // lançamentos sem categoria identificada), senão os dois aparecem juntos
+  // no gráfico parecendo duplicados.
+  const OUTRAS_BUCKET = 'Demais categorias'
   const hasOutras = rows.some((r) => r.categories.some((c) => !topCats.includes(c.category)))
-  const keys = hasOutras ? [...topCats, 'Outras'] : topCats
+  const keys = hasOutras ? [...topCats, OUTRAS_BUCKET] : topCats
 
   const data = rows.map((r) => {
     const entry: Record<string, string | number> = { name: monthShortLabel(r.month) }
@@ -696,7 +701,7 @@ function ChartGastosCategoriaEvolucaoWidget() {
       if (topCats.includes(c.category)) entry[c.category] = (Number(entry[c.category]) || 0) + c.total
       else outras += c.total
     }
-    if (hasOutras) entry['Outras'] = outras
+    if (hasOutras) entry[OUTRAS_BUCKET] = outras
     return entry
   })
   const hasData = data.some((d) => keys.some((k) => Number(d[k] ?? 0) > 0))
