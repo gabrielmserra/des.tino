@@ -156,8 +156,25 @@ export function Layout() {
   const [showAddMonth, setShowAddMonth] = useState(false)
   const [showEditMonth, setShowEditMonth] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarCollapsed)
+  const contentRef = useRef<HTMLDivElement>(null)
 
   const toggleSidebar = () => {
+    // Congela a largura do conteúdo durante a transição da sidebar: sem
+    // isso, cada frame da animação muda a largura disponível pro conteúdo,
+    // e todo gráfico Recharts (ResponsiveContainer usa ResizeObserver)
+    // recalcula e redesenha a si mesmo dezenas de vezes em ~200ms — isso
+    // que travava a animação (~15fps). Trava a largura atual, deixa só a
+    // sidebar animar sozinha, e solta no fim pra o conteúdo assentar de
+    // uma vez (um único recálculo, não ~40).
+    const el = contentRef.current
+    if (el) {
+      const { width } = el.getBoundingClientRect()
+      el.style.flex = `0 0 ${width}px`
+      window.setTimeout(() => {
+        el.style.flex = ''
+      }, 260)
+    }
+
     setSidebarCollapsed((prev) => {
       const next = !prev
       try {
@@ -172,7 +189,7 @@ export function Layout() {
   return (
     <div className="flex min-h-full flex-col lg:flex-row">
       <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
-      <div className="flex min-h-full min-w-0 flex-1 flex-col">
+      <div ref={contentRef} className="flex min-h-full min-w-0 flex-1 flex-col">
       {/* Header */}
       <header
         className={`sticky top-0 z-10 flex flex-wrap items-center justify-center gap-x-2 gap-y-2 border-b px-3 py-3 sm:justify-between sm:px-4 ${
