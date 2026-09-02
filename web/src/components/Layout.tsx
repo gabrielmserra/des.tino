@@ -19,6 +19,7 @@ import { useAuth } from '../lib/auth'
 import { useTxForm } from '../lib/txform'
 import { useTheme } from '../lib/theme'
 import { TxForm } from './TxForm'
+import { Sidebar } from './Sidebar'
 import { AddMonthDialog } from './AddMonthDialog'
 import { EditMonthDialog } from './EditMonthDialog'
 import { ThemeDialog } from './ThemeDialog'
@@ -156,17 +157,19 @@ export function Layout() {
   const [showEditMonth, setShowEditMonth] = useState(false)
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="flex min-h-full flex-col lg:flex-row">
+      <Sidebar />
+      <div className="flex min-h-full min-w-0 flex-1 flex-col">
       {/* Header */}
       <header
-        className="sticky top-0 z-10 flex flex-wrap items-center justify-center gap-x-2 gap-y-2 border-b px-3 py-3 sm:justify-between sm:px-4"
+        className="sticky top-0 z-10 flex flex-wrap items-center justify-center gap-x-2 gap-y-2 border-b px-3 py-3 sm:justify-between sm:px-4 lg:justify-end"
         style={{
           background: 'var(--bg)',
           borderColor: 'var(--border)',
           paddingTop: 'calc(env(safe-area-inset-top) + 12px)',
         }}
       >
-        <span className="shrink-0 text-xl font-bold sm:text-2xl">
+        <span className="shrink-0 text-xl font-bold sm:text-2xl lg:hidden">
           des<span style={{ color: 'var(--primary)' }}>.</span>tino
         </span>
         <div className="flex min-w-0 flex-wrap items-center justify-center gap-1.5">
@@ -228,7 +231,7 @@ export function Layout() {
       )}
 
       {/* Conteúdo */}
-      <main className="flex-1 pb-20">
+      <main className="flex-1 pb-20 lg:pb-6">
         <Outlet />
       </main>
 
@@ -245,9 +248,9 @@ export function Layout() {
       {/* Formulário (modal) */}
       <TxForm />
 
-      {/* Navegação inferior */}
+      {/* Navegação inferior (só mobile — a partir de lg: vira a sidebar) */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-10 flex border-t"
+        className="fixed inset-x-0 bottom-0 z-10 flex border-t lg:hidden"
         style={{ background: 'var(--card)', borderColor: 'var(--border)', paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <NavTab to="/" end icon={LayoutDashboard} label="Dashboard" />
@@ -257,6 +260,7 @@ export function Layout() {
         <NavTab to="/compromissos" icon={HandCoins} label="Compromissos" />
         <NavTab to="/mais" icon={MoreHorizontal} label="Mais" />
       </nav>
+      </div>
     </div>
   )
 }
