@@ -68,7 +68,19 @@
   margin: 0;
 }
 .login-desktop .ld-route {
-  margin-top: 44px;
+  /* Centralizada no espaço entre o parágrafo e o rodapé do painel (em
+     vez de grudada embaixo) — funciona junto com .ld-mid-fixed-gap, que
+     reserva o espaço logo→texto de forma fixa pra sobrar só o resto pra
+     centralizar aqui. */
+  margin-top: auto;
+  margin-bottom: auto;
+}
+/* Só na tela de Login (única com .ld-route): sem essa margem fixa, o
+   auto-margin acima "engole" todo o espaço livre do flex, inclusive o
+   vão entre a logo e o texto (justify-content:space-between do
+   .ld-brand é ignorado assim que qualquer item ganha margem auto). */
+.login-desktop .ld-mid-fixed-gap {
+  margin-top: 210px;
 }
 .login-desktop .ld-route svg {
   display: block;

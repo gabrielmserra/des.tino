@@ -109,7 +109,7 @@ export function Login() {
           <img src="/destino-logo.png" alt="des.tino" style={{ height: 26, display: 'block' }} />
         </div>
 
-        <div className="ld-brand-mid">
+        <div className="ld-brand-mid ld-mid-fixed-gap">
           <h1>
             Organize seu dinheiro
             <br />
