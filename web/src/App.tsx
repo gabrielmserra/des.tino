@@ -5,6 +5,7 @@ import { MonthProvider } from './lib/month'
 import { ThemeProvider } from './lib/theme'
 import { TxFormProvider } from './lib/txform'
 import { Layout } from './components/Layout'
+import { ChunkErrorBoundary } from './components/ChunkErrorBoundary'
 import { Login } from './pages/Login'
 import { SignUp } from './pages/SignUp'
 import { ForgotPassword } from './pages/ForgotPassword'
@@ -74,9 +75,11 @@ export default function App() {
             <Route
               path="/importar"
               element={
-                <Suspense fallback={<Splash />}>
-                  <Import />
-                </Suspense>
+                <ChunkErrorBoundary>
+                  <Suspense fallback={<Splash />}>
+                    <Import />
+                  </Suspense>
+                </ChunkErrorBoundary>
               }
             />
             <Route path="/mais" element={<More />} />
