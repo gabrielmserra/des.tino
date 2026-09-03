@@ -227,7 +227,14 @@ export function Import() {
           </span>
           <input
             type="file"
-            accept=".ofx,.csv,.pdf"
+            // O iOS filtra o seletor de arquivos por tipo de sistema (UTI), não
+            // pela extensão em si — ".ofx" não tem UTI reconhecido, então o
+            // Safari no iPhone escondia/bloqueava esses arquivos (só .csv/.pdf
+            // apareciam, que têm UTI padrão). Adicionar os MIME types cobre
+            // esse caso; a validação de verdade é pelo conteúdo do arquivo
+            // (detectParser), não por essa lista — só afeta o que aparece
+            // pré-filtrado no seletor.
+            accept=".ofx,.csv,.pdf,application/x-ofx,application/vnd.intu.qfx,text/csv,application/csv,application/pdf,application/octet-stream"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0]
