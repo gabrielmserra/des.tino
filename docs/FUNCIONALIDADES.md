@@ -269,6 +269,10 @@ Três tipos de meta, lado a lado:
 
 - **[Ambas]** Importação de extrato da conta corrente do Banco Inter em três
   formatos: OFX, CSV e PDF.
+  - **[Web]** No Safari/iOS, o seletor de arquivo aceita o .ofx mesmo sem
+    esse formato ter um tipo de arquivo reconhecido pelo sistema (UTI) —
+    sem isso, o app Arquivos do iPhone escondia/bloqueava os .ofx,
+    deixando só .csv/.pdf selecionáveis.
 - **[Ambas]** Importação da **fatura do cartão de crédito** do Banco Inter
   (só exportável em .csv) — pede qual cartão cadastrado é o dono da fatura
   (um seletor único pra todo o arquivo) e já lança tudo com forma de
@@ -279,13 +283,18 @@ Três tipos de meta, lado a lado:
 - **[Ambas]** Categorização automática por palavras-chave na descrição do
   lançamento (ex.: "IFOOD", "UBER", "NETFLIX" → categoria correspondente),
   mantida em sincronia entre desktop (`parsers/base.py`), web
-  (`web/src/lib/parsers/base.ts`) e o atalho de voz (`quick-tx`).
+  (`web/src/lib/parsers/base.ts`) e o atalho de voz (`quick-tx`). Siglas
+  curtas de risco (ex.: "IFD", abreviação comum de iFood em lançamentos de
+  cartão) só contam quando aparecem como palavra isolada, não coladas em
+  outra palavra — evita categorizar errado por coincidência de letras.
 - **[Ambas]** Reconhecimento automático de accents/acentos e caixa (ex.:
   "café", "CAFE", "Café" tratados igual).
 - **[Ambas]** Detecção de possíveis duplicatas antes de confirmar a
-  importação — compara descrição, valor **e data exata** (lançamentos
-  recorrentes no mesmo lugar e valor mas em dias diferentes, como um café
-  comprado todo dia, **não** são marcados como duplicata).
+  importação — precisa ter valor igual, **data exata** igual e descrição
+  **parecida** pra ser sinalizado (lançamentos recorrentes no mesmo lugar e
+  valor mas em dias diferentes, como um café comprado todo dia, **não** são
+  marcados como duplicata; dois Pix de mesmo valor/dia mas pra pessoas
+  diferentes também não, já que a descrição não bate).
   A data do lançamento suspeito de duplicata é exibida no aviso.
   - **[Web]** Lista de lançamentos a importar pode ser ordenada por data
     real do pagamento.
