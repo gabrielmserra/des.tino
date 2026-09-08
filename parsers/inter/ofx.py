@@ -1,7 +1,13 @@
 """Parser de extrato bancário em OFX (padrão SGML/XML usado por bancos
-brasileiros). Ainda não validado contra uma amostra real do Inter — segue
-o padrão OFX 1.x (tags <STMTTRN>/<TRNTYPE>/<DTPOSTED>/<TRNAMT>/<MEMO>),
-comum à maioria dos bancos. Ajustar se o formato real do Inter divergir.
+brasileiros). Validado contra uma amostra real do Inter — segue o padrão
+OFX 1.x (tags <STMTTRN>/<TRNTYPE>/<DTPOSTED>/<TRNAMT>/<MEMO>), comum à
+maioria dos bancos.
+
+Confirmado: o extrato de conta corrente do Inter manda <DTPOSTED> só com
+os 8 dígitos de data (ex. "20260908"), sem os 6 dígitos de hora que o
+padrão OFX permite opcionalmente — não tem hora nenhuma pra extrair
+nesses arquivos. _parse_ofx_time() continua aqui por completude (outros
+bancos podem mandar hora), mas pro Inter sempre retorna None.
 """
 import re
 from datetime import datetime
