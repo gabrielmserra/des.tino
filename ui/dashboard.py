@@ -1258,8 +1258,8 @@ class Dashboard(ctk.CTkScrollableFrame):
             message=f"A fatura de {format_currency(unpaid)} do cartão "
                     f"{card['name']} será marcada como paga.\n\n"
                     "Os lançamentos continuam existindo (aparecem no histórico\n"
-                    "de faturas do cartão, em Saídas Variáveis) e o saldo é\n"
-                    "debitado normalmente.",
+                    "de faturas do cartão e em Saídas Variáveis normalmente) —\n"
+                    "não mexe no saldo, importe o pagamento pelo extrato da conta.",
             confirm_text="Pagar fatura",
             on_confirm=do_pay,
             danger=False,

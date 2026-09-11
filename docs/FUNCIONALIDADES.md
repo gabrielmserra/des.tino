@@ -94,6 +94,13 @@ Para cada lançamento:
   paga manualmente até a data de vencimento, é quitada sozinha
   automaticamente (assume paga, ex. débito automático) — verificado uma
   vez a cada abertura do app/site.
+- **[Ambas]** Compra no cartão **nunca** entra no saldo/saídas/entradas
+  (saldo atual, saldo acumulado, saldo após contas em aberto) — nem em
+  aberto, nem depois de paga. É só controle/acompanhamento da fatura
+  (Lançamentos + aba Cartões). O dinheiro saindo de verdade só é contado
+  quando o pagamento da fatura aparece no **extrato da conta corrente**
+  importado (ou lançado manualmente) — evita contar o mesmo gasto duas
+  vezes.
 - **[Ambas]** Histórico de faturas por cartão — lista as faturas já
   fechadas e resolvidas (pagas ou vencidas automaticamente), com período,
   total e data; cada fatura pode ser expandida pra ver os lançamentos que

@@ -248,7 +248,8 @@ class CardPresetsBar(ctk.CTkFrame):
             message=f"A fatura de {format_currency(unpaid)} do cartão "
                     f"{card['name']} será marcada como paga.\n\n"
                     "Os lançamentos continuam existindo (aparecem no histórico\n"
-                    "de faturas do cartão) e o saldo é debitado normalmente.",
+                    "de faturas do cartão e em Lançamentos normalmente) — não\n"
+                    "mexe no saldo, importe o pagamento pelo extrato da conta.",
             confirm_text="Pagar fatura",
             on_confirm=do_pay,
             danger=False,
