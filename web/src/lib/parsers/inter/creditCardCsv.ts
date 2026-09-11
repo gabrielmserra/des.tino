@@ -2,9 +2,26 @@
 // formato exportável pro cartão (diferente do extrato da conta corrente).
 // Mesma lógica de parsers/inter/credit_card_csv.py (desktop) — ver ali
 // para detalhes do formato observado.
+//
+// A coluna "Tipo" indica "Compra à vista" ou "Parcela N/M" — cada parcela
+// de uma compra parcelada chega como sua própria linha, uma por fatura/mês
+// (o Inter não manda as parcelas futuras de uma vez, nem um ID que ligue as
+// parcelas de uma mesma compra entre faturas de meses diferentes). Por isso
+// não dá pra reconstruir a compra parcelada "de verdade" (como o fluxo
+// manual "🧾 Compra parcelada" faz, com card_purchase_id agrupando tudo) —
+// o que dá pra fazer com segurança é só marcar "N/M" na descrição de cada
+// parcela importada, pra ficar visível qual parcela é e de quantas.
 import type { BankParser, NormalizedRow } from '../types'
 import { guessCategory } from '../base'
 import { cleanDescription, decodeBytes, parseBrlAmount, stripAccents } from '../common'
+
+const INSTALLMENT_RE = /^parcela\s+(\d+)\s*\/\s*(\d+)$/i
+
+function parseInstallment(tipo: string): [number, number] | null {
+  const m = INSTALLMENT_RE.exec(tipo.trim())
+  if (!m) return null
+  return [Number(m[1]), Number(m[2])]
+}
 
 function parseDateBr(s: string): string | null {
   const m = s.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
@@ -61,6 +78,7 @@ export class InterCreditCardCsvParser implements BankParser {
     const iDate = header.indexOf('DATA')
     const iDesc = header.indexOf('LANCAMENTO')
     const iVal = header.indexOf('VALOR')
+    const iTipo = header.indexOf('TIPO')
     if (iDate === -1 || iDesc === -1 || iVal === -1) return []
 
     const rows: NormalizedRow[] = []
@@ -78,7 +96,14 @@ export class InterCreditCardCsvParser implements BankParser {
         continue
       }
 
-      const desc = cleanDescription(parts[iDesc])
+      let desc = cleanDescription(parts[iDesc])
+      if (iTipo !== -1 && iTipo < parts.length) {
+        const installment = parseInstallment(parts[iTipo])
+        if (installment) {
+          const [n, total] = installment
+          desc = `${desc} (parcela ${n}/${total})`
+        }
+      }
       rows.push({
         date: isoDate,
         description: desc,

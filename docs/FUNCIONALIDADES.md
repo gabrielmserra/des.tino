@@ -280,6 +280,14 @@ Três tipos de meta, lado a lado:
   automático da fatura (valor negativo) é descartada automaticamente — o
   app já tem seu próprio fluxo de "Pagar Fatura" pra isso, importar
   duplicaria o pagamento.
+  - **[Ambas]** Compra parcelada identificada pela coluna "Tipo" do CSV
+    (ex.: "Parcela 1/10") — a descrição do lançamento importado ganha
+    "(parcela N/M)" pra deixar claro qual parcela é e de quantas. Como o
+    Inter manda cada parcela como uma linha própria em faturas de meses
+    diferentes (sem nenhum identificador ligando as parcelas de uma mesma
+    compra entre si), a importação não agrupa isso como uma "Compra
+    parcelada" de verdade (ver [Cartões](#4-cartões-débito-crédito-e-benefícios))
+    — só marca a informação na descrição de cada parcela importada.
 - **[Ambas]** Categorização automática por palavras-chave na descrição do
   lançamento (ex.: "IFOOD", "UBER", "NETFLIX" → categoria correspondente),
   mantida em sincronia entre desktop (`parsers/base.py`), web
