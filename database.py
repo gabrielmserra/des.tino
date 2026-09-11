@@ -267,9 +267,12 @@ def get_month_summary(month_id: int) -> Dict[str, float]:
         amt = float(row["amount"] or 0)
         if t not in real:
             continue
-        # Compras no cartão não afetam o saldo até a fatura ser paga (ou
-        # vencer) — a partir daí (invoice_id setado) já são saída real.
-        if row.get("card_id") and t == "saida_variavel" and not row.get("invoice_id"):
+        # Compras no cartão nunca afetam o saldo/saídas/entradas, pagas ou
+        # não — o dinheiro saindo de verdade só é contado quando o extrato
+        # da CONTA CORRENTE (não a fatura do cartão) trouxer a transação
+        # real do pagamento. A fatura do cartão é só controle/
+        # acompanhamento (aba Cartões + histórico de faturas).
+        if row.get("card_id") and t == "saida_variavel":
             continue
         # Gastos com VR/VA saem do saldo carimbado, não do caixa do mês
         if row.get("benefit_id") and t in ("saida_fixa", "saida_variavel"):
@@ -306,15 +309,15 @@ def get_month_summary(month_id: int) -> Dict[str, float]:
 
 def _month_real_flow(month_id: int) -> tuple:
     """(entradas, saídas) reais de um mês — mesma regra de get_month_summary
-    (ignora previstos, compras no cartão ainda não pagas, gastos em VR/VA),
-    usado pelo cálculo do saldo acumulado."""
+    (ignora previstos, compras no cartão, gastos em VR/VA), usado pelo
+    cálculo do saldo acumulado."""
     rows = get_transactions(month_id)
     entradas = saidas = 0.0
     for row in rows:
         t = row["type"]
         if t not in ("entrada_fixa", "entrada_variavel", "saida_fixa", "saida_variavel"):
             continue
-        if row.get("card_id") and t == "saida_variavel" and not row.get("invoice_id"):
+        if row.get("card_id") and t == "saida_variavel":
             continue
         if row.get("benefit_id") and t in ("saida_fixa", "saida_variavel"):
             continue
