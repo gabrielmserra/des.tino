@@ -15,6 +15,10 @@ type Candidate = NormalizedRow & {
   category: string
   paymentMethod: string
   description: string
+  // Descrição exatamente como o parser leu, antes de qualquer edição do
+  // usuário na revisão — usada só pra checagem de duplicata em futuras
+  // reimportações (ver findDuplicate), nunca mostrada/editada na UI.
+  importRaw: string
 }
 
 // Razão de similaridade baseada em maior subsequência comum (LCS) — mesmo
@@ -44,7 +48,11 @@ const DUPLICATE_DESC_RATIO_MIN = 0.6
 // falso positivo só por caírem em dias diferentes. A descrição também
 // precisa ser parecida (ratio >= 0.6): sem isso, dois Pix de mesmo valor/dia
 // pra pessoas diferentes (ex: "Cp :123-Fulano" vs "Cp :456-Ciclano") eram
-// marcados como duplicata só por coincidência de valor.
+// marcados como duplicata só por coincidência de valor. Compara contra
+// import_raw (a descrição como foi importada originalmente, nunca
+// alterada) quando existe, em vez de description — senão renomear um
+// lançamento já importado (uso normal do app) faz reimportar o mesmo
+// extrato parar de ser reconhecido como duplicata.
 function findDuplicate(row: NormalizedRow, existing: Transaction[]): string {
   for (const tx of existing) {
     if (Math.abs(tx.amount - row.amount) > 0.01) continue
@@ -52,7 +60,8 @@ function findDuplicate(row: NormalizedRow, existing: Transaction[]): string {
     if (!txDateRaw) continue
     const txDate = txDateRaw.slice(0, 10)
     if (txDate !== row.date) continue
-    if (descriptionSimilarity(tx.description, row.description) < DUPLICATE_DESC_RATIO_MIN) continue
+    const compareDesc = tx.import_raw || tx.description
+    if (descriptionSimilarity(compareDesc, row.description) < DUPLICATE_DESC_RATIO_MIN) continue
     return `"${tx.description}" (${formatCurrency(tx.amount)} em ${formatDate(txDate)})`
   }
   return ''
@@ -131,6 +140,7 @@ export function Import() {
         category: r.direction === 'entrada' ? 'Receita' : r.suggestedCategory,
         paymentMethod: r.suggestedPaymentMethod,
         description: r.description,
+        importRaw: r.description,
       })
     }
     // Mais recente primeiro.
@@ -190,6 +200,7 @@ export function Import() {
           payment_date: c.date,
           payment_time: c.time ?? null,
           card_id: c.isCreditCardCharge ? cardId : null,
+          import_raw: c.importRaw,
         })),
       )
       setDoneCount(selected.length)

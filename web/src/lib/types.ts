@@ -35,6 +35,7 @@ export type Transaction = {
   card_purchase_id: number | null
   installment_number: number | null
   installment_total: number | null
+  import_raw?: string | null
 }
 
 export type MonthSummary = {

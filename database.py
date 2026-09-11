@@ -106,6 +106,7 @@ def add_transaction(
     payment_date: Optional[date] = None,
     imported: bool = False,
     payment_time: Optional[time] = None,
+    import_raw: Optional[str] = None,
 ) -> None:
     client  = get_client()
     user_id = client.auth.get_user().user.id
@@ -119,6 +120,8 @@ def add_transaction(
         "is_expectation": is_expectation,
         "imported":       imported,
     }
+    if import_raw is not None:
+        row["import_raw"] = import_raw
     if card_id is not None:
         row["card_id"] = card_id
     if benefit_id is not None:
@@ -206,6 +209,7 @@ def import_transactions_bulk(rows: List[dict]) -> None:
             payment_date=r.get("payment_date"),
             payment_time=r.get("payment_time"),
             imported=True,
+            import_raw=r.get("import_raw"),
         )
 
 

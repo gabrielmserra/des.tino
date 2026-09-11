@@ -1022,6 +1022,7 @@ export type ImportRow = {
   card_id?: number | null
   benefit_id?: number | null
   debit_card_id?: number | null
+  import_raw?: string | null
 }
 
 export async function importTransactionsBulk(rows: ImportRow[]): Promise<number[]> {

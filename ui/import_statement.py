@@ -342,6 +342,7 @@ class ImportTab(ctk.CTkFrame):
                 "payment_date":   c.row.date,
                 "payment_time":   c.row.time,
                 "card_id":        card_id,
+                "import_raw":     c.row.description,
             })
 
         self._confirm_btn.configure(state="disabled", text="Importando…")
@@ -380,7 +381,11 @@ def _find_duplicate(row: NormalizedRow, existing: List[dict]) -> str:
     por caírem em dias diferentes. A descrição PRECISA ser parecida (ratio
     >= 0.6) — sem isso, dois Pix de mesmo valor/dia mas pra pessoas
     diferentes (ex: "Cp :123-Fulano" vs "Cp :456-Ciclano") eram marcados
-    como duplicata só por coincidência de valor."""
+    como duplicata só por coincidência de valor. Compara contra
+    import_raw (a descrição como foi importada originalmente, nunca
+    alterada) quando existe, em vez de description — senão renomear um
+    lançamento já importado (uso normal do app) faz reimportar o mesmo
+    extrato parar de ser reconhecido como duplicata."""
     for tx in existing:
         if abs(float(tx.get("amount") or 0) - row.amount) > 0.01:
             continue
@@ -393,8 +398,9 @@ def _find_duplicate(row: NormalizedRow, existing: List[dict]) -> str:
             continue
         if tx_date != row.date:
             continue
+        compare_desc = tx.get("import_raw") or tx.get("description", "")
         ratio = difflib.SequenceMatcher(
-            None, tx.get("description", "").lower(), row.description.lower()).ratio()
+            None, compare_desc.lower(), row.description.lower()).ratio()
         if ratio < _DUPLICATE_DESC_RATIO_MIN:
             continue
         date_str = format_date_br(tx_date)
