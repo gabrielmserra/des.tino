@@ -118,6 +118,7 @@ class CardPresetsBar(ctk.CTkFrame):
         limit      = float(card.get("limit") or 0)
         best       = _best_buy_day(closing)
         days_cls   = int(ov.get("days_until_closing") or 0)
+        days_due   = int(ov.get("days_until_due") or 0)
         spent      = float(ov.get("spent") or 0)
         avail      = ov.get("available")
         avail      = float(avail) if avail is not None else None
@@ -155,13 +156,16 @@ class CardPresetsBar(ctk.CTkFrame):
             command=lambda c=card: self._new_purchase(c),
         ).pack(side="right", padx=(0, 4))
 
-        # Status fatura
-        if cycle_open:
+        # Status fatura — "Fecha em Xd" e "Vence em Yd" são sobre ciclos
+        # diferentes (o que está formando agora vs. o que já fechou e
+        # está aguardando pagamento), nunca mostrados juntos pra não
+        # parecer contraditório ("fatura fechada... fecha em Xd?").
+        if unpaid > 0:
+            sub     = f"Fatura fechada  •  Vence em {days_due}d"
+            sub_col = T.GOLD
+        else:
             sub     = f"Fatura aberta  •  Fecha em {days_cls}d"
             sub_col = T.MUTED
-        else:
-            sub     = "Fatura fechada  •  Nova fatura"
-            sub_col = T.GREEN
         ctk.CTkLabel(body, text=sub, font=F(11), text_color=sub_col,
                      anchor="w", width=180).pack(anchor="w", pady=(2, 0))
 

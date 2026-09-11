@@ -1200,9 +1200,13 @@ class Dashboard(ctk.CTkScrollableFrame):
                     info_parts.append(f"Disponível: {format_currency(avail)}")
             else:
                 info_parts = [f"Gasto: {format_currency(spent)}"]
-            info_parts.append(f"Fecha {_date_from_days_until(days_cls)}")
+            # "Fecha" (próximo fechamento) e "Vence" (fatura já fechada,
+            # aguardando pagamento) são sobre ciclos diferentes — nunca
+            # mostrados juntos, senão fica parecendo contraditório.
             if unpaid > 0:
                 info_parts.append(f"Vence {_date_from_days_until(days_due)}")
+            else:
+                info_parts.append(f"Fecha {_date_from_days_until(days_cls)}")
             ctk.CTkLabel(self._credit_frame,
                          text="  •  ".join(info_parts),
                          font=F(11), text_color=T.MUTED, anchor="w").pack(

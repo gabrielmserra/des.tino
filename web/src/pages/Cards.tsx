@@ -140,9 +140,9 @@ export function Cards() {
                     </div>
 
                     <p className="mb-2 text-xs" style={{ color: 'var(--muted)' }}>
-                      {c.cycle_open ? 'Fatura aberta' : 'Fatura fechada'} · Fecha em{' '}
-                      {c.days_until_closing}d
-                      {c.unpaid > 0 ? ` · Vence em ${c.days_until_due}d` : ''}
+                      {c.unpaid > 0
+                        ? `Fatura fechada · Vence em ${c.days_until_due}d`
+                        : `Fatura aberta · Fecha em ${c.days_until_closing}d`}
                     </p>
 
                     <div className="mb-1 flex items-baseline justify-between">
