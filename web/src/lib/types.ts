@@ -161,6 +161,15 @@ export type CardOverview = {
   cycle_open: boolean
 }
 
+export type CardInvoice = {
+  id: number
+  cycle_start: string
+  due_date: string
+  total: number
+  paid_at: string
+  auto_settled: boolean
+}
+
 export type Debt = {
   id: number
   description: string

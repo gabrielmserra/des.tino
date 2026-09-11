@@ -34,6 +34,7 @@ class FinanceApp(ctk.CTkFrame):
         self._build()
         self._load_months()
         self._check_benefit_renewals()
+        self._settle_card_invoices()
         self._sync_theme_from_cloud()
 
     # ------------------------------------------------------------------
@@ -204,6 +205,18 @@ class FinanceApp(ctk.CTkFrame):
                 summary = []
             if summary:
                 self.after(0, lambda: self._show_renewal_toast(summary))
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _settle_card_invoices(self) -> None:
+        """Quita sozinha qualquer fatura de cartão fechada cujo vencimento
+        já passou e que não foi paga manualmente — mesmo padrão de
+        _check_benefit_renewals, roda uma vez na abertura do app, sem
+        toast (housekeeping silencioso, não é uma novidade "boa")."""
+        def _work():
+            try:
+                db.settle_due_card_invoices()
+            except Exception:
+                pass
         threading.Thread(target=_work, daemon=True).start()
 
     def _show_renewal_toast(self, summary: list) -> None:

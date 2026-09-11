@@ -583,12 +583,26 @@ class TransactionsTab(ctk.CTkFrame):
         self._method_filter_var = ctk.StringVar(value="Todas as formas")
         ctk.CTkComboBox(
             bar, values=method_values, variable=self._method_filter_var,
-            command=lambda _=None: self.refresh(),
+            command=lambda _=None: self._on_method_filter_change(),
             width=170, height=28, corner_radius=7,
             fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.MUTED,
             button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
             dropdown_text_color=T.TEXT, font=F(11), state="readonly",
         ).pack(side="left", padx=(0, 8))
+
+        # Subfiltro "cartão específico" — só aparece quando a forma de
+        # pagamento filtrada é Crédito (mesma lista usada no formulário
+        # de lançamento, ver _secondary_values_for).
+        self._card_filter_var = ctk.StringVar(value="Todos os cartões")
+        self._card_filter_combo = ctk.CTkComboBox(
+            bar, values=["Todos os cartões"], variable=self._card_filter_var,
+            command=lambda _=None: self.refresh(),
+            width=150, height=28, corner_radius=7,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.MUTED,
+            button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
+            dropdown_text_color=T.TEXT, font=F(11), state="readonly",
+        )
+        # não packed ainda — só aparece com Crédito selecionado
 
         self._date_filter_mode_var = ctk.StringVar(value="Todas as datas")
         ctk.CTkComboBox(
@@ -646,9 +660,23 @@ class TransactionsTab(ctk.CTkFrame):
             self._date_single_entry.pack(side="left")
         self.refresh()
 
+    def _on_method_filter_change(self) -> None:
+        if self._method_filter_var.get() == "Crédito":
+            values = ["Todos os cartões"] + [c["name"] for c in self._cards_list]
+            self._card_filter_combo.configure(values=values)
+            if self._card_filter_var.get() not in values:
+                self._card_filter_var.set("Todos os cartões")
+            self._card_filter_combo.pack(side="left", padx=(0, 8))
+        else:
+            self._card_filter_var.set("Todos os cartões")
+            self._card_filter_combo.pack_forget()
+        self.refresh()
+
     def _clear_filters(self) -> None:
         self._cat_filter_var.set("Todas as categorias")
         self._method_filter_var.set("Todas as formas")
+        self._card_filter_var.set("Todos os cartões")
+        self._card_filter_combo.pack_forget()
         self._date_filter_mode_var.set("Todas as datas")
         self._date_from_entry.delete(0, "end")
         self._date_to_entry.delete(0, "end")
@@ -995,6 +1023,11 @@ class TransactionsTab(ctk.CTkFrame):
             method_key = _LABEL_TO_METHOD_KEY.get(method_filter)
             txs = [t for t in txs if t.get("payment_method") == method_key]
 
+        card_filter = self._card_filter_var.get() if hasattr(self, "_card_filter_var") else "Todos os cartões"
+        if method_filter == "Crédito" and card_filter != "Todos os cartões":
+            card_id = next((c["id"] for c in self._cards_list if c["name"] == card_filter), None)
+            txs = [t for t in txs if t.get("card_id") == card_id]
+
         date_mode = self._date_filter_mode_var.get() if hasattr(self, "_date_filter_mode_var") else "Todas as datas"
         if date_mode == "Dia específico":
             d = _parse_filter_date(self._date_single_entry.get())
@@ -1010,7 +1043,7 @@ class TransactionsTab(ctk.CTkFrame):
 
         if hasattr(self, "_clear_filters_btn"):
             active = (cat_filter != "Todas as categorias" or method_filter != "Todas as formas"
-                      or date_mode != "Todas as datas")
+                      or card_filter != "Todos os cartões" or date_mode != "Todas as datas")
             if active:
                 self._clear_filters_btn.pack(side="left")
             else:

@@ -6,6 +6,7 @@ import type {
   CategoryTotal,
   Transaction,
   CardOverview,
+  CardInvoice,
   CardBasic,
   BenefitBasic,
   BenefitOverview,
@@ -343,6 +344,31 @@ export async function payCardBill(cardId: number, monthId: number): Promise<numb
     p_card_id: cardId,
     p_month_id: monthId,
   })
+  if (error) throw error
+  return Number(data ?? 0)
+}
+
+export async function fetchCardInvoices(cardId: number): Promise<CardInvoice[]> {
+  const { data, error } = await supabase.rpc('get_card_invoices', { p_card_id: cardId })
+  if (error) throw error
+  return (data ?? []) as CardInvoice[]
+}
+
+export async function fetchCardInvoiceTransactions(invoiceId: number): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('invoice_id', invoiceId)
+    .order('payment_date', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+// Quita faturas fechadas cujo vencimento já passou e que não foram pagas
+// manualmente — chamada uma vez por sessão (ver useCardInvoicesSettle em
+// Layout.tsx), mesmo padrão de applyAllDueRenewals pras renovações de VR/VA.
+export async function settleDueCardInvoices(): Promise<number> {
+  const { data, error } = await supabase.rpc('settle_due_card_invoices')
   if (error) throw error
   return Number(data ?? 0)
 }

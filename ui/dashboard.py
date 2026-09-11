@@ -561,10 +561,10 @@ class Dashboard(ctk.CTkScrollableFrame):
             except Exception:
                 goals = []
             try:
-                cards         = db.get_cards()
-                card_payments = db.get_card_payments(self.month_id)
+                cards    = db.get_cards()
+                overview = db.get_cards_overview(self.month_id) if cards else []
             except Exception:
-                cards, card_payments = [], []
+                cards, overview = [], []
             try:
                 all_months  = db.get_months()
                 cur_idx     = next((i for i, m in enumerate(all_months)
@@ -575,21 +575,11 @@ class Dashboard(ctk.CTkScrollableFrame):
             except Exception:
                 history, investments = [], []
             try:
-                from ui.credit_cards import _all_card_spendings
-                spendings    = _all_card_spendings(cards) if cards else {}
-                paid_by_card = {}
-                for p in card_payments:
-                    cid = p.get("card_id")
-                    if cid:
-                        paid_by_card[cid] = paid_by_card.get(cid, 0.0) + float(p["amount"])
-                total_unpaid_cards = sum(
-                    max(0.0, spendings.get(c["id"], 0.0) - paid_by_card.get(c["id"], 0.0))
-                    for c in cards
-                )
+                total_unpaid_cards = sum(float(o.get("unpaid") or 0) for o in overview)
             except Exception:
                 total_unpaid_cards = 0.0
             try:
-                card_warning = self._compute_card_warning(cards, spendings, paid_by_card, s)
+                card_warning = self._compute_card_warning(overview, s)
             except Exception:
                 card_warning = ""
             try:
@@ -685,7 +675,7 @@ class Dashboard(ctk.CTkScrollableFrame):
             if hasattr(self, "_goals_frame"):
                 self.after(0, lambda: self._draw_goals(goals))
             if hasattr(self, "_credit_frame"):
-                self.after(0, lambda cp=card_payments: self._draw_credit_panel(cards, s, cp))
+                self.after(0, lambda ov=overview: self._draw_credit_panel(cards, s, ov))
             self.after(0, lambda t=total_inv: self._update_total_inv(t))
             self.after(0, lambda t=benefit_total: self._update_benefit_balance(t))
             self.after(0, lambda t=saldo_apos_contas, w=contas_warning: self._update_saldo_apos_contas(t, w))
@@ -706,25 +696,23 @@ class Dashboard(ctk.CTkScrollableFrame):
 
         threading.Thread(target=_background, daemon=True).start()
 
-    def _compute_card_warning(self, cards: list, spendings: dict,
-                              paid_by_card: dict, s: dict) -> str:
+    def _compute_card_warning(self, overview: list, s: dict) -> str:
         """Roda em background thread. Reaproveita _credit_safety (mesma
         lógica do painel de cartões) pra achar cartões em nível vermelho,
         soma a fatura em aberto do ciclo atual de cada cartão (rotulada
         pelo mês em que o ciclo começou, mesmo critério de fechamento
         usado na tela de Cartões) e quanto o mês seguinte já tem em
         parcelas previstas."""
-        from ui.credit_cards import _days_until
         saldo = s.get("saldo", 0)
         red_cards = []
-        for c in cards:
-            limit    = float(c.get("limit") or 0)
-            spent    = spendings.get(c["id"], 0.0)
-            paid     = paid_by_card.get(c["id"], 0.0)
-            unpaid   = max(0.0, spent - paid)
-            pct_used = spent / limit if limit > 0 else 0.0
-            avail    = max(0.0, limit - spent) if limit > 0 else None
-            days_due = _days_until(c.get("due_day", 10))
+        for c in overview:
+            limit    = float(c.get("card_limit") or 0)
+            unpaid   = float(c.get("unpaid") or 0)
+            avail    = c.get("available")
+            avail    = float(avail) if avail is not None else None
+            used     = max(0.0, limit - avail) if avail is not None else float(c.get("spent") or 0)
+            pct_used = used / limit if limit > 0 else 0.0
+            days_due = int(c.get("days_until_due") or 0)
             msg, color = _credit_safety(pct_used, days_due, unpaid, saldo, avail)
             if color == T.RED:
                 red_cards.append((c["name"], msg))
@@ -1148,10 +1136,10 @@ class Dashboard(ctk.CTkScrollableFrame):
 
     # ------------------------------------------------------------------
     def _draw_credit_panel(self, cards: list, s: dict,
-                           card_payments: list = None) -> None:
+                           overview: list = None) -> None:
         if not hasattr(self, "_credit_frame"):
             return
-        from ui.credit_cards import _all_card_spendings, _days_until, _date_from_days_until
+        from ui.credit_cards import _date_from_days_until
 
         for w in self._credit_frame.winfo_children():
             w.destroy()
@@ -1164,30 +1152,25 @@ class Dashboard(ctk.CTkScrollableFrame):
             ).pack(anchor="w")
             return
 
-        saldo          = s.get("saldo", 0)
-        card_spendings = _all_card_spendings(cards)
-        paid_by_card: dict = {}
-        for p in (card_payments or []):
-            cid = p.get("card_id")
-            if cid:
-                paid_by_card[cid] = paid_by_card.get(cid, 0.0) + float(p["amount"])
+        saldo   = s.get("saldo", 0)
+        ov_by_id = {o["id"]: o for o in (overview or [])}
 
         for i, card in enumerate(cards):
             if i > 0:
                 ctk.CTkFrame(self._credit_frame, height=1,
                              fg_color=T.BORDER).pack(fill="x", pady=(10, 10))
 
+            ov          = ov_by_id.get(card["id"], {})
             color       = card.get("color", "#6C8EFF")
             limit       = float(card.get("limit") or 0)
-            due_day     = card.get("due_day", 10)
-            closing_day = card.get("closing_day", 1)
-            spent       = card_spendings.get(card["id"], 0.0)
-            paid        = paid_by_card.get(card["id"], 0.0)
-            unpaid      = max(0.0, spent - paid)
-            days_cls    = _days_until(closing_day)
-            days_due    = _days_until(due_day)
-            avail       = max(0.0, limit - spent) if limit > 0 else None
-            pct_used    = spent / limit if limit > 0 else 0.0
+            spent       = float(ov.get("spent") or 0)
+            unpaid      = float(ov.get("unpaid") or 0)
+            days_cls    = int(ov.get("days_until_closing") or 0)
+            days_due    = int(ov.get("days_until_due") or 0)
+            avail       = ov.get("available")
+            avail       = float(avail) if avail is not None else None
+            used        = max(0.0, limit - avail) if avail is not None else spent
+            pct_used    = used / limit if limit > 0 else 0.0
 
             safety_msg, safety_color = _credit_safety(
                 pct_used, days_due, unpaid, saldo, avail)
@@ -1227,25 +1210,23 @@ class Dashboard(ctk.CTkScrollableFrame):
                 fill="x", pady=(3, 0))
 
             # Status de pagamento da fatura
-            if spent > 0:
-                if paid >= spent:
-                    ctk.CTkLabel(self._credit_frame,
-                                 text=f"✓ Fatura paga ({format_currency(paid)})",
-                                 font=F(11, "bold"), text_color=T.GREEN, anchor="w").pack(
-                        fill="x", pady=(4, 0))
-                else:
-                    bill_row = ctk.CTkFrame(self._credit_frame, fg_color="transparent")
-                    bill_row.pack(fill="x", pady=(4, 0))
-                    extra = f"  •  Pago: {format_currency(paid)}" if paid > 0 else ""
-                    ctk.CTkLabel(bill_row,
-                                 text=f"Fatura em aberto: {format_currency(unpaid)}{extra}",
-                                 font=F(11), text_color=T.GOLD, anchor="w").pack(side="left")
-                    ctk.CTkButton(
-                        bill_row, text="Pagar Fatura", height=24, width=110, corner_radius=6,
-                        fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
-                        text_color="#ffffff", font=F(11, "bold"),
-                        command=lambda c=card, u=unpaid: self._pay_bill(c, u),
-                    ).pack(side="right")
+            if unpaid > 0:
+                bill_row = ctk.CTkFrame(self._credit_frame, fg_color="transparent")
+                bill_row.pack(fill="x", pady=(4, 0))
+                ctk.CTkLabel(bill_row,
+                             text=f"Fatura em aberto: {format_currency(unpaid)}",
+                             font=F(11), text_color=T.GOLD, anchor="w").pack(side="left")
+                ctk.CTkButton(
+                    bill_row, text="Pagar Fatura", height=24, width=110, corner_radius=6,
+                    fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
+                    text_color="#ffffff", font=F(11, "bold"),
+                    command=lambda c=card, u=unpaid: self._pay_bill(c, u),
+                ).pack(side="right")
+            elif spent > 0:
+                ctk.CTkLabel(self._credit_frame,
+                             text="✓ Fatura em dia",
+                             font=F(11, "bold"), text_color=T.GREEN, anchor="w").pack(
+                    fill="x", pady=(4, 0))
 
             # Barra de progresso (só se tiver limite)
             if limit > 0:
@@ -1264,8 +1245,7 @@ class Dashboard(ctk.CTkScrollableFrame):
 
         def do_pay():
             try:
-                db.settle_card_bill(card["id"], self.month_id,
-                                    card.get("closing_day", 1), card["name"])
+                db.pay_card_bill(card["id"], self.month_id)
             except Exception as e:
                 show_error(self.winfo_toplevel(), "Erro ao pagar fatura", str(e)[:200])
                 return
@@ -1277,9 +1257,10 @@ class Dashboard(ctk.CTkScrollableFrame):
             self.winfo_toplevel(),
             title="Pagar fatura?",
             message=f"A fatura de {format_currency(unpaid)} do cartão "
-                    f"{card['name']} será paga.\n\n"
-                    "Um lançamento \"Pagamento fatura cartão de crédito\" entra em\n"
-                    "Saídas Variáveis (debitando o saldo) e o cartão é zerado.",
+                    f"{card['name']} será marcada como paga.\n\n"
+                    "Os lançamentos continuam existindo (aparecem no histórico\n"
+                    "de faturas do cartão, em Saídas Variáveis) e o saldo é\n"
+                    "debitado normalmente.",
             confirm_text="Pagar fatura",
             on_confirm=do_pay,
             danger=False,

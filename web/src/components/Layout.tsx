@@ -23,7 +23,7 @@ import { Sidebar, SIDEBAR_STORAGE_KEY, getInitialSidebarCollapsed } from './Side
 import { AddMonthDialog } from './AddMonthDialog'
 import { EditMonthDialog } from './EditMonthDialog'
 import { ThemeDialog } from './ThemeDialog'
-import { applyAllDueRenewals } from '../lib/api'
+import { applyAllDueRenewals, settleDueCardInvoices } from '../lib/api'
 import { formatCurrency } from '../lib/format'
 import type { RenewalSummary } from '../lib/types'
 
@@ -118,6 +118,31 @@ function useRenewalCheck() {
   return summary
 }
 
+// Roda uma vez por sessão: quita sozinha qualquer fatura de cartão
+// fechada cujo vencimento já passou (assume paga automaticamente, ex.
+// débito automático) — mesmo padrão do useRenewalCheck acima, sem toast
+// (não é uma novidade "boa" como a renovação de VR/VA, só housekeeping).
+function useCardInvoicesSettle() {
+  const qc = useQueryClient()
+  const ranRef = useRef(false)
+
+  useEffect(() => {
+    if (ranRef.current) return
+    ranRef.current = true
+    settleDueCardInvoices()
+      .then((count) => {
+        if (count > 0) {
+          qc.invalidateQueries({ queryKey: ['cardsOverview'] })
+          qc.invalidateQueries({ queryKey: ['cardInvoices'] })
+          qc.invalidateQueries({ queryKey: ['transactions'] })
+          qc.invalidateQueries({ queryKey: ['futureCommitments'] })
+          qc.invalidateQueries({ queryKey: ['summary'] })
+        }
+      })
+      .catch(() => {})
+  }, [qc])
+}
+
 function RenewalToast({ summary, onDismiss }: { summary: RenewalSummary[]; onDismiss: () => void }) {
   useEffect(() => {
     const t = setTimeout(onDismiss, 6000)
@@ -151,6 +176,7 @@ export function Layout() {
   const { months, selected, setSelectedId } = useMonths()
   const qc = useQueryClient()
   const renewalSummary = useRenewalCheck()
+  useCardInvoicesSettle()
   const [showToast, setShowToast] = useState(true)
   const [showTheme, setShowTheme] = useState(false)
   const [showAddMonth, setShowAddMonth] = useState(false)

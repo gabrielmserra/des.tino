@@ -64,6 +64,9 @@ Para cada lançamento:
 - **[Web]** Filtro de ordenação na tela de Lançamentos: mais recentes ↔ mais
   antigos primeiro, **pela data real do pagamento** (não pela data em que
   foi importado/cadastrado).
+- **[Ambas]** Filtro por forma de pagamento — quando "Crédito" é escolhido,
+  aparece um subfiltro pra restringir a um cartão específico ("Todos" ou
+  o nome de cada cartão cadastrado).
 - **[Ambas]** Percentual de cartão de crédito por lançamento (ver
   [Cartões](#4-cartões-débito-crédito-e-benefícios)).
 
@@ -78,10 +81,23 @@ Para cada lançamento:
   as parcelas de meses futuros entram como **previstas** (reaproveita o
   mesmo mecanismo de "previsto"/confirmação usado no resto do app) — os
   meses futuros necessários são criados automaticamente. Na lista de
-  lançamentos, uma parcela aparece como "🧾 descrição (N/M)". Pagar a
-  fatura do mês continua funcionando normalmente: só consolida a parcela
-  daquele mês específico, as futuras ficam intactas.
-- **[Ambas]** "Situação dos cartões" — acompanhamento de fatura por cartão.
+  lançamentos, uma parcela aparece como "🧾 descrição (N/M)".
+- **[Ambas]** "Situação dos cartões" — acompanhamento de fatura por cartão:
+  gasto no ciclo aberto (ainda acumulando), fatura fechada aguardando
+  pagamento (mostra o valor real até ser resolvida — não zera sozinha só
+  porque um novo ciclo começou) e disponível (limite menos tudo que ainda
+  não foi pago, ciclo aberto + fatura fechada).
+- **[Ambas]** "Pagar Fatura" **marca** a fatura fechada como paga (fica
+  registrada no histórico com todos os lançamentos originais intactos —
+  eles continuam existindo e aparecendo normalmente em Lançamentos) em
+  vez de apagar e consolidar tudo numa única linha. Se a fatura não for
+  paga manualmente até a data de vencimento, é quitada sozinha
+  automaticamente (assume paga, ex. débito automático) — verificado uma
+  vez a cada abertura do app/site.
+- **[Ambas]** Histórico de faturas por cartão — lista as faturas já
+  fechadas e resolvidas (pagas ou vencidas automaticamente), com período,
+  total e data; cada fatura pode ser expandida pra ver os lançamentos que
+  a compõem.
 - **[Ambas]** Saldo de benefícios (VR/VA) com controle de uso separado do
   saldo em conta.
 - **[Web]** Tela dedicada "Cartões" (`/cartoes`) reúne cartões de

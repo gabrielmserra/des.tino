@@ -11,6 +11,7 @@ import { Skeleton } from '../components/Skeleton'
 import { CardForm } from '../components/CardForm'
 import { BenefitForm } from '../components/BenefitForm'
 import { CardPurchaseForm } from '../components/CardPurchaseForm'
+import { CardInvoiceHistory } from '../components/CardInvoiceHistory'
 import type { CardOverview, BenefitOverview } from '../lib/types'
 
 export function safetyMessage(c: CardOverview): { text: string; color: string } {
@@ -43,6 +44,7 @@ export function Cards() {
   const [creditForm, setCreditForm] = useState<CardOverview | 'new' | null>(null)
   const [benefitForm, setBenefitForm] = useState<BenefitOverview | 'new' | null>(null)
   const [purchaseForm, setPurchaseForm] = useState<CardOverview | null>(null)
+  const [historyCard, setHistoryCard] = useState<CardOverview | null>(null)
 
   const [payBusy, setPayBusy] = useState<number | null>(null)
   const [payError, setPayError] = useState('')
@@ -194,10 +196,18 @@ export function Cards() {
 
                     <button
                       onClick={() => setPurchaseForm(c)}
-                      className="w-full rounded-lg border py-2.5 text-sm font-bold"
+                      className="mb-2 w-full rounded-lg border py-2.5 text-sm font-bold"
                       style={{ borderColor: 'var(--border-l)', color: 'var(--text)' }}
                     >
                       🧾 Compra parcelada
+                    </button>
+
+                    <button
+                      onClick={() => setHistoryCard(c)}
+                      className="w-full text-center text-xs font-semibold"
+                      style={{ color: 'var(--muted)' }}
+                    >
+                      📜 Histórico de faturas
                     </button>
                   </div>
                 )
@@ -302,6 +312,9 @@ export function Cards() {
       )}
       {purchaseForm !== null && (
         <CardPurchaseForm card={purchaseForm} onClose={() => setPurchaseForm(null)} />
+      )}
+      {historyCard !== null && (
+        <CardInvoiceHistory card={historyCard} onClose={() => setHistoryCard(null)} />
       )}
     </div>
   )

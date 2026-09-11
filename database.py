@@ -267,8 +267,9 @@ def get_month_summary(month_id: int) -> Dict[str, float]:
         amt = float(row["amount"] or 0)
         if t not in real:
             continue
-        # Compras no cartão não afetam o saldo — só debitam quando a fatura é paga
-        if row.get("card_id") and t == "saida_variavel":
+        # Compras no cartão não afetam o saldo até a fatura ser paga (ou
+        # vencer) — a partir daí (invoice_id setado) já são saída real.
+        if row.get("card_id") and t == "saida_variavel" and not row.get("invoice_id"):
             continue
         # Gastos com VR/VA saem do saldo carimbado, não do caixa do mês
         if row.get("benefit_id") and t in ("saida_fixa", "saida_variavel"):
@@ -279,11 +280,8 @@ def get_month_summary(month_id: int) -> Dict[str, float]:
         else:
             real[t] += amt
 
-    # Pagamentos de fatura são saídas reais do mês em que foram registrados
-    bill_total = sum(float(p["amount"]) for p in get_card_payments(month_id))
-
     total_entradas      = real["entrada_fixa"] + real["entrada_variavel"]
-    total_saidas        = real["saida_fixa"]   + real["saida_variavel"] + bill_total
+    total_saidas        = real["saida_fixa"]   + real["saida_variavel"]
     total_investimentos = get_month_investment_net(month_id)
     # Investimentos não descontam o saldo — ficam só como informativo
     # (aportar pela aba Investimentos não é a mesma coisa que gastar).
@@ -316,7 +314,7 @@ def _month_real_flow(month_id: int) -> tuple:
         t = row["type"]
         if t not in ("entrada_fixa", "entrada_variavel", "saida_fixa", "saida_variavel"):
             continue
-        if row.get("card_id") and t == "saida_variavel":
+        if row.get("card_id") and t == "saida_variavel" and not row.get("invoice_id"):
             continue
         if row.get("benefit_id") and t in ("saida_fixa", "saida_variavel"):
             continue
@@ -327,8 +325,6 @@ def _month_real_flow(month_id: int) -> tuple:
             entradas += amt
         else:
             saidas += amt
-    bill_total = sum(float(p["amount"]) for p in get_card_payments(month_id))
-    saidas += bill_total
     return entradas, saidas
 
 
@@ -805,92 +801,53 @@ def get_card_transactions_since(card_ids: List[int]) -> List[dict]:
     return resp.data or []
 
 
-def get_card_payments(month_id: int) -> List[dict]:
-    """Retorna os pagamentos de fatura registrados no mês."""
-    if month_id not in _bill_cache:
-        resp = get_client().table("credit_card_payments") \
-            .select("*") \
-            .eq("month_id", month_id) \
-            .execute()
-        _bill_cache[month_id] = resp.data or []
-    return list(_bill_cache[month_id])
+def get_cards_overview(month_id: int) -> List[dict]:
+    """Gasto/disponível/dias até fechar-vencer por cartão, calculado no
+    banco (get_cards_overview) — fonte única de verdade compartilhada com
+    o site, evita reimplementar (e divergir de novo) a lógica de ciclo de
+    fatura aqui."""
+    resp = get_client().rpc("get_cards_overview", {"p_month_id": month_id}).execute()
+    return resp.data or []
 
 
-def pay_card_bill(card_id: int, month_id: int, amount: float, note: str = "") -> None:
-    """Registra o pagamento de uma fatura de cartão."""
-    client  = get_client()
-    user_id = client.auth.get_user().user.id
-    client.table("credit_card_payments").insert({
-        "card_id":  card_id,
-        "month_id": month_id,
-        "amount":   amount,
-        "note":     note or None,
-        "user_id":  user_id,
+def pay_card_bill(card_id: int, month_id: int) -> float:
+    """Paga a fatura fechada do cartão: marca as transações do ciclo como
+    faturadas (invoice_id) em vez de apagá-las — elas continuam existindo
+    e aparecem no histórico de faturas. Retorna o valor pago (0.0 se não
+    havia fatura em aberto)."""
+    resp = get_client().rpc("pay_card_bill", {
+        "p_card_id": card_id, "p_month_id": month_id,
     }).execute()
-    _bill_cache.pop(month_id, None)
+    _invalidate(month_id)
+    return float(resp.data or 0)
 
 
-def _card_cycle_start(closing_day: int):
-    """Início do ciclo de faturamento atual (réplica de ui.credit_cards._cycle_start)."""
-    import calendar
-    from datetime import date
-    today = date.today()
-    if today.day >= closing_day:
-        try:
-            return date(today.year, today.month, closing_day)
-        except ValueError:
-            return date(today.year, today.month, 1)
-    if today.month == 1:
-        y, m = today.year - 1, 12
-    else:
-        y, m = today.year, today.month - 1
-    max_day = calendar.monthrange(y, m)[1]
-    return date(y, m, min(closing_day, max_day))
+def settle_due_card_invoices() -> int:
+    """Quita sozinha qualquer fatura fechada cujo vencimento já passou e
+    que não foi paga manualmente — chamada uma vez por sessão (mesmo
+    padrão de apply_due_renewals pras renovações de VR/VA). Retorna
+    quantos cartões foram quitados."""
+    resp = get_client().rpc("settle_due_card_invoices").execute()
+    count = int(resp.data or 0)
+    if count > 0:
+        _tx_cache.clear()
+    return count
 
 
-def settle_card_bill(card_id: int, month_id: int, closing_day: int,
-                     card_name: str) -> float:
-    """Quita a fatura: soma as compras reais do ciclo, exclui esses lançamentos
-    e cria uma única saída 'Pagamento fatura cartão de crédito' que debita o
-    saldo. Retorna o valor pago (0.0 se não havia fatura em aberto)."""
-    from datetime import date
-    client  = get_client()
-    user_id = client.auth.get_user().user.id
-    start   = _card_cycle_start(closing_day)
+def get_card_invoices(card_id: int) -> List[dict]:
+    """Histórico de faturas já resolvidas (pagas ou vencidas) de um cartão."""
+    resp = get_client().rpc("get_card_invoices", {"p_card_id": card_id}).execute()
+    return resp.data or []
 
-    to_settle = []
-    for tx in get_card_transactions_since([card_id]):
-        if tx.get("is_expectation"):
-            continue
-        raw = str(tx.get("created_at") or "")[:10]
-        try:
-            if date.fromisoformat(raw) >= start:
-                to_settle.append(tx)
-        except ValueError:
-            to_settle.append(tx)
 
-    total = sum(float(t["amount"] or 0) for t in to_settle)
-    if total <= 0:
-        return 0.0
-
-    affected_months = {month_id}
-    for t in to_settle:
-        client.table("transactions").delete().eq("id", t["id"]).execute()
-        if t.get("month_id"):
-            affected_months.add(t["month_id"])
-
-    client.table("transactions").insert({
-        "month_id":    month_id,
-        "user_id":     user_id,
-        "type":        "saida_variavel",
-        "description": f"Pagamento fatura cartão de crédito — {card_name}",
-        "amount":      total,
-        "category":    "Outros",
-    }).execute()
-
-    for m in affected_months:
-        _invalidate(m)
-    return total
+def get_card_invoice_transactions(invoice_id: int) -> List[dict]:
+    """Lançamentos que compõem uma fatura específica do histórico."""
+    resp = get_client().table("transactions") \
+        .select("*") \
+        .eq("invoice_id", invoice_id) \
+        .order("payment_date", desc=True) \
+        .execute()
+    return resp.data or []
 
 
 # ---------------------------------------------------------------------------

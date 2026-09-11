@@ -68,6 +68,7 @@ export function Transactions() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('recentes')
   const [categoryFilter, setCategoryFilter] = useState<string>('')
   const [methodFilter, setMethodFilter] = useState<string>('')
+  const [cardFilter, setCardFilter] = useState<string>('')
   const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('todas')
   const [dateFrom, setDateFrom] = useState<string>('')
   const [dateTo, setDateTo] = useState<string>('')
@@ -85,7 +86,7 @@ export function Transactions() {
 
   const all = data ?? []
   const hasActiveFilters =
-    filter !== 'todos' || categoryFilter !== '' || methodFilter !== '' || dateFilterMode !== 'todas'
+    filter !== 'todos' || categoryFilter !== '' || methodFilter !== '' || cardFilter !== '' || dateFilterMode !== 'todas'
   const txs = all
     .filter((t) => {
       if (filter === 'entradas') return IS_INCOME[t.type]
@@ -94,6 +95,7 @@ export function Transactions() {
     })
     .filter((t) => !categoryFilter || (t.category || 'Outros') === categoryFilter)
     .filter((t) => !methodFilter || t.payment_method === methodFilter)
+    .filter((t) => !cardFilter || t.card_id === Number(cardFilter))
     .filter((t) => {
       if (dateFilterMode === 'dia') return !dateSingle || txDate(t) === dateSingle
       if (dateFilterMode === 'periodo') {
@@ -186,7 +188,10 @@ export function Transactions() {
         </select>
         <select
           value={methodFilter}
-          onChange={(e) => setMethodFilter(e.target.value)}
+          onChange={(e) => {
+            setMethodFilter(e.target.value)
+            if (e.target.value !== 'credito') setCardFilter('')
+          }}
           className="rounded-lg border px-2.5 py-1.5 text-xs font-semibold outline-none"
           style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
         >
@@ -195,6 +200,19 @@ export function Transactions() {
             <option key={k} value={k}>{label}</option>
           ))}
         </select>
+        {methodFilter === 'credito' && (
+          <select
+            value={cardFilter}
+            onChange={(e) => setCardFilter(e.target.value)}
+            className="rounded-lg border px-2.5 py-1.5 text-xs font-semibold outline-none"
+            style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+          >
+            <option value="">Todos os cartões</option>
+            {(cardsQ.data ?? []).map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        )}
         <select
           value={dateFilterMode}
           onChange={(e) => setDateFilterMode(e.target.value as DateFilterMode)}
@@ -244,6 +262,7 @@ export function Transactions() {
               setFilter('todos')
               setCategoryFilter('')
               setMethodFilter('')
+              setCardFilter('')
               setDateFilterMode('todas')
               setDateFrom('')
               setDateTo('')

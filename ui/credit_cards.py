@@ -1,6 +1,5 @@
 """Presets de cartão de crédito — barra usada dentro de Saídas Variáveis."""
 import threading
-import calendar
 from datetime import date, datetime
 from typing import Callable, List, Optional
 
@@ -17,18 +16,6 @@ CARD_COLORS = [
 ]
 
 
-def _days_until(target_day: int) -> int:
-    today = date.today()
-    if today.day <= target_day:
-        return target_day - today.day
-    if today.month == 12:
-        nxt = date(today.year + 1, 1, min(target_day, 31))
-    else:
-        max_day = calendar.monthrange(today.year, today.month + 1)[1]
-        nxt = date(today.year, today.month + 1, min(target_day, max_day))
-    return (nxt - today).days
-
-
 def _date_from_days_until(days_until: int) -> str:
     """Data real (DD/MM) a partir de 'daqui a N dias' — pra mostrar a data
     de fechamento/vencimento de fatura em vez de só 'em Nd'."""
@@ -39,64 +26,6 @@ def _date_from_days_until(days_until: int) -> str:
 
 def _best_buy_day(closing_day: int) -> int:
     return (closing_day % 28) + 1
-
-
-def _cycle_start(closing_day: int) -> date:
-    """Data de início do ciclo atual de faturamento."""
-    today = date.today()
-    if today.day >= closing_day:
-        try:
-            return date(today.year, today.month, closing_day)
-        except ValueError:
-            return date(today.year, today.month, 1)
-    # Ciclo começou no mês passado
-    if today.month == 1:
-        y, m = today.year - 1, 12
-    else:
-        y, m = today.year, today.month - 1
-    max_day = calendar.monthrange(y, m)[1]
-    return date(y, m, min(closing_day, max_day))
-
-
-def _card_spending(card_id: int, closing_day: int) -> float:
-    """Soma dos gastos deste cartão desde o início do ciclo atual — o
-    ciclo de fatura é independente do mês do app (month_id), então olha
-    todas as compras do cartão em qualquer mês."""
-    start = _cycle_start(closing_day)
-    txs   = db.get_card_transactions_since([card_id])
-    total = 0.0
-    for tx in txs:
-        raw = str(tx.get("created_at") or "")[:10]
-        try:
-            tx_date = date.fromisoformat(raw)
-            if tx_date >= start:
-                total += float(tx["amount"])
-        except ValueError:
-            total += float(tx["amount"])
-    return total
-
-
-def _all_card_spendings(cards: list) -> dict:
-    """Calcula gastos de todos os cartões em uma única passagem — O(n+m) em vez de O(n×m)."""
-    if not cards:
-        return {}
-    cycle_starts = {c["id"]: _cycle_start(c.get("closing_day", 1)) for c in cards}
-    card_ids     = list(cycle_starts)
-    totals       = {cid: 0.0 for cid in card_ids}
-
-    for tx in db.get_card_transactions_since(card_ids):
-        cid   = tx.get("card_id")
-        if cid not in cycle_starts:
-            continue
-        start = cycle_starts[cid]
-        raw   = str(tx.get("created_at") or "")[:10]
-        try:
-            if date.fromisoformat(raw) >= start:
-                totals[cid] += float(tx["amount"])
-        except ValueError:
-            totals[cid] += float(tx["amount"])
-
-    return totals
 
 
 class CardPresetsBar(ctk.CTkFrame):
@@ -157,17 +86,13 @@ class CardPresetsBar(ctk.CTkFrame):
     def refresh(self) -> None:
         def _fetch():
             cards    = db.get_cards()
-            payments = db.get_card_payments(self.month_id)
-            self.after(0, lambda: self._render(cards, payments))
+            overview = {o["id"]: o for o in db.get_cards_overview(self.month_id)}
+            self.after(0, lambda: self._render(cards, overview))
         threading.Thread(target=_fetch, daemon=True).start()
 
-    def _render(self, cards: List[dict], payments: List[dict] = None) -> None:
+    def _render(self, cards: List[dict], overview: dict = None) -> None:
         self._cards = cards
-        paid_by_card: dict = {}
-        for p in (payments or []):
-            cid = p.get("card_id")
-            if cid:
-                paid_by_card[cid] = paid_by_card.get(cid, 0.0) + float(p["amount"])
+        overview = overview or {}
 
         for w in self._chips_frame.winfo_children():
             w.destroy()
@@ -180,22 +105,24 @@ class CardPresetsBar(ctk.CTkFrame):
             ).pack(pady=8, padx=8)
         else:
             for card in cards:
-                self._make_chip(card, paid_by_card.get(card["id"], 0.0))
+                self._make_chip(card, overview.get(card["id"]))
 
         self.on_cards_changed(cards)
 
-    def _make_chip(self, card: dict, paid: float = 0.0) -> None:
+    def _make_chip(self, card: dict, ov: dict = None) -> None:
         from utils.helpers import format_currency
+        ov         = ov or {}
         color      = card.get("color", "#6C8EFF")
         closing    = card.get("closing_day", 1)
         due        = card.get("due_day", 10)
         limit      = float(card.get("limit") or 0)
         best       = _best_buy_day(closing)
-        days_cls   = _days_until(closing)
-        spent      = _card_spending(card["id"], closing)
-        avail      = max(0.0, limit - spent) if limit > 0 else None
-        cycle_open = date.today().day < closing
-        unpaid     = max(0.0, spent - paid)
+        days_cls   = int(ov.get("days_until_closing") or 0)
+        spent      = float(ov.get("spent") or 0)
+        avail      = ov.get("available")
+        avail      = float(avail) if avail is not None else None
+        cycle_open = bool(ov.get("cycle_open", True))
+        unpaid     = float(ov.get("unpaid") or 0)
 
         chip = ctk.CTkFrame(self._chips_frame, fg_color=T.CARD, corner_radius=10,
                             border_width=1, border_color=T.BORDER_L)
@@ -253,22 +180,20 @@ class CardPresetsBar(ctk.CTkFrame):
                      text_color=color, anchor="w", width=180).pack(anchor="w")
 
         # Status de pagamento
-        if spent > 0:
-            if paid >= spent:
-                ctk.CTkLabel(body, text=f"✓ Fatura paga ({format_currency(paid)})",
-                             font=F(11, "bold"), text_color=T.GREEN,
-                             anchor="w", width=180).pack(anchor="w", pady=(3, 0))
-            else:
-                extra = f"  •  Pago: {format_currency(paid)}" if paid > 0 else ""
-                ctk.CTkLabel(body, text=f"Em aberto: {format_currency(unpaid)}{extra}",
-                             font=F(11), text_color=T.GOLD,
-                             anchor="w", width=180).pack(anchor="w", pady=(3, 0))
-                ctk.CTkButton(
-                    body, text="Pagar Fatura", height=28, corner_radius=7,
-                    fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
-                    text_color="#ffffff", font=F(11, "bold"), width=180,
-                    command=lambda c=card, u=unpaid: self._pay_bill(c, u),
-                ).pack(anchor="w", pady=(4, 0))
+        if unpaid > 0:
+            ctk.CTkLabel(body, text=f"Em aberto: {format_currency(unpaid)}",
+                         font=F(11), text_color=T.GOLD,
+                         anchor="w", width=180).pack(anchor="w", pady=(3, 0))
+            ctk.CTkButton(
+                body, text="Pagar Fatura", height=28, corner_radius=7,
+                fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
+                text_color="#ffffff", font=F(11, "bold"), width=180,
+                command=lambda c=card, u=unpaid: self._pay_bill(c, u),
+            ).pack(anchor="w", pady=(4, 0))
+        elif spent > 0:
+            ctk.CTkLabel(body, text="✓ Fatura em dia",
+                         font=F(11, "bold"), text_color=T.GREEN,
+                         anchor="w", width=180).pack(anchor="w", pady=(3, 0))
 
         # Disponível
         if avail is not None:
@@ -276,9 +201,19 @@ class CardPresetsBar(ctk.CTkFrame):
                          font=F(11), text_color=T.MUTED,
                          anchor="w", width=180).pack(anchor="w", pady=(1, 0))
 
-        # Barra de progresso
+        # Histórico de faturas
+        ctk.CTkButton(
+            body, text="📜 Histórico de faturas", height=24, corner_radius=6,
+            fg_color="transparent", hover_color=T.CARD2,
+            border_width=1, border_color=T.BORDER_L,
+            text_color=T.MUTED, font=F(10), width=180,
+            command=lambda c=card: self._show_history(c),
+        ).pack(anchor="w", pady=(6, 0))
+
+        # Barra de progresso (limite total usado: ciclo aberto + fatura em aberto)
         if limit > 0:
-            pct    = min(spent / limit, 1.0)
+            used   = max(0.0, limit - avail) if avail is not None else spent
+            pct    = min(used / limit, 1.0)
             bar_bg = ctk.CTkFrame(body, height=5, fg_color=T.BORDER,
                                   corner_radius=3, width=180)
             bar_bg.pack(anchor="w", pady=(4, 0))
@@ -296,8 +231,7 @@ class CardPresetsBar(ctk.CTkFrame):
 
         def do_pay():
             try:
-                db.settle_card_bill(card["id"], self.month_id,
-                                    card.get("closing_day", 1), card["name"])
+                db.pay_card_bill(card["id"], self.month_id)
             except Exception as e:
                 show_error(self.winfo_toplevel(), "Erro ao pagar fatura", str(e)[:200])
                 return
@@ -307,13 +241,16 @@ class CardPresetsBar(ctk.CTkFrame):
             self.winfo_toplevel(),
             title="Pagar fatura?",
             message=f"A fatura de {format_currency(unpaid)} do cartão "
-                    f"{card['name']} será paga.\n\n"
-                    "Um lançamento \"Pagamento fatura cartão de crédito\" entra em\n"
-                    "Saídas Variáveis (debitando o saldo) e o cartão é zerado.",
+                    f"{card['name']} será marcada como paga.\n\n"
+                    "Os lançamentos continuam existindo (aparecem no histórico\n"
+                    "de faturas do cartão) e o saldo é debitado normalmente.",
             confirm_text="Pagar fatura",
             on_confirm=do_pay,
             danger=False,
         )
+
+    def _show_history(self, card: dict) -> None:
+        _CardInvoiceHistoryDialog(self.winfo_toplevel(), card)
 
     def _add_card(self) -> None:
         dlg = _CardDialog(self)
@@ -425,6 +362,132 @@ class _PayBillDialog(ctk.CTkToplevel):
             return
         self.result = {"amount": amount, "note": self._note.get().strip()}
         self.destroy()
+
+
+# ---------------------------------------------------------------------------
+
+class _CardInvoiceHistoryDialog(ctk.CTkToplevel):
+    """Lista as faturas já resolvidas (pagas ou vencidas) de um cartão —
+    cada linha pode expandir e mostrar os lançamentos reais daquela
+    fatura (não foram apagados/consolidados, só marcados com invoice_id)."""
+
+    def __init__(self, parent, card: dict):
+        super().__init__(parent)
+        self.title(f"Histórico de faturas — {card['name']}")
+        self.resizable(False, False)
+        self.grab_set()
+        apply_app_icon(self)
+        self._card = card
+        ctk.CTkLabel(self, text="Carregando…", font=F(12), text_color=T.MUTED).pack(pady=40, padx=40)
+        self.after(100, self._center)
+        threading.Thread(target=self._load, daemon=True).start()
+
+    def _center(self) -> None:
+        self.update_idletasks()
+        w, h = 440, 520
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        self.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
+
+    def _load(self) -> None:
+        try:
+            invoices = db.get_card_invoices(self._card["id"])
+        except Exception:
+            invoices = []
+        self.after(0, lambda: self._build(invoices))
+
+    def _build(self, invoices: list) -> None:
+        for w in self.winfo_children():
+            w.destroy()
+
+        ctk.CTkLabel(self, text=f"Histórico de faturas — {self._card['name']}",
+                     font=F(14, "bold"), text_color=T.TEXT, anchor="w",
+                     wraplength=400).pack(fill="x", padx=20, pady=(20, 10))
+
+        if not invoices:
+            ctk.CTkLabel(self, text="Nenhuma fatura fechada e paga (ou vencida) ainda.",
+                         font=F(12), text_color=T.MUTED, wraplength=380).pack(pady=20, padx=20)
+            return
+
+        box = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        box.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+        box.grid_columnconfigure(0, weight=1)
+
+        for i, inv in enumerate(invoices):
+            self._make_invoice_row(box, i, inv)
+
+    def _make_invoice_row(self, box, i: int, inv: dict) -> None:
+        from utils.helpers import format_currency, format_date_br
+
+        row = ctk.CTkFrame(box, fg_color=T.CARD2, corner_radius=8)
+        row.grid(row=i, column=0, sticky="ew", pady=4)
+
+        cs = date.fromisoformat(str(inv["cycle_start"])[:10])
+        dd = date.fromisoformat(str(inv["due_date"])[:10])
+
+        top = ctk.CTkFrame(row, fg_color="transparent")
+        top.pack(fill="x", padx=12, pady=(10, 2))
+        ctk.CTkLabel(top, text=f"{format_date_br(cs)} — {format_date_br(dd)}",
+                     font=F(12, "bold"), text_color=T.TEXT, anchor="w").pack(side="left")
+        ctk.CTkLabel(top, text=format_currency(float(inv["total"])),
+                     font=F(12, "bold"), text_color=T.TEXT, anchor="e").pack(side="right")
+
+        paid_raw = str(inv.get("paid_at") or "")[:10]
+        try:
+            paid_label = format_date_br(date.fromisoformat(paid_raw)) if paid_raw else "—"
+        except ValueError:
+            paid_label = "—"
+        status = (f"Vencida automaticamente em {paid_label}" if inv.get("auto_settled")
+                  else f"Paga em {paid_label}")
+        ctk.CTkLabel(row, text=status, font=F(10), text_color=T.MUTED, anchor="w").pack(
+            fill="x", padx=12, pady=(0, 6))
+
+        items_box = ctk.CTkFrame(row, fg_color="transparent")
+
+        def _toggle(inv_id=inv["id"]):
+            if items_box.winfo_ismapped():
+                items_box.pack_forget()
+                return
+            items_box.pack(fill="x", padx=12, pady=(0, 10))
+            for w in items_box.winfo_children():
+                w.destroy()
+            ctk.CTkLabel(items_box, text="Carregando…", font=F(10), text_color=T.MUTED).pack(anchor="w")
+
+            def _work():
+                try:
+                    txs = db.get_card_invoice_transactions(inv_id)
+                except Exception:
+                    txs = []
+                self.after(0, lambda: _fill(txs))
+
+            def _fill(txs):
+                for w in items_box.winfo_children():
+                    w.destroy()
+                if not txs:
+                    ctk.CTkLabel(items_box, text="Nenhum lançamento encontrado.",
+                                 font=F(10), text_color=T.MUTED).pack(anchor="w")
+                    return
+                for t in txs:
+                    pd_raw = str(t.get("payment_date") or "")[:10]
+                    try:
+                        pd_label = format_date_br(date.fromisoformat(pd_raw)) if pd_raw else ""
+                    except ValueError:
+                        pd_label = ""
+                    line = ctk.CTkFrame(items_box, fg_color="transparent")
+                    line.pack(fill="x", pady=1)
+                    ctk.CTkLabel(line, text=t.get("description", ""), font=F(10),
+                                 text_color=T.TEXT, anchor="w").pack(side="left")
+                    ctk.CTkLabel(line, text=f"{pd_label}  {format_currency(float(t.get('amount') or 0))}",
+                                 font=F(10), text_color=T.MUTED, anchor="e").pack(side="right")
+
+            threading.Thread(target=_work, daemon=True).start()
+
+        ctk.CTkButton(
+            row, text="Ver lançamentos", height=22, corner_radius=6,
+            fg_color="transparent", hover_color=T.BORDER_L,
+            border_width=1, border_color=T.BORDER_L,
+            text_color=T.MUTED, font=F(10),
+            command=_toggle,
+        ).pack(anchor="w", padx=12, pady=(0, 10))
 
 
 # ---------------------------------------------------------------------------
