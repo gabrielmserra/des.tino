@@ -491,7 +491,8 @@ function CartoesSituacaoWidget() {
                 )}
 
                 <p className="mb-2 text-[11px]" style={{ color: 'var(--muted)' }}>
-                  Fecha {dateFromDaysUntil(c.days_until_closing)} · Vence {dateFromDaysUntil(c.days_until_due)}
+                  Fecha {dateFromDaysUntil(c.days_until_closing)}
+                  {c.unpaid > 0 ? ` · Vence ${dateFromDaysUntil(c.days_until_due)}` : ''}
                 </p>
 
                 {c.unpaid > 0 ? (

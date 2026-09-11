@@ -165,8 +165,13 @@ class CardPresetsBar(ctk.CTkFrame):
         ctk.CTkLabel(body, text=sub, font=F(11), text_color=sub_col,
                      anchor="w", width=180).pack(anchor="w", pady=(2, 0))
 
-        # Melhor dia + vencimento
-        ctk.CTkLabel(body, text=f"Melhor dia: {best}  •  Vence dia {due}",
+        # Melhor dia + vencimento (só mostra "Vence dia" se tiver algo
+        # pendente — senão fica parecendo que ainda tem fatura aberta
+        # mesmo já paga)
+        info_txt = f"Melhor dia: {best}"
+        if unpaid > 0:
+            info_txt += f"  •  Vence dia {due}"
+        ctk.CTkLabel(body, text=info_txt,
                      font=F(10), text_color=T.MUTED,
                      anchor="w", width=180).pack(anchor="w", pady=(1, 0))
 

@@ -1200,10 +1200,9 @@ class Dashboard(ctk.CTkScrollableFrame):
                     info_parts.append(f"Disponível: {format_currency(avail)}")
             else:
                 info_parts = [f"Gasto: {format_currency(spent)}"]
-            info_parts += [
-                f"Fecha {_date_from_days_until(days_cls)}",
-                f"Vence {_date_from_days_until(days_due)}",
-            ]
+            info_parts.append(f"Fecha {_date_from_days_until(days_cls)}")
+            if unpaid > 0:
+                info_parts.append(f"Vence {_date_from_days_until(days_due)}")
             ctk.CTkLabel(self._credit_frame,
                          text="  •  ".join(info_parts),
                          font=F(11), text_color=T.MUTED, anchor="w").pack(
