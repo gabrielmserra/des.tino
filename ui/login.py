@@ -116,7 +116,13 @@ class LoginFrame(ctk.CTkFrame):
         mid = ctk.CTkFrame(content, fg_color="transparent")
         mid.grid(row=1, column=0, sticky="nsew", padx=56)
         mid_inner = ctk.CTkFrame(mid, fg_color="transparent")
-        mid_inner.place(relx=0, rely=0.5, anchor="w")
+        # Antes de haver ilustração, mid_inner centralizava em toda a
+        # altura de `mid` (rely=0.5). Agora `mid` cresce até o fundo da
+        # janela pra sobrar espaço pra ilustração embaixo, então o texto
+        # ganha um deslocamento fixo pra cima (y=-59) só pra manter a
+        # posição visual de sempre — sem esse ajuste ele desceria pro
+        # centro do espaço todo (texto + ilustração).
+        mid_inner.place(relx=0, rely=0.5, y=-59, anchor="w")
         for text, bold in title_lines:
             ctk.CTkLabel(
                 mid_inner, text=text, font=F(28, "bold" if bold else "normal"),
@@ -128,9 +134,21 @@ class LoginFrame(ctk.CTkFrame):
         ).pack(anchor="w", pady=(16, 0))
 
         if show_route:
-            route = tk.Canvas(content, width=280, height=70, bg=T.SIDEBAR, highlightthickness=0)
-            route.grid(row=2, column=0, sticky="sw", padx=56, pady=(0, 48))
+            route = tk.Canvas(mid, width=280, height=70, bg=T.SIDEBAR, highlightthickness=0)
             self._draw_route(route)
+
+            def _position_route(_event=None):
+                if not route.winfo_exists() or not mid_inner.winfo_exists():
+                    return
+                mid.update_idletasks()
+                mid_h = mid.winfo_height()
+                text_bottom = mid_inner.winfo_y() + mid_inner.winfo_height()
+                route_h = 70
+                y = text_bottom + max(0, (mid_h - text_bottom - route_h) // 2)
+                route.place(x=0, y=y)
+
+            mid.bind("<Configure>", lambda _e: mid.after(30, _position_route))
+            mid.after(60, _position_route)
 
         panel.after(30, _redraw_glow)
         return panel
