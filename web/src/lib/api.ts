@@ -260,6 +260,7 @@ export async function updateTransaction(id: number, tx: TxInput): Promise<void> 
     p_payment_method: tx.payment_method ?? null,
     p_payment_date: tx.payment_date ?? null,
     p_payment_time: tx.payment_time ?? null,
+    p_type: tx.type,
   })
   if (error) throw error
 }
