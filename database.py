@@ -107,6 +107,7 @@ def add_transaction(
     imported: bool = False,
     payment_time: Optional[time] = None,
     import_raw: Optional[str] = None,
+    is_investment_movement: bool = False,
 ) -> None:
     client  = get_client()
     user_id = client.auth.get_user().user.id
@@ -119,6 +120,7 @@ def add_transaction(
         "category":       category,
         "is_expectation": is_expectation,
         "imported":       imported,
+        "is_investment_movement": is_investment_movement,
     }
     if import_raw is not None:
         row["import_raw"] = import_raw
@@ -210,6 +212,7 @@ def import_transactions_bulk(rows: List[dict]) -> None:
             payment_time=r.get("payment_time"),
             imported=True,
             import_raw=r.get("import_raw"),
+            is_investment_movement=bool(r.get("is_investment_movement")),
         )
 
 
@@ -257,7 +260,18 @@ def get_total_investments() -> float:
 def get_month_summary(month_id: int) -> Dict[str, float]:
     rows = get_transactions(month_id)
 
-    real: Dict[str, float] = {
+    # "Exibição" (cards Entradas/Saídas, e tudo derivado deles pra análise —
+    # ex. Guru Financeiro): pula aporte/resgate de investimento
+    # (is_investment_movement) — é dinheiro que só mudou de lugar, não
+    # renda nem gasto de verdade.
+    display: Dict[str, float] = {
+        "entrada_fixa": 0.0, "entrada_variavel": 0.0,
+        "saida_fixa":   0.0, "saida_variavel":   0.0,
+    }
+    # "Completo" (Saldo): inclui tudo, sem exclusão de investimento — o
+    # dinheiro que entra/sai da conta corrente num resgate/aporte é real e
+    # precisa bater com o saldo do banco (pedido explícito do usuário).
+    full: Dict[str, float] = {
         "entrada_fixa": 0.0, "entrada_variavel": 0.0,
         "saida_fixa":   0.0, "saida_variavel":   0.0,
     }
@@ -269,7 +283,7 @@ def get_month_summary(month_id: int) -> Dict[str, float]:
     for row in rows:
         t   = row["type"]
         amt = float(row["amount"] or 0)
-        if t not in real:
+        if t not in full:
             continue
         # Compras no cartão nunca afetam o saldo/saídas/entradas, pagas ou
         # não — o dinheiro saindo de verdade só é contado quando o extrato
@@ -284,22 +298,26 @@ def get_month_summary(month_id: int) -> Dict[str, float]:
         if row.get("is_expectation"):
             proj_extra[t] += amt
             n_expectations += 1
-        else:
-            real[t] += amt
+            continue
 
-    total_entradas      = real["entrada_fixa"] + real["entrada_variavel"]
-    total_saidas        = real["saida_fixa"]   + real["saida_variavel"]
-    total_investimentos = get_month_investment_net(month_id)
-    # Investimentos não descontam o saldo — ficam só como informativo
-    # (aportar pela aba Investimentos não é a mesma coisa que gastar).
-    saldo = total_entradas - total_saidas
+        full[t] += amt
+        if row.get("is_investment_movement"):
+            continue
+        display[t] += amt
 
-    proj_entradas   = total_entradas + proj_extra["entrada_fixa"] + proj_extra["entrada_variavel"]
-    proj_saidas     = total_saidas   + proj_extra["saida_fixa"]   + proj_extra["saida_variavel"]
+    total_entradas       = display["entrada_fixa"] + display["entrada_variavel"]
+    total_saidas         = display["saida_fixa"]   + display["saida_variavel"]
+    full_entradas         = full["entrada_fixa"] + full["entrada_variavel"]
+    full_saidas           = full["saida_fixa"]   + full["saida_variavel"]
+    total_investimentos  = get_month_investment_net(month_id)
+    saldo = full_entradas - full_saidas
+
+    proj_entradas   = full_entradas + proj_extra["entrada_fixa"] + proj_extra["entrada_variavel"]
+    proj_saidas     = full_saidas   + proj_extra["saida_fixa"]   + proj_extra["saida_variavel"]
     saldo_projetado = proj_entradas - proj_saidas
 
     return {
-        **real,
+        **display,
         "total_entradas":      total_entradas,
         "total_saidas":        total_saidas,
         "total_investimentos": total_investimentos,

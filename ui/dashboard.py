@@ -10,6 +10,7 @@ from typing import Optional, Callable
 import database as db
 import ui.theme as T
 from ui.theme import F
+from ui.dialogs import show_info
 from utils.helpers import format_currency, MONTHS_PT, PAYMENT_METHODS
 
 
@@ -205,18 +206,27 @@ class Dashboard(ctk.CTkScrollableFrame):
         return wrapper
 
     def _make_kpi_widget(self, parent, key: str, label: str, color: str,
-                         bind_investments: bool = False) -> ctk.CTkFrame:
-        card = self._make_kpi(parent, label, color)
+                         bind_investments: bool = False, info: str = None) -> ctk.CTkFrame:
+        card = self._make_kpi(parent, label, color, info=info)
         self._card_lbls[key] = (card.val_lbl, color)
         if bind_investments and self._on_investments:
             self._bind_click(card, self._on_investments)
         return card
 
+    _INVESTMENT_INFO_TEXT = (
+        "Não inclui aporte/resgate de investimento — esse dinheiro só "
+        "mudou de lugar (conta ↔ investimento), não é renda nem gasto "
+        "real. Ele continua contando no Saldo, que reflete o valor real "
+        "da sua conta."
+    )
+
     def _build_widget_kpi_entradas(self, parent) -> ctk.CTkFrame:
-        return self._make_kpi_widget(parent, "total_entradas", "ENTRADAS", T.GREEN)
+        return self._make_kpi_widget(parent, "total_entradas", "ENTRADAS", T.GREEN,
+                                     info=self._INVESTMENT_INFO_TEXT)
 
     def _build_widget_kpi_saidas(self, parent) -> ctk.CTkFrame:
-        return self._make_kpi_widget(parent, "total_saidas", "SAÍDAS", T.RED)
+        return self._make_kpi_widget(parent, "total_saidas", "SAÍDAS", T.RED,
+                                     info=self._INVESTMENT_INFO_TEXT)
 
     def _build_widget_kpi_saldo_vrva(self, parent) -> ctk.CTkFrame:
         return self._make_kpi_widget(parent, "saldo_beneficios", "SALDO VR/VA", T.GOLD)
@@ -424,13 +434,26 @@ class Dashboard(ctk.CTkScrollableFrame):
         return card
 
     # ------------------------------------------------------------------
-    @staticmethod
-    def _make_kpi(parent, label: str, color: str) -> ctk.CTkFrame:
+    def _make_kpi(self, parent, label: str, color: str, info: str = None) -> ctk.CTkFrame:
         card = ctk.CTkFrame(parent, fg_color=T.CARD, corner_radius=14,
                             border_width=1, border_color=T.BORDER)
         ctk.CTkFrame(card, height=3, fg_color=color, corner_radius=2).pack(
             fill="x", padx=8, pady=(10, 0))
-        ctk.CTkLabel(card, text=label, font=F(10, "bold"), text_color=T.MUTED).pack(pady=(10, 2))
+        if info:
+            label_row = ctk.CTkFrame(card, fg_color="transparent")
+            label_row.pack(pady=(10, 2))
+            ctk.CTkLabel(label_row, text=label, font=F(10, "bold"),
+                         text_color=T.MUTED).pack(side="left")
+            info_btn = ctk.CTkLabel(
+                label_row, text="i", font=F(8, "bold"), text_color=T.MUTED,
+                width=13, height=13, corner_radius=7,
+                fg_color="transparent", cursor="hand2")
+            info_btn.pack(side="left", padx=(4, 0))
+            info_btn.bind(
+                "<Button-1>",
+                lambda _e, l=label, m=info: show_info(self.winfo_toplevel(), l, m))
+        else:
+            ctk.CTkLabel(card, text=label, font=F(10, "bold"), text_color=T.MUTED).pack(pady=(10, 2))
         card.val_lbl = ctk.CTkLabel(card, text="R$ 0,00",
                                     font=F(18, "bold"), text_color=color)
         card.val_lbl.pack(pady=(0, 16))

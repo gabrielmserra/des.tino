@@ -137,7 +137,7 @@ export function Import() {
         monthId,
         monthName: name,
         dupLabel,
-        category: r.direction === 'entrada' ? 'Receita' : r.suggestedCategory,
+        category: r.direction === 'entrada' && !r.isInvestmentLike ? 'Receita' : r.suggestedCategory,
         paymentMethod: r.suggestedPaymentMethod,
         description: r.description,
         importRaw: r.description,
@@ -201,6 +201,7 @@ export function Import() {
           payment_time: c.time ?? null,
           card_id: c.isCreditCardCharge ? cardId : null,
           import_raw: c.importRaw,
+          is_investment_movement: c.isInvestmentLike,
         })),
       )
       setDoneCount(selected.length)

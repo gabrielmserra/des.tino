@@ -278,7 +278,10 @@ class ImportTab(ctk.CTkFrame):
             row, text="  •  ".join(info_bits), font=F(11), text_color=info_color, anchor="w",
         ).grid(row=1, column=1, sticky="ew", padx=(0, 8), pady=(0, 8))
 
-        default_cat = "Receita" if r.direction == "entrada" else r.suggested_category
+        if r.direction == "entrada" and not r.is_investment_like:
+            default_cat = "Receita"
+        else:
+            default_cat = r.suggested_category
         cand.cat_var = ctk.StringVar(value=default_cat)
         ctk.CTkComboBox(
             row, values=sorted(set(CATEGORIES + ["Investimentos", "Receita"])), variable=cand.cat_var,
@@ -343,6 +346,7 @@ class ImportTab(ctk.CTkFrame):
                 "payment_time":   c.row.time,
                 "card_id":        card_id,
                 "import_raw":     c.row.description,
+                "is_investment_movement": c.row.is_investment_like,
             })
 
         self._confirm_btn.configure(state="disabled", text="Importando…")

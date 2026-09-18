@@ -62,16 +62,44 @@ function useSummary() {
   })
 }
 
-export function Kpi({ label, value, color, to }: { label: string; value: string; color: string; to?: string }) {
+export function Kpi({
+  label, value, color, to, info,
+}: { label: string; value: string; color: string; to?: string; info?: string }) {
+  const [showInfo, setShowInfo] = useState(false)
   const content = (
     <>
       <div className="h-1 w-8 rounded" style={{ background: color }} />
-      <p className="mt-2 text-[10px] font-bold" style={{ color: 'var(--muted)' }}>
-        {label}
-      </p>
+      <div className="mt-2 flex items-center gap-1">
+        <p className="text-[10px] font-bold" style={{ color: 'var(--muted)' }}>
+          {label}
+        </p>
+        {info && (
+          <button
+            type="button"
+            aria-label={`Sobre ${label}`}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setShowInfo((v) => !v)
+            }}
+            className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold"
+            style={{ color: 'var(--muted)', border: '1px solid var(--border)' }}
+          >
+            i
+          </button>
+        )}
+      </div>
       <p className="mt-1 text-lg font-bold" style={{ color }}>
         {value}
       </p>
+      {info && showInfo && (
+        <p
+          className="relative z-10 mt-2 rounded-lg p-2 text-[10px] leading-snug"
+          style={{ background: 'var(--bg)', color: 'var(--muted)', border: '1px solid var(--border)' }}
+        >
+          {info}
+        </p>
+      )}
     </>
   )
   const className = 'block rounded-2xl border p-4'
@@ -117,16 +145,33 @@ function SaldoMesWidget() {
 }
 
 // ── KPIs individuais ──────────────────────────────────────────────────
+const INVESTMENT_INFO_TEXT =
+  'Não inclui aporte/resgate de investimento — esse dinheiro só mudou de lugar (conta ↔ investimento), não é renda nem gasto real. Ele continua contando no Saldo, que reflete o valor real da sua conta.'
+
 function KpiEntradasWidget() {
   const summary = useSummary()
   const s = summary.data
-  return <Kpi label="ENTRADAS" value={s ? formatCurrency(s.total_entradas) : '…'} color="var(--primary)" />
+  return (
+    <Kpi
+      label="ENTRADAS"
+      value={s ? formatCurrency(s.total_entradas) : '…'}
+      color="var(--primary)"
+      info={INVESTMENT_INFO_TEXT}
+    />
+  )
 }
 
 function KpiSaidasWidget() {
   const summary = useSummary()
   const s = summary.data
-  return <Kpi label="SAÍDAS" value={s ? formatCurrency(s.total_saidas) : '…'} color="var(--red)" />
+  return (
+    <Kpi
+      label="SAÍDAS"
+      value={s ? formatCurrency(s.total_saidas) : '…'}
+      color="var(--red)"
+      info={INVESTMENT_INFO_TEXT}
+    />
+  )
 }
 
 function KpiSaldoVrVaWidget() {

@@ -1024,6 +1024,7 @@ export type ImportRow = {
   benefit_id?: number | null
   debit_card_id?: number | null
   import_raw?: string | null
+  is_investment_movement?: boolean | null
 }
 
 export async function importTransactionsBulk(rows: ImportRow[]): Promise<number[]> {

@@ -219,8 +219,19 @@ Três tipos de meta, lado a lado:
 - **[Ambas]** Acompanhamento do total investido e evolução do patrimônio.
 - **[Ambas]** Detecção automática de aporte/resgate na importação de extrato
   (palavras-chave: "Tesouro Direto", "Aplicação", "Resgate", "CDB", "LCI",
-  "LCA", "Fundo de Investimento") — sugerido como investimento, fora do
-  fluxo normal de despesa/receita, mas confirmado pelo usuário na revisão.
+  "LCA", "Fundo de Investimento", "Selic") — sugerido como categoria
+  "Investimentos" nos dois sentidos (tanto o aporte saindo quanto o
+  resgate voltando pra conta), confirmado pelo usuário na revisão.
+- **[Ambas]** Aporte/resgate de investimento importado **não conta** nos
+  cards "Entradas" e "Saídas" do mês — é dinheiro que só mudou de lugar
+  (conta ↔ investimento), não renda nem gasto real. Um ícone "i" nos dois
+  cards explica isso. O **Saldo** (e saldo projetado/acumulado) continua
+  somando esses valores normalmente — reflete o dinheiro real da conta,
+  então um resgate de R$100 aparece no saldo como R$100 a mais, mesmo não
+  aparecendo em "Entradas". A marcação é estrutural
+  (`transactions.is_investment_movement`, setada só pela importação),
+  não depende da categoria escolhida — trocar a categoria de um
+  lançamento depois não muda esse comportamento.
 
 ## 8. Resumo dos Compromissos (Compromissos Futuros)
 
@@ -296,6 +307,10 @@ Três tipos de meta, lado a lado:
   rotulado "Demais categorias" pra não confundir com a categoria
   "Outros" de verdade (que continua aparecendo do seu próprio jeito
   quando usada) — evita poluir o gráfico com muitas linhas/barras.
+- **[Ambas]** Os cards "Entradas" e "Saídas" têm um ícone "i" clicável
+  que explica por que aporte/resgate de investimento não aparece ali
+  (mas aparece no Saldo) — evita que a diferença entre os dois números
+  pareça um bug.
 
 ### 10.1 Guru Financeiro
 
@@ -491,14 +506,18 @@ conta fixa).
 `id, month_id, user_id, type, description, amount, category, created_at,
 card_id, is_expectation, benefit_id, debit_card_id, payment_method,
 payment_date, card_purchase_id, installment_number, installment_total,
-imported, payment_time, invoice_id, import_raw`.
+imported, payment_time, invoice_id, import_raw, is_investment_movement`.
 `type` é um de `entrada_fixa/entrada_variavel/saida_fixa/saida_variavel`.
 Colunas adicionadas ao longo do tempo (por migração): `benefit_id` (003),
 `debit_card_id`+`payment_method` (009), `payment_date` (014),
 `card_purchase_id`+`installment_number`+`installment_total` (027),
 `imported` (032), `payment_time` (033), `invoice_id` (035), `import_raw`
 (038, descrição original do parser no momento da importação, imutável —
-usada na detecção de duplicata pra sobreviver a renomeações).
+usada na detecção de duplicata pra sobreviver a renomeações),
+`is_investment_movement` (041, booleana — marca aporte/resgate de
+investimento identificado na importação; setada só pelo código, nunca
+por escolha manual de categoria — usada por `get_month_summary` pra
+excluir esses lançamentos dos cards Entradas/Saídas sem afetar o Saldo).
 
 **`credit_cards`** — `id, user_id, name, limit, due_day, closing_day,
 color, created_at`.
@@ -611,8 +630,8 @@ recente) é listada.
 | `add_transaction` | month_id, type, description, amount, category, card_id?, benefit_id?, is_expectation?, debit_card_id?, payment_method?, payment_date?, payment_time? | Insere um lançamento; debita saldo de VR/VA na hora se `benefit_id` + gasto real. |
 | `update_transaction` | id, description, amount, category, card_id?, benefit_id?, is_expectation?, debit_card_id?, payment_method?, payment_date?, payment_time?, type? | Atualiza um lançamento (estorna e reaplica débito de VR/VA se mudou); `type` (040) permite trocar fixa↔variável. |
 | `delete_transaction` | id | Remove um lançamento (estorna saldo de VR/VA se aplicável). |
-| `import_transactions_bulk` | rows (jsonb[]) | Confirma uma importação de extrato/fatura: chama `add_transaction` por linha, marca `imported=true` e grava `import_raw`. |
-| `get_month_summary` | month_id | Resumo do mês em JSON: entradas/saídas reais e previstas, saldo, saldo projetado, saldo acumulado, nº de previsões. Ignora compras no cartão e gastos com VR/VA no cálculo do saldo. |
+| `import_transactions_bulk` | rows (jsonb[]) | Confirma uma importação de extrato/fatura: chama `add_transaction` por linha, marca `imported=true`, grava `import_raw` e `is_investment_movement` (041). |
+| `get_month_summary` | month_id | Resumo do mês em JSON: entradas/saídas reais e previstas, saldo, saldo projetado, saldo acumulado, nº de previsões. Ignora compras no cartão e gastos com VR/VA no cálculo do saldo. Desde a 041, calcula dois conjuntos de entradas/saídas: um "completo" (tudo, alimenta Saldo/projetado/acumulado) e um "de exibição" que pula `is_investment_movement` (alimenta os cards Entradas/Saídas e os 4 campos por tipo). |
 | `get_month_real_flow` | month_id | Helper interno de `get_saldo_acumulado`: entradas/saídas reais do mês, mesma regra do resumo. |
 | `get_saldo_acumulado` | month_id | Saldo acumulado até o mês, a partir da âncora (`opening_balance`) mais recente em ou antes do mês, somando o fluxo real mês a mês. |
 | `get_expenses_by_category` | month_id | Gastos reais (exclui previstos e VR/VA) somados por categoria. |
