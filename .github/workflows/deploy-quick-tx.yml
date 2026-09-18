@@ -27,6 +27,10 @@ jobs:
           version: latest
 
       - name: Deploy quick-tx
-        run: supabase functions deploy quick-tx --project-ref wbnefvskqudjnmafpqnn
+        # --no-verify-jwt: a function usa seu próprio segredo (QUICK_TX_SECRET),
+        # não uma sessão do Supabase Auth -- sem essa flag, o gateway do
+        # Supabase passaria a exigir um JWT válido antes mesmo de a function
+        # rodar, quebrando o atalho de voz (ver comentário no topo do index.ts).
+        run: supabase functions deploy quick-tx --no-verify-jwt --project-ref wbnefvskqudjnmafpqnn
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

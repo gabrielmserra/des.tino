@@ -3,7 +3,9 @@
 // Recebe um texto curto (ditado por voz no iOS, ex: "35 mercado almoço")
 // e cria uma transação no app des.tino, criando o mês se necessário.
 //
-// Deploy:  supabase functions deploy quick-tx --no-verify-jwt
+// Deploy: automático via GitHub Actions (.github/workflows/deploy-quick-tx.yml)
+//         a cada push na main que toque neste diretório. Manual, se precisar:
+//         supabase functions deploy quick-tx --no-verify-jwt
 // Secrets: QUICK_TX_SECRET (segredo aleatório), QUICK_TX_USER_ID (seu uid)
 //          SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY são injetados pelo runtime.
 // =====================================================================
