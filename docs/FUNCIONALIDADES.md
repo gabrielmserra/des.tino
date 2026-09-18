@@ -445,3 +445,444 @@ dívidas) e mostra até 3 cartões, sempre nesta ordem de prioridade:
 - **[Web]** Abaixo de 1024px (celular e tablets estreitos), a navegação
   continua sendo a barra inferior fixa com "Mais" reunindo os destinos
   extras — sem nenhuma mudança nessas larguras.
+
+## 17. Banco de dados (Supabase Postgres)
+
+Um único banco Postgres (Supabase) é a fonte de verdade das duas versões.
+Toda tabela tem Row Level Security (RLS) ligada com a mesma política em
+todo o projeto — `for all using (auth.uid() = user_id) with check
+(auth.uid() = user_id)` — então cada usuário só enxerga suas próprias
+linhas, sem nenhum filtro extra no código do app. A maior parte da lógica
+de negócio (cálculos, regras de quando debitar saldo, etc.) mora em
+**funções SQL (RPC)** chamadas pelo app — não em código Python/TS —
+justamente pra desktop e web nunca divergirem: os dois chamam a mesma
+função e recebem o mesmo resultado. Funções simples de leitura (sem
+efeito colateral) rodam `stable`; funções que escrevem não têm essa
+marcação. Todas são `SECURITY INVOKER` (padrão do Postgres) — a RLS do
+usuário que chamou continua valendo dentro da função.
+
+O schema é versionado como uma sequência de migrações SQL em
+`docs/migrations/001_*.sql` a `040_*.sql` (uma por mudança, nunca
+editadas depois de escritas), cada uma rodada manualmente pelo usuário no
+SQL Editor do Supabase. Convenção importante: `create or replace
+function` só troca a implementação se a lista de tipos de parâmetro for
+idêntica à já existente — mudar a assinatura (adicionar/remover
+parâmetro) sem um `drop function if exists (<assinatura antiga>)` antes
+cria uma segunda função com o mesmo nome em vez de substituir, deixando
+duas versões coexistindo. Toda migração deste projeto que muda uma
+assinatura já dropa a versão antiga primeiro (ver 009, 021, 023, 025,
+031, 040 como exemplos).
+
+As tabelas `months`, `transactions`, `credit_cards`, `investments`,
+`investment_movements` e `goals` são anteriores à pasta `docs/migrations`
+(criadas direto no painel do Supabase antes desse versionamento existir)
+— por isso não têm um arquivo `create table` correspondente no repositório,
+só os `alter table` incrementais que vieram depois.
+
+### 17.1 Tabelas
+
+**`months`** — um período (mês) do app.
+`id, user_id, name, year, month, created_at, opening_balance` (opening_balance:
+"âncora" opcional do saldo acumulado, migração 019).
+
+**`transactions`** — todo lançamento (entrada/saída), de qualquer origem
+(manual, importado, gerado por outra feature como parcela de dívida ou
+conta fixa).
+`id, month_id, user_id, type, description, amount, category, created_at,
+card_id, is_expectation, benefit_id, debit_card_id, payment_method,
+payment_date, card_purchase_id, installment_number, installment_total,
+imported, payment_time, invoice_id, import_raw`.
+`type` é um de `entrada_fixa/entrada_variavel/saida_fixa/saida_variavel`.
+Colunas adicionadas ao longo do tempo (por migração): `benefit_id` (003),
+`debit_card_id`+`payment_method` (009), `payment_date` (014),
+`card_purchase_id`+`installment_number`+`installment_total` (027),
+`imported` (032), `payment_time` (033), `invoice_id` (035), `import_raw`
+(038, descrição original do parser no momento da importação, imutável —
+usada na detecção de duplicata pra sobreviver a renomeações).
+
+**`credit_cards`** — `id, user_id, name, limit, due_day, closing_day,
+color, created_at`.
+
+**`card_invoices`** (migração 035) — fatura fechada e resolvida (paga ou
+vencida automaticamente) de um cartão. `id, user_id, card_id, cycle_start,
+due_date, total, paid_at, auto_settled, created_at`. Uma vez criada, as
+`transactions` daquele ciclo ganham `invoice_id` apontando pra cá — elas
+não são apagadas nem movidas, só ganham esse vínculo extra.
+
+**`card_purchases`** (migração 027) — cabeçalho de uma compra parcelada
+real no cartão. `id, user_id, card_id, description, category,
+total_amount, installment_count, created_at`. Cada parcela é uma linha
+normal em `transactions` com `card_purchase_id` apontando pra cá.
+
+**`debit_cards`** (migração 009, exclusivo web) — `id, user_id, name,
+color, created_at`. Tabela separada de `credit_cards` de propósito: cartão
+de débito não tem fatura/vencimento/limite, e isolar evita qualquer risco
+de quebrar o desktop (que nunca lê essa tabela nem a coluna
+`transactions.debit_card_id`).
+
+**`benefit_cards`** (migração 003) — saldo de VR/VA. `id, user_id, name,
+benefit_type ('VR'|'VA'), balance, renewal_day, recharge_amount,
+recharge_mode ('acumula'|'zera'), last_renewal, color, archived_at,
+created_at`. Exclusão é "arquivar" (`archived_at`), nunca deleta de
+verdade — mantém os gastos já vinculados intactos.
+
+**`benefit_renewals`** (migração 003) — auditoria de cada recarga
+automática aplicada. `id, benefit_id, user_id, renewed_at, amount,
+balance_before, balance_after, created_at`.
+
+**`investments`** — `id, user_id, name, category, archived_at,
+created_at`.
+
+**`investment_movements`** — cada aporte/saque. `id, investment_id,
+user_id, month_id, movement_type ('aporte_inicial'|'aporte'|'saque'),
+amount, note, created_at`.
+
+**`goals`** — `id, user_id, name, target_amount, saved_amount,
+created_at, monthly_amount, schedule_type`. `target_amount` é opcional
+(meta recorrente "sem fim"); `monthly_amount` (022) marca meta recorrente
+mensal; `schedule_type='custom'` (026) marca meta de cronograma
+personalizado — sem nenhum dos dois, é uma meta simples (aporte avulso).
+
+**`goal_installments`** (migração 022, `due_day` na 026) — parcela de uma
+meta recorrente/personalizada. `id, goal_id, user_id, installment_number,
+amount, due_year, due_month, contributed_at, created_at, due_day`.
+`due_day` só é preenchido em metas de cronograma personalizado.
+
+**`monthly_plans`** — um plano de orçamento por mês (`unique(month_id)`).
+`id, user_id, month_id, income, status ('ativo'|'fechado'), created_at,
+updated_at`.
+
+**`monthly_plan_items`** — alocação planejada por categoria dentro de um
+plano. `id, plan_id, user_id, category, suggested_amount, planned_amount,
+is_eventual, is_mandatory`. `is_mandatory=true` são itens sincronizados
+automaticamente a partir de dívidas em aberto (`sync_debts_into_plan`) —
+o usuário não edita o valor livremente enquanto a dívida existir.
+
+**`plan_income_items`** (migração 031) — cada entrada de renda esperada
+do plano (várias por plano, com dia do mês). `id, plan_id, user_id,
+amount, expected_day, created_at`. `monthly_plans.income` continua
+existindo como o total (soma destes itens).
+
+**`debts`** — `id, user_id, description, creditor, total_amount,
+category, notes, created_at, interest_rate` (interest_rate na migração
+023, opcional, só armazenada pra exibição — quem calcula a Tabela Price é
+o client antes de chamar `create_debt`).
+
+**`debt_installments`** — `id, debt_id, user_id, installment_number,
+amount, due_year, due_month, paid_at, expense_id`. Sem coluna de status:
+`paga` = `paid_at` preenchido; `atrasada` = `(due_year,due_month)` no
+passado e não paga; senão `pendente` — sempre derivado na leitura.
+
+**`fixed_bills`** (migração 024) — template de conta recorrente. `id,
+user_id, name, expected_amount, due_day, category, payment_method,
+active, created_at`.
+
+**`fixed_bill_instances`** (migração 024, `due_year`/`due_month` na 025)
+— uma instância por mês de uma conta fixa ativa. `id, bill_id, user_id,
+amount, paid_at, expense_id, created_at, due_year, due_month`. Usa
+calendário real (`due_year`/`due_month`), não `month_id` do app (que é
+deslocado pelo dia de corte da importação) — mesmo modelo de
+`debt_installments`/`goal_installments`. `expense_id` ficou órfão depois
+da migração 025 (pagar deixou de gerar lançamento); a coluna continua
+existindo mas sempre null em instâncias novas.
+
+**`user_settings`** — uma linha por usuário (`user_id` é a PK).
+`user_id, theme, updated_at, dashboard_widgets, import_cutoff_day`.
+`dashboard_widgets` é um array json `[{id, enabled}]` na ordem de
+exibição; `import_cutoff_day` (padrão 1) desloca lançamentos importados
+pro mês seguinte a partir desse dia.
+
+**`card_transactions`** e **`credit_card_payments`** — tabelas legadas,
+anteriores a `docs/migrations`, de uma versão antiga do controle de
+cartão (antes de `card_purchases`/`invoice_id` existirem). Não são mais
+escritas por nenhum fluxo atual do app; `credit_card_payments` só
+continua sendo lida (sempre retorna 0) num `LEFT JOIN` de compatibilidade
+em `get_cards_overview`. Não devem ser usadas em código novo.
+
+### 17.2 Funções (RPC)
+
+Catálogo por domínio — nome, parâmetros principais e o que faz. Onde a
+mesma função foi redefinida em várias migrações, só a versão final (mais
+recente) é listada.
+
+**Lançamentos (transactions)**
+| Função | Parâmetros | O que faz |
+|---|---|---|
+| `add_transaction` | month_id, type, description, amount, category, card_id?, benefit_id?, is_expectation?, debit_card_id?, payment_method?, payment_date?, payment_time? | Insere um lançamento; debita saldo de VR/VA na hora se `benefit_id` + gasto real. |
+| `update_transaction` | id, description, amount, category, card_id?, benefit_id?, is_expectation?, debit_card_id?, payment_method?, payment_date?, payment_time?, type? | Atualiza um lançamento (estorna e reaplica débito de VR/VA se mudou); `type` (040) permite trocar fixa↔variável. |
+| `delete_transaction` | id | Remove um lançamento (estorna saldo de VR/VA se aplicável). |
+| `import_transactions_bulk` | rows (jsonb[]) | Confirma uma importação de extrato/fatura: chama `add_transaction` por linha, marca `imported=true` e grava `import_raw`. |
+| `get_month_summary` | month_id | Resumo do mês em JSON: entradas/saídas reais e previstas, saldo, saldo projetado, saldo acumulado, nº de previsões. Ignora compras no cartão e gastos com VR/VA no cálculo do saldo. |
+| `get_month_real_flow` | month_id | Helper interno de `get_saldo_acumulado`: entradas/saídas reais do mês, mesma regra do resumo. |
+| `get_saldo_acumulado` | month_id | Saldo acumulado até o mês, a partir da âncora (`opening_balance`) mais recente em ou antes do mês, somando o fluxo real mês a mês. |
+| `get_expenses_by_category` | month_id | Gastos reais (exclui previstos e VR/VA) somados por categoria. |
+| `get_expenses_by_payment_method` | month_id | Gastos reais somados por forma de pagamento. |
+| `get_month_investment_net` | month_id | Aportes menos saques do mês. |
+| `get_total_investments` | — | Patrimônio total investido (todos os meses). |
+| `get_benefit_balance_total` | — | Soma o saldo de todos os benefícios VR/VA ativos. |
+| `get_daily_spending` | — | Gasto real somado por dia, últimos N dias (usado no widget "Gastos dos últimos 7 dias"). |
+| `billing_month` | date, cutoff_day | Calcula (ano, mês) de cobrança de uma data sob um dia de corte — réplica de `utils/helpers.py:billing_month`. |
+| `recompute_cutoff_months` | cutoff_day | Remove lançamentos importados pro mês certo quando o usuário muda o dia de corte. |
+| `create_month` / `ensure_month` | nome/ano/mês | Cria um período se não existir; `create_month` também copia pro novo mês as compras no cartão feitas após o fechamento do ciclo anterior. |
+
+**Cartões de crédito**
+| Função | Parâmetros | O que faz |
+|---|---|---|
+| `get_cards_overview` | month_id | Por cartão: gasto no ciclo aberto ou fatura fechada pendente (o que existir), pago, em aberto, disponível, dias até fechar/vencer, `cycle_open`. `cycle_open` é `true` quando não há fatura fechada pendente (não usa mais conta de calendário — migração 039). |
+| `pay_card_bill` | card_id, month_id | Cria uma linha em `card_invoices` com o total da fatura fechada e marca (`invoice_id`) as transações correspondentes — nunca apaga lançamentos. |
+| `settle_due_card_invoices` | — | Quita automaticamente (auto_settled=true) qualquer fatura fechada cujo vencimento já passou sem pagamento manual; chamada uma vez por sessão. |
+| `get_card_invoices` | card_id | Histórico de faturas do cartão (mais recente primeiro). |
+| `create_card_purchase` | card_id, description, category, installments (jsonb) | Cria `card_purchases` + uma transação por parcela (parcela do mês corrente é gasto real; futuras entram como previstas). |
+| `delete_remaining_card_purchase_installments` | purchase_id | Apaga só as parcelas ainda previstas (futuras) de uma compra parcelada. |
+| `get_debit_cards_overview` | month_id | Gasto do mês por cartão de débito (exclusivo web). |
+| `_cycle_start` / `_cycle_due_date` / `_days_until` | closing_day / due_day | Helpers internos de data: início do ciclo atual, data de vencimento absoluta do ciclo mais recentemente fechado, dias até um dia-alvo do mês (com clamp pra meses curtos). |
+
+**Benefícios (VR/VA)**
+| Função | Parâmetros | O que faz |
+|---|---|---|
+| `get_benefits_overview` | — | Lista benefícios ativos com dias até a próxima renovação. |
+| `create_benefit` | name, benefit_type, balance, renewal_day, recharge_amount, recharge_mode, color | Cria o benefício. |
+| `apply_all_due_renewals` | — | Aplica todas as renovações pendentes de todos os benefícios (uma por mês perdido, se o app ficou muito tempo fechado), retorna um resumo pra toast; chamada uma vez por sessão. |
+| `_renewal_date` / `_last_occurrence` / `_days_until_renewal` | — | Helpers internos de data de renovação (com clamp pra meses curtos). |
+
+**Planejamento**
+| Função | Parâmetros | O que faz |
+|---|---|---|
+| `save_plan` | month_id, income, items (jsonb), income_items (jsonb) | Cria/atualiza o plano do mês e substitui seus itens; fecha planos `ativo` de meses anteriores. |
+| `get_month_income` | month_id, include_expectations? | Soma de entradas do mês (usada no histórico de sugestão). |
+
+**Dívidas**
+| Função | Parâmetros | O que faz |
+|---|---|---|
+| `create_debt` | description, creditor, total_amount, category, notes, installments (jsonb), interest_rate? | Cria a dívida + suas parcelas. |
+| `update_installment_amount` | inst_id, amount | Edita o valor de uma parcela e recalcula `total_amount` da dívida. |
+| `pay_installment` | inst_id | Marca a parcela como paga — checklist puro, não lança gasto nem mexe no saldo. |
+| `undo_installment_payment` | inst_id | Desfaz o pagamento. |
+| `delete_installment` / `delete_debt` | inst_id / debt_id | Exclui parcela (recalcula total; some a dívida se ficou sem parcelas) ou a dívida inteira. |
+| `get_month_debt_totals` | month_id | Parcelas não pagas com vencimento no mês, somadas por categoria. |
+| `sync_debts_into_plan` | month_id | Sincroniza itens obrigatórios (`is_mandatory`) do plano ativo com as parcelas pendentes. |
+| `get_debt_overview` | — | Resumo: total em aberto, nº de parcelas atrasadas, comprometimento dos próximos 6 meses. |
+
+**Contas Fixas**
+| Função | Parâmetros | O que faz |
+|---|---|---|
+| `create_fixed_bill` / `update_fixed_bill` / `delete_fixed_bill` | — | CRUD do template da conta recorrente. |
+| `ensure_fixed_bill_instances` | year, month | Garante uma instância pendente no mês real pra cada conta ativa que ainda não tem uma (idempotente). |
+| `update_fixed_bill_instance_amount` | instance_id, amount | Edita o valor de uma instância (ex.: luz/água variam mês a mês). |
+| `pay_fixed_bill_instance` / `undo_fixed_bill_payment` | instance_id | Marca paga/pendente — checklist puro (desde a migração 025). |
+| `get_pending_fixed_bills_total` | year, month | Soma das instâncias pendentes do mês real. |
+
+**Metas**
+| Função | Parâmetros | O que faz |
+|---|---|---|
+| `create_recurring_goal` | name, target_amount?, monthly_amount, installments (jsonb) | Cria meta recorrente mensal + cronograma inicial. |
+| `create_custom_goal` | name, target_amount, installments (jsonb, com dia) | Cria meta de cronograma personalizado (`schedule_type='custom'`). |
+| `add_goal_installments` | goal_id, installments (jsonb) | Adiciona mais parcelas a uma meta já existente ("Gerar mais parcelas"/"+ Adicionar parcela"). |
+| `contribute_goal_installment` / `undo_goal_installment_contribution` | inst_id | Marca/desmarca uma parcela como guardada; ajusta `saved_amount`. |
+| `update_goal_installment_amount` / `delete_goal_installment` | inst_id, amount? | Edita/exclui uma parcela; recalcula `target_amount` como soma das parcelas **só** em metas recorrentes (não em `custom`, onde o alvo é independente). |
+| `add_goal_contribution` | goal_id, amount | Aporte/saque avulso numa meta simples (valor negativo = saque); nunca deixa `saved_amount` negativo. |
+
+**Investimentos**
+| Função | Parâmetros | O que faz |
+|---|---|---|
+| `create_investment` | name, category, month_id, amount, note? | Cria o investimento + registra o aporte inicial. |
+| `delete_investment` | investment_id | Exclui o investimento e todas as suas movimentações. |
+
+**Compromissos futuros**
+| Função | Parâmetros | O que faz |
+|---|---|---|
+| `get_future_commitments` | months (default 6) | Soma, mês a mês, parcelas de cartão previstas + fatura em aberto (rotulada pelo mês em que o ciclo começou) + dívidas em aberto + contas fixas pendentes. |
+
+Grants: toda função é `grant execute ... to authenticated` — nunca
+exposta a `anon`.
+
+## 18. Arquitetura do código
+
+### 18.1 Desktop (Python + CustomTkinter)
+
+**Ponto de entrada — `main.py`**: `MainWindow(ctk.CTk)` é a única janela raiz
+(nunca é destruída — as telas trocam como frames filhos). Cuida do
+bootstrap visual (tema escuro, tamanho mínimo 1050x640, janela 1340x800
+centralizada, ícone), de um patch pra um bug conhecido do CustomTkinter
+5.2.2 + PyInstaller (`CTkButton.destroy()` levanta `AttributeError` em
+certas condições), e do fluxo de login: se existe sessão salva
+(`config.has_saved_session()`), mostra `ui.splash.SplashFrame` e tenta
+restaurar em background; sem sessão salva, vai direto pro formulário
+(`ui.login.LoginFrame`). `_prewarm_imports()` pré-importa `database`
+(que já carrega o client do Supabase) e `matplotlib` em background
+enquanto a tela de login está visível, pra esconder a latência desses
+imports pesados.
+
+**`config.py`**: credenciais do Supabase (URL + anon key) hardcoded no
+módulo (`config.example.py` é o template sem valor real, pro
+repositório). `get_client()` memoiza um único `supabase.Client` global.
+`save_session`/`restore_session`/`has_saved_session`/`clear_session`
+gerenciam o token salvo em `%APPDATA%/FinancasApp/.session`.
+
+**`database.py`** (~1950 linhas) — camada de acesso a dados. Não há
+SQLite local: tudo passa pelo `supabase-py`, com bastante lógica de
+negócio em Python por cima (agregações, valores derivados). Padrão de
+cache: dicionários no nível do módulo, indexados por `month_id` (ou
+chaves compostas), um por domínio (`_tx_cache`, `_plan_cache`,
+`_debts_cache`, `_benefits_cache`, etc.), cada um com sua própria função
+`_invalidate*()` chamada depois de toda escrita; `clear_cache()` limpa
+tudo de uma vez (logout, ou depois de mudar o dia de corte). A maior
+parte do CRUD (meses, lançamentos, metas, cartões, investimentos,
+dívidas, benefícios) é feita direto via `.table(...).select/insert/
+update/delete()`, com a regra de negócio em Python — só uma parte vira
+chamada de RPC (delegando pra mesma função SQL que o web usa, quando a
+lógica precisa ficar idêntica nos dois): `get_cards_overview`,
+`pay_card_bill`, `settle_due_card_invoices`, `get_card_invoices`,
+`create_card_purchase`, `delete_remaining_card_purchase_installments`,
+`get_future_commitments`, e **todas** as escritas de Contas Fixas
+(`ensure_fixed_bill_instances`, `create/update/delete_fixed_bill`,
+`update_fixed_bill_instance_amount`, `pay_fixed_bill_instance`,
+`undo_fixed_bill_payment`, `get_pending_fixed_bills_total`) e
+`save_import_cutoff_day` (que chama a RPC `recompute_cutoff_months`).
+Funções agrupadas por domínio: meses, lançamentos (inclui
+`get_month_summary`/`get_saldo_acumulado`, a lógica mais pesada do
+arquivo), metas, cartões de crédito, cartões de débito, investimentos,
+planejamento mensal, dívidas, contas fixas, benefícios VR/VA,
+exportação (`export_month_xlsx`), config do dashboard e dia de corte.
+
+**`ui/` (22 arquivos, ~10.800 linhas)** — uma tela/feature por arquivo:
+
+| Arquivo | Classe(s) principal(is) | Tela/feature |
+|---|---|---|
+| `app.py` | `FinanceApp` | Shell do app pós-login: monta sidebar + `MainContent`, seleção/criação/exclusão de mês, roda as checagens de renovação de benefício e quitação automática de fatura ao abrir. |
+| `login.py` | `LoginFrame` | Tela de login/cadastro/recuperação de senha (dois painéis). |
+| `splash.py` | `SplashFrame` | Tela de transição durante a restauração automática de sessão. |
+| `main_content.py` | `MainContent` | Área de conteúdo: cabeçalho + abas (Dashboard/Lançamentos/Planejamento). |
+| `sidebar.py` | `Sidebar` | Navegação lateral: lista/seleção de mês, botões de navegação. |
+| `dashboard.py` | `Dashboard`, `EditDashboardDialog` | KPIs + gráficos (matplotlib) + Guru Financeiro; widgets configuráveis pelo usuário. |
+| `transactions.py` | `TransactionsTab` | Aba de Lançamentos: adicionar/editar/excluir, filtros, confirmação de previsão. |
+| `credit_cards.py` | `CardPresetsBar`, `_PayBillDialog`, `_CardInvoiceHistoryDialog`, `_CardDialog`, `_NewCardPurchaseDialog` | Gestão de cartão de crédito: CRUD, pagar fatura, histórico de faturas, compra parcelada. |
+| `debts.py` | `DebtsTab` + diálogos | Dívidas: cadastro com parcelas, pagar/desfazer, reagendar. |
+| `goals.py` | `GoalsTab` + diálogos | Metas: simples, recorrente e cronograma personalizado. |
+| `investments.py` | `InvestmentsTab` + diálogos | Investimentos: criar, aportar/sacar, editar/excluir movimentação. |
+| `planning.py` | `PlanningTab`, `_IncomeItemsDialog` | Planejamento mensal: sugestão de alocação por categoria, entradas de renda. |
+| `import_statement.py` | `_Candidate`, `ImportTab` | Importação de extrato/fatura: seleção de arquivo, revisão/dedupe, confirmação. |
+| `fixed_bills.py` | `FixedBillsTab` + diálogos | Contas fixas: checklist de vencimento, nunca lança gasto. |
+| `benefits.py` | `BenefitsBar`, `_BenefitDialog` | Barra de benefícios VR/VA (dentro de Saídas Variáveis) + CRUD. |
+| `commitments.py` | `CommitmentsTab` | Tela unificada Dívidas/Metas/Contas Fixas (abas). |
+| `future_commitments.py` | `FutureCommitmentsTab` | Resumo dos Compromissos (somente leitura). |
+| `dialogs.py` | `_ErrorDialog`, `_InfoDialog`, `ConfirmDialog` | Diálogos modais reutilizáveis (erro/info/confirmação). |
+| `report_dialog.py` | `ReportDialog` | Modal de geração do Relatório PDF por período. |
+| `settings_dialog.py` | `SettingsDialog` | Configurações: dia de corte, atalho pro relatório PDF. |
+| `theme.py` | (funções de módulo) | Tokens de design, fontes, aplicar/salvar/sincronizar tema com a nuvem (compartilhado com o web). |
+| `theme_picker.py` | `ThemePickerDialog` | Modal de escolha de tema. |
+
+**`utils/`**: `helpers.py` (constantes — `APP_VERSION`, categorias,
+formas de pagamento, `format_currency`, `billing_month` — réplica da
+função SQL homônima) e `plan_strategy.py` (`suggest_allocations`/
+`estimate_income`: algoritmo de sugestão de orçamento por média
+ponderada dos últimos 3 meses, com teto de 50% da renda pra
+Investimentos, usado tanto pelo desktop quanto pelo web via porte
+próprio).
+
+**`parsers/`** (extrato bancário, exclusivo desktop): `base.py`
+(`NormalizedRow`, `BankParser`, `guess_category`,
+`looks_like_investment`), `registry.py` (`detect_parser`, tenta cada
+parser em ordem), e `inter/` com um parser por formato do Banco Inter
+(`csv_extrato.py`, `ofx.py`, `pdf_extrato.py`, `credit_card_csv.py`) —
+único banco suportado hoje.
+
+**Outros arquivos**: `FinancasApp.spec` (build PyInstaller),
+`requirements.txt`, `report.py` (gera o PDF do Relatório Financeiro
+Completo com reportlab + matplotlib), `file_version_info.txt`
+(metadados de versão do .exe), `assets/` (ícones), `supabase/functions/`
+(Edge Functions, compartilhadas com o web).
+
+### 18.2 Web (React + TypeScript + Vite)
+
+**Entrada e rotas — `src/main.tsx`/`src/App.tsx`**: `QueryClientProvider`
+(TanStack Query) + `AuthProvider` no topo; roteamento com
+`react-router-dom`. Rotas públicas (`/login`, `/cadastro`,
+`/esqueci-senha`, `/reset-password`) redirecionam pra `/` se já
+autenticado; todo o resto vive sob `ThemeProvider` → `MonthProvider` →
+`TxFormProvider` → `Layout`, com redirect pra `/login` se não
+autenticado. `/importar` é **lazy-loaded** (evita carregar o `pdfjs-dist`,
+~440kB, pra quem nunca importa extrato) com um `ChunkErrorBoundary` que
+recarrega a página sozinho se um chunk falhar (deploy novo no ar
+enquanto a aba estava aberta). Rotas antigas (`/beneficios`, `/dividas`,
+`/metas`, `/contas-fixas`) redirecionam pras rotas atuais.
+
+| Rota | Página |
+|---|---|
+| `/` | `Dashboard` |
+| `/lancamentos` | `Transactions` |
+| `/cartoes` | `Cards` |
+| `/planejamento` | `Planning` |
+| `/compromissos` (`?tab=dividas\|metas\|contas-fixas`) | `Commitments` |
+| `/investimentos` | `Investments` |
+| `/compromissos-futuros` | `FutureCommitments` |
+| `/importar` | `Import` (lazy) |
+| `/mais` | `More` |
+| `/configuracoes` | `Settings` |
+
+**`src/pages/`**: um componente por tela (`Dashboard.tsx`,
+`Transactions.tsx`, `Cards.tsx`, `Commitments.tsx` com `Debts.tsx`/
+`Goals.tsx`/`FixedBills.tsx` como abas, `Planning.tsx`,
+`Investments.tsx`, `FutureCommitments.tsx`, `Import.tsx`, `More.tsx`,
+`Settings.tsx`, mais as telas de autenticação `Login.tsx`/`SignUp.tsx`/
+`ForgotPassword.tsx`/`ResetPassword.tsx`).
+
+**`src/components/`** — principais: `Layout.tsx` (shell: sidebar/nav
+inferior, seletor de mês, tema, botão flutuante de novo lançamento,
+roda `useRenewalCheck()`/`useCardInvoicesSettle()` uma vez por sessão),
+`TxForm.tsx` (modal de add/editar lançamento), `CardForm.tsx`/
+`CardPurchaseForm.tsx`/`CardInvoiceHistory.tsx`/`CardRiskBanner.tsx`
+(cartões), `BenefitForm.tsx`, `DebtForm.tsx`/`EditDebtForm.tsx`/
+`DebtDialogs.tsx`, `GoalDialogs.tsx`/`RecurringGoalForm.tsx`,
+`InvestmentDialogs.tsx`, `IncomeDialog.tsx`, `AddMonthDialog.tsx`/
+`EditMonthDialog.tsx`, `ThemeDialog.tsx`, `AddWidgetPicker.tsx`/
+`EditableWidgetCard.tsx` (dashboard arrastável, `@dnd-kit`),
+`Skeleton.tsx`, `ChunkErrorBoundary.tsx`, `Sidebar.tsx`.
+
+**`src/lib/`** (camada compartilhada):
+- `api.ts` (~1030 linhas, ~90 funções) — toda a comunicação com o
+  Supabase (RPC + tabelas), organizada pelos mesmos domínios do banco
+  (seção 17).
+- `types.ts` (~310 linhas) — tipos TypeScript espelhando o schema.
+- `tips.ts` — motor do Guru Financeiro (porte fiel de
+  `ui/dashboard.py:_build_tips`, ver seção 10.1).
+- `dashboardWidgets.tsx` (~870 linhas) — registro + implementação dos
+  ~19 widgets do Dashboard (gráficos via `recharts`).
+- `format.ts`, `constants.ts` — formatação (moeda, datas) e listas
+  estáticas (categorias, formas de pagamento).
+- `month.tsx`, `auth.tsx`, `theme.tsx`, `txform.tsx` — contexts React
+  pro mês selecionado, sessão, tema e o modal global de lançamento.
+- `themes.ts` — paletas de cor (réplica de `ui/theme.py`).
+- `supabase.ts` — client singleton, com adapter de storage
+  customizado pra "Lembrar de mim" (localStorage vs sessionStorage).
+- `debtStatus.ts`, `investmentBalance.ts`, `planStrategy.ts` — portes
+  puros de lógica do desktop (status de parcela, saldo de investimento,
+  sugestão de orçamento).
+- `exportXlsx.ts`, `reportCharts.ts`, `reportPdf.ts` — exportação
+  .xlsx e geração do Relatório PDF (ver seção 12), carregados sob
+  demanda.
+
+**`src/lib/parsers/`** (extrato bancário, web): mesmo desenho do
+desktop — `types.ts`/`base.ts`/`common.ts`/`registry.ts` +
+`inter/creditCardCsv.ts`, `inter/csvExtrato.ts`, `inter/ofx.ts`,
+`inter/pdfExtrato.ts` (este último usa `pdfjs-dist` direto no
+navegador). Só Banco Inter, igual ao desktop.
+
+**PWA/config**: `vite.config.ts` (plugin React + Tailwind v4 +
+`vite-plugin-pwa`, manifest com nome/ícones/cor do des.tino),
+`vercel.json` (rewrite de SPA), `index.html` (meta tags PWA/iOS).
+
+### 18.3 Convenção de sincronia entre plataformas
+
+Onde uma regra de negócio precisa se comportar identicamente nas duas
+versões (cálculo de saldo, ciclo de fatura, dicas do Guru Financeiro,
+sugestão de orçamento, categorização automática na importação), o
+projeto usa uma de duas estratégias: **centralizar em SQL** (a função
+RPC é a única implementação, ambas as plataformas só chamam) sempre que
+possível, ou **manter dois portes fiéis comentados um pro outro**
+quando a lógica precisa rodar no cliente (ex.: `ui/dashboard.py:
+_build_tips` ↔ `web/src/lib/tips.ts`; `utils/plan_strategy.py` ↔
+`web/src/lib/planStrategy.ts`; `parsers/base.py` ↔
+`web/src/lib/parsers/base.ts`). Mudar uma dessas regras exige lembrar
+de replicar no par — não há teste automatizado que garanta a
+sincronia, é convenção mantida manualmente.
