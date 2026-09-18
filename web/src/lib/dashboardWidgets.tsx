@@ -23,6 +23,7 @@ import {
   fetchCardsOverview,
   fetchTransactions,
   fetchDailySpending,
+  fetchDebtOverview,
   payCardBill,
   type MonthSeriesPoint,
 } from './api'
@@ -541,8 +542,9 @@ function GuruFinanceiroWidget() {
     queryFn: () => fetchCardsOverview(selectedId!),
     enabled: selectedId != null,
   })
+  const debtsQ = useQuery({ queryKey: ['debtOverview'], queryFn: fetchDebtOverview })
 
-  const ready = summary.data && goalsQ.data && catsQ.data && historyQ.data && investmentsQ.data && totalInvQ.data != null && cardsQ.data
+  const ready = summary.data && goalsQ.data && catsQ.data && historyQ.data && investmentsQ.data && totalInvQ.data != null && cardsQ.data && debtsQ.data
 
   const TONE_COLOR: Record<string, string> = {
     red: 'var(--red)',
@@ -559,6 +561,7 @@ function GuruFinanceiroWidget() {
         investments: investmentsQ.data,
         totalInv: totalInvQ.data ?? 0,
         unpaidCards: (cardsQ.data ?? []).reduce((a, c) => a + c.unpaid, 0),
+        overdueDebts: debtsQ.data?.n_atrasadas ?? 0,
       })
     : []
 

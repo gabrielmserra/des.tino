@@ -69,6 +69,11 @@ Para cada lançamento:
   o nome de cada cartão cadastrado).
 - **[Ambas]** Percentual de cartão de crédito por lançamento (ver
   [Cartões](#4-cartões-débito-crédito-e-benefícios)).
+- **[Web]** Trocar o **tipo** do lançamento (ex.: Entrada Variável → Entrada
+  Fixa, ou Saída Fixa → Saída Variável) direto no formulário de edição, via
+  seletor Fixa/Variável — muda o lançamento de aba sem precisar excluir e
+  recriar. O desktop não tem esse seletor na edição (o tipo é definido pela
+  aba em que o lançamento foi criado e não muda depois).
 
 ## 4. Cartões (débito, crédito e benefícios)
 
@@ -154,6 +159,10 @@ Para cada lançamento:
 - **[Ambas]** Editar valor de uma parcela específica (as parcelas geradas
   pela Tabela Price continuam editáveis manualmente depois, pra ajustar
   arredondamento do banco ou trocar pra sistema SAC).
+- **[Ambas]** Cada parcela tem status **paga**, **pendente** ou **atrasada**
+  (vencimento já passou e não foi marcada como paga), com filtro por status
+  e um resumo no topo mostrando total em aberto e quantas parcelas estão
+  atrasadas.
 
 ### 6.2 Metas de poupança
 
@@ -288,6 +297,37 @@ Três tipos de meta, lado a lado:
   "Outros" de verdade (que continua aparecendo do seu próprio jeito
   quando usada) — evita poluir o gráfico com muitas linhas/barras.
 
+### 10.1 Guru Financeiro
+
+Widget de dicas automáticas — analisa o mês corrente (saldo, gastos por
+categoria, histórico dos últimos meses, investimentos, metas, cartões e
+dívidas) e mostra até 3 cartões, sempre nesta ordem de prioridade:
+
+1. **Alertas** (vermelho/dourado) — o que precisa de atenção agora:
+   fatura de cartão em aberto, parcela de dívida atrasada, déficit no mês,
+   gastos consumindo mais de 80% da renda, alta de mais de 12% nos gastos
+   vs. o mês anterior, gastos fixos acima de 55% da renda, e categorias que
+   sozinhas (ou juntas, as duas maiores) consomem mais de 20% da renda.
+2. **Neutros/educativos** (dourado/azul) — sinais mais sutis: gastos deste
+   mês acima da **própria média histórica** do usuário (limiar adaptativo,
+   não um corte fixo igual pra todo mundo — só aparece quando não há
+   nenhum alerta mais forte já cobrindo o mesmo problema), taxa de
+   poupança em queda ao longo de 3 meses, renda predominantemente
+   variável, reserva de emergência abaixo de 6 meses de despesas,
+   portfólio de investimentos concentrado, metas sem nenhum aporte, e
+   sugestões de quanto investir pra chegar a 10%/20% da renda.
+3. **Positivos** (verde) — reconhecimento quando algo vai bem: projeção de
+   data de conclusão de meta no ritmo atual de aportes, projeção de juros
+   compostos em 5 e 10 anos, reserva de emergência completa, metas
+   concluídas ou quase lá, boa taxa de investimento e mês equilibrado.
+- **[Ambas]** Cada cartão tem um ícone (não emoji de rosto — ⚠️ alerta,
+  💡 dica, 💰 investimento, ✅ positivo, 💳 fatura, ⏰ dívida atrasada),
+  cor de acordo com a severidade e um texto com números concretos (R$ e
+  %), nunca genérico.
+- **[Ambas]** Lógica centralizada e mantida idêntica entre desktop
+  (`ui/dashboard.py:_build_tips`) e web (`web/src/lib/tips.ts`) —
+  mesmas regras, mesmos limiares, mesmo texto nas duas versões.
+
 ## 11. Importação de extrato bancário
 
 - **[Ambas]** Importação de extrato da conta corrente do Banco Inter em três
@@ -329,6 +369,12 @@ Três tipos de meta, lado a lado:
   A data do lançamento suspeito de duplicata é exibida no aviso.
   - **[Web]** Lista de lançamentos a importar pode ser ordenada por data
     real do pagamento.
+  - **[Ambas]** A comparação de descrição usa o texto **original** lido do
+    extrato/fatura no momento da importação (congelado, nunca muda), não a
+    descrição atual do lançamento — renomear um lançamento depois de
+    importado (ex.: trocar "SL MARECHAL CURITIBA BRA" por "Padaria da
+    esquina") não atrapalha a detecção de duplicata numa reimportação
+    futura do mesmo extrato/fatura.
 - **[Ambas]** Dia de corte configurável: lançamentos a partir do dia
   configurado nas Configurações contam pro mês seguinte, alinhando a
   importação com a data em que o salário cai.
@@ -380,7 +426,7 @@ Três tipos de meta, lado a lado:
   vice-versa, em tempo real.
 - **[Desktop]** Distribuído como executável Windows (`destino.exe`),
   empacotado com PyInstaller, com atualizações via GitHub Releases
-  (versionado, ex. `v3.9.2`).
+  (versionado, ex. `v4.4.5`).
 - **[Web]** Hospedado na Vercel, deploy automático a cada push na branch
   principal; PWA instalável.
 

@@ -34,10 +34,11 @@ type BuildTipsOptions = {
   investments?: Investment[]
   totalInv?: number
   unpaidCards?: number
+  overdueDebts?: number // nº de parcelas de dívida atrasadas
 }
 
 export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
-  const { goals, categories, history, investments, totalInv = 0, unpaidCards = 0 } = opts
+  const { goals, categories, history, investments, totalInv = 0, unpaidCards = 0, overdueDebts = 0 } = opts
 
   const entradas = s.total_entradas ?? 0
   if (entradas <= 0) return []
@@ -65,6 +66,16 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
     })
   }
 
+  // 0b. Parcelas de dívida atrasadas — mesma prioridade máxima da fatura em aberto
+  if (overdueDebts > 0) {
+    alerts.push({
+      icon: '⏰',
+      title: overdueDebts === 1 ? 'Parcela de dívida atrasada' : `${overdueDebts} parcelas de dívida atrasadas`,
+      body: `Acesse a aba Dívidas para regularizar — parcelas atrasadas costumam acumular juros e multa quanto mais tempo ficam em aberto.`,
+      tone: 'red',
+    })
+  }
+
   // Média de aportes (meses com investimento > 0)
   const histInv = (history ?? []).map((h) => h.total_investimentos ?? 0)
   const allInv = [investidos, ...histInv].filter((v) => v > 0)
@@ -75,7 +86,7 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
   // 1. Déficit
   if (saldo < 0) {
     alerts.push({
-      icon: '!',
+      icon: '⚠️',
       title: 'Déficit este mês',
       body: `Você está gastando ${formatCurrency(Math.abs(saldo))} a mais do que ganha. Revise os gastos variáveis com urgência e corte o que não é essencial.`,
       tone: 'red',
@@ -83,11 +94,32 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
   } else if (gastoPct > 0.8) {
     // 2. Gastos elevados
     alerts.push({
-      icon: '!',
+      icon: '⚠️',
       title: 'Gastos elevados',
       body: `Despesas consumindo ${Math.round(gastoPct * 100)}% da renda (${formatCurrency(saidas)}). Abaixo de 70% é o ideal para ter margem.`,
       tone: 'gold',
     })
+  } else {
+    // 2b. Gastos acima do próprio padrão histórico — limiar adaptativo em vez
+    // de fixo: compara com a média real do usuário (últimos 3 meses com
+    // renda > 0), não com um corte universal de 80%. Só dispara quando a
+    // regra fixa acima não disparou, pra não duplicar o alerta.
+    const histGastoPcts = (history ?? [])
+      .slice(0, 3)
+      .map((h) => ({ ent: h.total_entradas ?? 0, sai: h.total_saidas ?? 0 }))
+      .filter((h) => h.ent > 0)
+      .map((h) => h.sai / h.ent)
+    if (histGastoPcts.length >= 2) {
+      const avgGastoPct = histGastoPcts.reduce((a, b) => a + b, 0) / histGastoPcts.length
+      if (gastoPct > avgGastoPct + 0.08) {
+        neutral.push({
+          icon: '💡',
+          title: 'Gastos acima do seu padrão',
+          body: `Neste mês, despesas consomem ${Math.round(gastoPct * 100)}% da renda — acima da sua média dos últimos ${histGastoPcts.length} meses (${Math.round(avgGastoPct * 100)}%). Ainda não é um alerta, mas vale acompanhar antes que vire tendência.`,
+          tone: 'gold',
+        })
+      }
+    }
   }
 
   // 3. Tendência de alta nos gastos (vs mês anterior)
@@ -97,7 +129,7 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
       const crescimento = (saidas - prevSaidas) / prevSaidas
       if (crescimento > 0.12) {
         alerts.push({
-          icon: '!',
+          icon: '⚠️',
           title: 'Gastos em tendência de alta',
           body: `Seus gastos subiram ${Math.round(crescimento * 100)}% em relação ao mês anterior (${formatCurrency(prevSaidas)} → ${formatCurrency(saidas)}). Se a tendência continuar, seu saldo vai encolher.`,
           tone: 'gold',
@@ -109,7 +141,7 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
   // 4. Comprometimento de gastos fixos
   if (saidaFixa > 0 && saidaFixa / entradas > 0.55 && saldo >= 0) {
     alerts.push({
-      icon: '!',
+      icon: '⚠️',
       title: 'Compromissos fixos elevados',
       body: `Gastos fixos representam ${Math.round((saidaFixa / entradas) * 100)}% da renda (${formatCurrency(saidaFixa)}). Revise assinaturas, parcelas e aluguéis — quanto menos fixo, mais flexibilidade.`,
       tone: 'gold',
@@ -123,7 +155,7 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
       const nomes = pesadas.slice(0, 2).map((c) => c.category).join(' e ')
       const totalPesadas = pesadas.slice(0, 2).reduce((a, c) => a + c.total, 0)
       alerts.push({
-        icon: '!',
+        icon: '⚠️',
         title: 'Múltiplas categorias pesadas',
         body: `${nomes} juntas consomem ${Math.round((totalPesadas / entradas) * 100)}% da renda (${formatCurrency(totalPesadas)}). Focar o corte aqui gera mais impacto.`,
         tone: 'gold',
@@ -131,7 +163,7 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
     } else if (pesadas.length === 1) {
       const top = pesadas[0]
       alerts.push({
-        icon: '!',
+        icon: '⚠️',
         title: `${top.category} em destaque`,
         body: `Gastos com ${top.category.toLowerCase()} consomem ${Math.round((top.total / entradas) * 100)}% da renda (${formatCurrency(top.total)}). Veja se há margem para redução.`,
         tone: 'gold',
@@ -151,7 +183,7 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
     if (rates.length >= 2 && rates[0] > savingsPct + 0.07) {
       const trend = [...rates].reverse().map((r) => `${Math.round(r * 100)}%`).join(' → ') + ` → ${Math.round(savingsPct * 100)}%`
       neutral.push({
-        icon: 'i',
+        icon: '💡',
         title: 'Taxa de poupança em queda',
         body: `Sua taxa de poupança caiu: ${trend}. Identifique o que mudou nos seus gastos antes que vire déficit.`,
         tone: 'gold',
@@ -162,7 +194,7 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
   // 7. Renda majoritariamente variável
   if (entradaVar / entradas > 0.55) {
     neutral.push({
-      icon: 'i',
+      icon: '💡',
       title: 'Renda predominantemente variável',
       body: `${Math.round((entradaVar / entradas) * 100)}% das entradas vêm de fontes variáveis. Para rendas irregulares, a reserva de emergência ideal é de 9 a 12 meses de despesas — não apenas 6.`,
       tone: 'gold',
@@ -174,7 +206,7 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
     const mesesCobertos = totalInv / saidas
     if (mesesCobertos < 3) {
       neutral.push({
-        icon: 'i',
+        icon: '💡',
         title: `Reserva cobre só ${mesesCobertos.toFixed(1)} mês(es)`,
         body: `Seu patrimônio total (${formatCurrency(totalInv)}) cobre apenas ${mesesCobertos.toFixed(1)} meses de despesas. Para 6 meses, você precisa de ${formatCurrency(saidas * 6)}.`,
         tone: 'gold',
@@ -182,7 +214,7 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
     } else if (mesesCobertos < 6) {
       const faltaMeses = 6 - mesesCobertos
       neutral.push({
-        icon: 'i',
+        icon: '💡',
         title: `Reserva em ${mesesCobertos.toFixed(1)} de 6 meses`,
         body: `Você está a caminho da reserva ideal. Faltam ${formatCurrency(saidas * faltaMeses)} para completar 6 meses de segurança.`,
         tone: 'gold',
@@ -196,21 +228,21 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
   if (investidos === 0) {
     const sugestao = saldo > 0 ? Math.min(saldo, ideal10) : ideal10
     neutral.push({
-      icon: '$',
+      icon: '💰',
       title: 'Comece a investir',
       body: `Sem investimentos este mês. Aplicar ${formatCurrency(sugestao)} (10% da renda) em Tesouro Selic ou CDB liquidez diária já é um ótimo começo.`,
       tone: 'blue',
     })
   } else if (invPct < 0.1) {
     neutral.push({
-      icon: '$',
+      icon: '💰',
       title: 'Aumente seus investimentos',
       body: `Investindo ${(invPct * 100).toFixed(1)}% da renda. Mais ${formatCurrency(ideal10 - investidos)} chegaria ao mínimo de 10%.`,
       tone: 'blue',
     })
   } else if (invPct < 0.2) {
     neutral.push({
-      icon: '$',
+      icon: '💰',
       title: 'Você está no caminho certo',
       body: `Investindo ${(invPct * 100).toFixed(1)}% da renda. Mais ${formatCurrency(ideal20 - investidos)} atingiria os 20% da regra 50/30/20.`,
       tone: 'blue',
@@ -235,7 +267,7 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
     const conc = topN / investments.length
     if (conc >= 0.75) {
       neutral.push({
-        icon: 'i',
+        icon: '💡',
         title: 'Portfólio concentrado',
         body: `${topN} de ${investments.length} investimentos estão em ${topCat} (${Math.round(conc * 100)}% do portfólio). Diversificar reduz risco e pode melhorar a rentabilidade.`,
         tone: 'gold',
@@ -249,7 +281,7 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
     const paradas = active.filter((g) => (g.saved_amount ?? 0) === 0)
     if (paradas.length >= 2) {
       neutral.push({
-        icon: 'i',
+        icon: '💡',
         title: `${paradas.length} metas sem nenhum aporte`,
         body: `"${paradas[0].name}" e "${paradas[1].name}" ainda não têm progresso. Aportes regulares, mesmo pequenos, fazem a diferença.`,
         tone: 'gold',
@@ -268,7 +300,7 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
       const meses = Math.max(1, Math.round(restante / avgInv))
       const label = monthLabel(meses)
       positive.push({
-        icon: '*',
+        icon: '✅',
         title: `Previsão: ${g.name}`,
         body: `No ritmo atual (${formatCurrency(avgInv)}/mês), você conclui "${g.name}" em ~${meses} ${meses > 1 ? 'meses' : 'mês'} (${label}).`,
         tone: 'green',
@@ -282,7 +314,7 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
     const fv10 = futureValue(avgInv, 0.12, 10)
     const depositos5 = avgInv * 60
     positive.push({
-      icon: '$',
+      icon: '💰',
       title: 'Poder dos juros compostos',
       body: `Mantendo ${formatCurrency(avgInv)}/mês a 12% a.a. (≈CDI): em 5 anos → ${formatCurrency(fv5)} (depósitos: ${formatCurrency(depositos5)}). Em 10 anos → ${formatCurrency(fv10)}.`,
       tone: 'blue',
@@ -293,7 +325,7 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
   if (totalInv > 0 && saidas > 0 && totalInv / saidas >= 6) {
     const mesesCobertos = totalInv / saidas
     positive.push({
-      icon: '*',
+      icon: '✅',
       title: 'Reserva de emergência OK',
       body: `Seu patrimônio (${formatCurrency(totalInv)}) cobre ${mesesCobertos.toFixed(1)} meses de despesas — acima dos 6 meses recomendados. Excelente segurança financeira!`,
       tone: 'green',
@@ -306,7 +338,7 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
     const done = active.filter((g) => (g.saved_amount ?? 0) >= (g.target_amount || 1))
     if (active.length > 0 && done.length === active.length) {
       positive.push({
-        icon: '*',
+        icon: '✅',
         title: 'Todas as metas concluídas!',
         body: `Parabéns! Todas as suas ${active.length} metas foram atingidas. Hora de definir novos desafios — ou elevar os aportes.`,
         tone: 'green',
@@ -318,7 +350,7 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
         const pct = tgt > 0 ? svd / tgt : 0
         if (pct >= 0.8 && pct < 1.0) {
           positive.push({
-            icon: '*',
+            icon: '✅',
             title: 'Meta quase concluída!',
             body: `"${g.name}" está em ${Math.round(pct * 100)}%! Falta apenas ${formatCurrency(tgt - svd)}.`,
             tone: 'green',
@@ -332,7 +364,7 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
   // 16. Ótimo investidor
   if (invPct >= 0.2) {
     positive.push({
-      icon: '*',
+      icon: '✅',
       title: 'Ótimo investidor!',
       body: `Parabéns! ${(invPct * 100).toFixed(1)}% da renda investida (${formatCurrency(investidos)}). Considere diversificar entre renda fixa (CDB, LCI/LCA, Tesouro IPCA+) e variável (ações, FIIs).`,
       tone: 'green',
@@ -342,14 +374,14 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
   // 17. Taxa de poupança excelente / 18. Mês equilibrado (fallback)
   if (savingsPct >= 0.25 && invPct >= 0.15 && alerts.length === 0) {
     positive.push({
-      icon: '*',
+      icon: '✅',
       title: 'Taxa de poupança excelente',
       body: `Guardando ${Math.round(savingsPct * 100)}% da renda e investindo ${Math.round(invPct * 100)}%. Os juros compostos trabalham por você — cada mês de consistência vale muito.`,
       tone: 'green',
     })
   } else if (saldo >= 0 && invPct >= 0.1 && gastoPct <= 0.7 && alerts.length === 0) {
     positive.push({
-      icon: '*',
+      icon: '✅',
       title: 'Mês equilibrado',
       body: `Gastos em ${Math.round(gastoPct * 100)}%, ${Math.round(invPct * 100)}% investido e saldo positivo de ${formatCurrency(saldo)}. Continue assim.`,
       tone: 'green',

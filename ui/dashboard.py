@@ -579,6 +579,10 @@ class Dashboard(ctk.CTkScrollableFrame):
             except Exception:
                 total_unpaid_cards = 0.0
             try:
+                overdue_debts = db.get_debt_overview().get("n_atrasadas", 0)
+            except Exception:
+                overdue_debts = 0
+            try:
                 card_warning = self._compute_card_warning(overview, s)
             except Exception:
                 card_warning = ""
@@ -681,8 +685,8 @@ class Dashboard(ctk.CTkScrollableFrame):
             self.after(0, lambda t=saldo_apos_contas, w=contas_warning: self._update_saldo_apos_contas(t, w))
             if hasattr(self, "_tips_frame"):
                 self.after(0, lambda g=goals, c=pie_data, h=history,
-                           iv=investments, ti=total_inv, uc=total_unpaid_cards:
-                           self._draw_tips(s, g, c, h, iv, ti, uc))
+                           iv=investments, ti=total_inv, uc=total_unpaid_cards, od=overdue_debts:
+                           self._draw_tips(s, g, c, h, iv, ti, uc, od))
             if saldo_evo_fig is not None:
                 self.after(0, lambda: self._embed_host("_saldo_evo_host", saldo_evo_fig))
             if cat_evo_fig is not None:
@@ -1103,13 +1107,15 @@ class Dashboard(ctk.CTkScrollableFrame):
     # ------------------------------------------------------------------
     def _draw_tips(self, s: dict, goals: list = None, categories: list = None,
                    history: list = None, investments: list = None,
-                   total_inv: float = 0.0, unpaid_cards: float = 0.0) -> None:
+                   total_inv: float = 0.0, unpaid_cards: float = 0.0,
+                   overdue_debts: int = 0) -> None:
         if not hasattr(self, "_tips_frame"):
             return
         for w in self._tips_frame.winfo_children():
             w.destroy()
 
-        tips = _build_tips(s, goals, categories, history, investments, total_inv, unpaid_cards)
+        tips = _build_tips(s, goals, categories, history, investments, total_inv,
+                            unpaid_cards, overdue_debts)
         if not tips:
             ctk.CTkLabel(self._tips_frame,
                          text="Adicione lançamentos para receber dicas personalizadas.",
@@ -1552,6 +1558,7 @@ def _build_tips(
     investments:   list  = None,   # objetos de investimento com "category"
     total_inv:     float = 0.0,
     unpaid_cards:  float = 0.0,    # total de faturas em aberto nos cartões
+    overdue_debts: int   = 0,      # nº de parcelas de dívida atrasadas
 ) -> list:
     entradas    = s.get("total_entradas", 0)
     if entradas <= 0:
@@ -1583,6 +1590,16 @@ def _build_tips(
             "e evitar juros.",
             T.RED, red_dim))
 
+    # 0b. Parcelas de dívida atrasadas — mesma prioridade máxima da fatura em aberto
+    if overdue_debts > 0:
+        alerts.append((
+            "⏰",
+            "Parcela de dívida atrasada" if overdue_debts == 1
+                else f"{overdue_debts} parcelas de dívida atrasadas",
+            "Acesse a aba Dívidas para regularizar — parcelas atrasadas costumam "
+            "acumular juros e multa quanto mais tempo ficam em aberto.",
+            T.RED, red_dim))
+
     # ── Média de aportes (meses com investimento > 0) ─────────────────
     hist_inv = [h.get("total_investimentos", 0) for h in (history or [])]
     all_inv  = [v for v in [investidos] + hist_inv if v > 0]
@@ -1594,17 +1611,36 @@ def _build_tips(
 
     # 1. Déficit
     if saldo < 0:
-        alerts.append(("!", "Déficit este mês",
+        alerts.append(("⚠️", "Déficit este mês",
             f"Você está gastando {format_currency(abs(saldo))} a mais do que ganha. "
             "Revise os gastos variáveis com urgência e corte o que não é essencial.",
             T.RED, red_dim))
 
     # 2. Gastos elevados
     elif gasto_pct > 0.80:
-        alerts.append(("!", "Gastos elevados",
+        alerts.append(("⚠️", "Gastos elevados",
             f"Despesas consumindo {gasto_pct*100:.0f}% da renda "
             f"({format_currency(saidas)}). Abaixo de 70% é o ideal para ter margem.",
             T.GOLD, gold_dim))
+    else:
+        # 2b. Gastos acima do próprio padrão histórico — limiar adaptativo em
+        # vez de fixo: compara com a média real do usuário (últimos 3 meses
+        # com renda > 0), não com um corte universal de 80%. Só dispara
+        # quando a regra fixa acima não disparou, pra não duplicar o alerta.
+        hist_gasto_pcts = []
+        for h in (history or [])[:3]:
+            ent = h.get("total_entradas", 0)
+            if ent > 0:
+                hist_gasto_pcts.append(h.get("total_saidas", 0) / ent)
+        if len(hist_gasto_pcts) >= 2:
+            avg_gasto_pct = sum(hist_gasto_pcts) / len(hist_gasto_pcts)
+            if gasto_pct > avg_gasto_pct + 0.08:
+                neutral.append(("💡", "Gastos acima do seu padrão",
+                    f"Neste mês, despesas consomem {gasto_pct*100:.0f}% da renda — "
+                    f"acima da sua média dos últimos {len(hist_gasto_pcts)} meses "
+                    f"({avg_gasto_pct*100:.0f}%). Ainda não é um alerta, mas vale "
+                    "acompanhar antes que vire tendência.",
+                    T.GOLD, gold_dim))
 
     # 3. Tendência de alta nos gastos (vs mês anterior)
     if history and saidas > 0:
@@ -1612,7 +1648,7 @@ def _build_tips(
         if prev_saidas > 0:
             crescimento = (saidas - prev_saidas) / prev_saidas
             if crescimento > 0.12:
-                alerts.append(("!", "Gastos em tendência de alta",
+                alerts.append(("⚠️", "Gastos em tendência de alta",
                     f"Seus gastos subiram {crescimento*100:.0f}% em relação ao mês "
                     f"anterior ({format_currency(prev_saidas)} → {format_currency(saidas)}). "
                     "Se a tendência continuar, seu saldo vai encolher.",
@@ -1620,7 +1656,7 @@ def _build_tips(
 
     # 4. Comprometimento de gastos fixos
     if saida_fixa > 0 and saida_fixa / entradas > 0.55 and saldo >= 0:
-        alerts.append(("!", "Compromissos fixos elevados",
+        alerts.append(("⚠️", "Compromissos fixos elevados",
             f"Gastos fixos representam {saida_fixa/entradas*100:.0f}% da renda "
             f"({format_currency(saida_fixa)}). Revise assinaturas, parcelas e "
             "aluguéis — quanto menos fixo, mais flexibilidade.",
@@ -1632,13 +1668,13 @@ def _build_tips(
         if len(pesadas) >= 2:
             nomes = " e ".join(c["category"] for c in pesadas[:2])
             total_pesadas = sum(c["total"] for c in pesadas[:2])
-            alerts.append(("!", "Múltiplas categorias pesadas",
+            alerts.append(("⚠️", "Múltiplas categorias pesadas",
                 f"{nomes} juntas consomem {total_pesadas/entradas*100:.0f}% da renda "
                 f"({format_currency(total_pesadas)}). Focar o corte aqui gera mais impacto.",
                 T.GOLD, gold_dim))
         elif len(pesadas) == 1:
             top = pesadas[0]
-            alerts.append(("!", f"{top['category']} em destaque",
+            alerts.append(("⚠️", f"{top['category']} em destaque",
                 f"Gastos com {top['category'].lower()} consomem "
                 f"{top['total']/entradas*100:.0f}% da renda "
                 f"({format_currency(top['total'])}). Veja se há margem para redução.",
@@ -1658,14 +1694,14 @@ def _build_tips(
         if len(rates) >= 2 and rates[0] > savings_pct + 0.07:
             trend = " → ".join(f"{r*100:.0f}%" for r in reversed(rates))
             trend += f" → {savings_pct*100:.0f}%"
-            neutral.append(("i", "Taxa de poupança em queda",
+            neutral.append(("💡", "Taxa de poupança em queda",
                 f"Sua taxa de poupança caiu: {trend}. "
                 "Identifique o que mudou nos seus gastos antes que vire déficit.",
                 T.GOLD, gold_dim))
 
     # 7. Renda majoritariamente variável
     if entrada_var / entradas > 0.55:
-        neutral.append(("i", "Renda predominantemente variável",
+        neutral.append(("💡", "Renda predominantemente variável",
             f"{entrada_var/entradas*100:.0f}% das entradas vêm de fontes variáveis. "
             "Para rendas irregulares, a reserva de emergência ideal é de "
             "9 a 12 meses de despesas — não apenas 6.",
@@ -1675,14 +1711,14 @@ def _build_tips(
     if total_inv > 0 and saidas > 0:
         meses_cobertos = total_inv / saidas
         if meses_cobertos < 3:
-            neutral.append(("i", f"Reserva cobre só {meses_cobertos:.1f} mês(es)",
+            neutral.append(("💡", f"Reserva cobre só {meses_cobertos:.1f} mês(es)",
                 f"Seu patrimônio total ({format_currency(total_inv)}) cobre apenas "
                 f"{meses_cobertos:.1f} meses de despesas. "
                 f"Para 6 meses, você precisa de {format_currency(saidas * 6)}.",
                 T.GOLD, gold_dim))
         elif meses_cobertos < 6:
             falta_meses = 6 - meses_cobertos
-            neutral.append(("i", f"Reserva em {meses_cobertos:.1f} de 6 meses",
+            neutral.append(("💡", f"Reserva em {meses_cobertos:.1f} de 6 meses",
                 f"Você está a caminho da reserva ideal. Faltam "
                 f"{format_currency(saidas * falta_meses)} para completar 6 meses "
                 "de segurança.",
@@ -1693,17 +1729,17 @@ def _build_tips(
     ideal_20 = entradas * 0.20
     if investidos == 0:
         sugestao = min(saldo, ideal_10) if saldo > 0 else ideal_10
-        neutral.append(("$", "Comece a investir",
+        neutral.append(("💰", "Comece a investir",
             f"Sem investimentos este mês. Aplicar {format_currency(sugestao)} "
             "(10% da renda) em Tesouro Selic ou CDB liquidez diária já é um ótimo começo.",
             T.BLUE, blue_dim))
     elif inv_pct < 0.10:
-        neutral.append(("$", "Aumente seus investimentos",
+        neutral.append(("💰", "Aumente seus investimentos",
             f"Investindo {inv_pct*100:.1f}% da renda. Mais "
             f"{format_currency(ideal_10 - investidos)} chegaria ao mínimo de 10%.",
             T.BLUE, blue_dim))
     elif inv_pct < 0.20:
-        neutral.append(("$", "Você está no caminho certo",
+        neutral.append(("💰", "Você está no caminho certo",
             f"Investindo {inv_pct*100:.1f}% da renda. Mais "
             f"{format_currency(ideal_20 - investidos)} atingiria os 20% da regra 50/30/20.",
             T.BLUE, blue_dim))
@@ -1715,7 +1751,7 @@ def _build_tips(
         top_cat, top_n = cats.most_common(1)[0]
         conc = top_n / len(investments)
         if conc >= 0.75:
-            neutral.append(("i", "Portfólio concentrado",
+            neutral.append(("💡", "Portfólio concentrado",
                 f"{top_n} de {len(investments)} investimentos estão em {top_cat} "
                 f"({conc*100:.0f}% do portfólio). Diversificar reduz risco e "
                 "pode melhorar a rentabilidade.",
@@ -1726,7 +1762,7 @@ def _build_tips(
         active  = [g for g in goals if float(g.get("target_amount") or 0) > 0]
         paradas = [g for g in active if float(g.get("saved_amount") or 0) == 0]
         if len(paradas) >= 2:
-            neutral.append(("i", f"{len(paradas)} metas sem nenhum aporte",
+            neutral.append(("💡", f"{len(paradas)} metas sem nenhum aporte",
                 f'"{paradas[0]["name"]}" e "{paradas[1]["name"]}" ainda não têm '
                 "progresso. Aportes regulares, mesmo pequenos, fazem a diferença.",
                 T.GOLD, gold_dim))
@@ -1746,7 +1782,7 @@ def _build_tips(
             restante = target - saved
             meses   = max(1, round(restante / avg_inv))
             label   = _month_label(meses)
-            positive.append(("*", f"Previsão: {g['name']}",
+            positive.append(("✅", f"Previsão: {g['name']}",
                 f"No ritmo atual ({format_currency(avg_inv)}/mês), você conclui "
                 f'"{g["name"]}" em ~{meses} {"meses" if meses > 1 else "mês"} '
                 f"({label}).",
@@ -1757,7 +1793,7 @@ def _build_tips(
         fv5  = _fv(avg_inv, 0.12, 5)
         fv10 = _fv(avg_inv, 0.12, 10)
         depositos5 = avg_inv * 60
-        positive.append(("$", "Poder dos juros compostos",
+        positive.append(("💰", "Poder dos juros compostos",
             f"Mantendo {format_currency(avg_inv)}/mês a 12% a.a. (≈CDI): "
             f"em 5 anos → {format_currency(fv5)} "
             f"(depósitos: {format_currency(depositos5)}). "
@@ -1767,7 +1803,7 @@ def _build_tips(
     # 14. Reserva de emergência completa
     if total_inv > 0 and saidas > 0 and total_inv / saidas >= 6:
         meses_cobertos = total_inv / saidas
-        positive.append(("*", f"Reserva de emergência OK",
+        positive.append(("✅", f"Reserva de emergência OK",
             f"Seu patrimônio ({format_currency(total_inv)}) cobre "
             f"{meses_cobertos:.1f} meses de despesas — acima dos 6 meses "
             "recomendados. Excelente segurança financeira!",
@@ -1779,7 +1815,7 @@ def _build_tips(
         done   = [g for g in active
                   if float(g.get("saved_amount") or 0) >= float(g.get("target_amount") or 1)]
         if active and len(done) == len(active):
-            positive.append(("*", "Todas as metas concluídas!",
+            positive.append(("✅", "Todas as metas concluídas!",
                 f"Parabéns! Todas as suas {len(active)} metas foram atingidas. "
                 "Hora de definir novos desafios — ou elevar os aportes.",
                 T.GREEN, green_dim))
@@ -1789,7 +1825,7 @@ def _build_tips(
                 svd = float(g.get("saved_amount") or 0)
                 pct = svd / tgt if tgt > 0 else 0
                 if 0.80 <= pct < 1.0:
-                    positive.append(("*", "Meta quase concluída!",
+                    positive.append(("✅", "Meta quase concluída!",
                         f'"{g["name"]}" está em {pct*100:.0f}%! '
                         f"Falta apenas {format_currency(tgt - svd)}.",
                         T.GREEN, green_dim))
@@ -1797,7 +1833,7 @@ def _build_tips(
 
     # 16. Ótimo investidor
     if inv_pct >= 0.20:
-        positive.append(("*", "Ótimo investidor!",
+        positive.append(("✅", "Ótimo investidor!",
             f"Parabéns! {inv_pct*100:.1f}% da renda investida "
             f"({format_currency(investidos)}). Considere diversificar entre "
             "renda fixa (CDB, LCI/LCA, Tesouro IPCA+) e variável (ações, FIIs).",
@@ -1805,7 +1841,7 @@ def _build_tips(
 
     # 17. Taxa de poupança excelente
     if savings_pct >= 0.25 and inv_pct >= 0.15 and not alerts:
-        positive.append(("*", "Taxa de poupança excelente",
+        positive.append(("✅", "Taxa de poupança excelente",
             f"Guardando {savings_pct*100:.0f}% da renda e investindo "
             f"{inv_pct*100:.0f}%. Os juros compostos trabalham por você "
             "— cada mês de consistência vale muito.",
@@ -1813,7 +1849,7 @@ def _build_tips(
 
     # 18. Mês equilibrado (fallback)
     elif saldo >= 0 and inv_pct >= 0.10 and gasto_pct <= 0.70 and not alerts:
-        positive.append(("*", "Mês equilibrado",
+        positive.append(("✅", "Mês equilibrado",
             f"Gastos em {gasto_pct*100:.0f}%, {inv_pct*100:.0f}% investido e "
             f"saldo positivo de {format_currency(saldo)}. Continue assim.",
             T.GREEN, green_dim))
