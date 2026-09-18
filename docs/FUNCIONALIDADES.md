@@ -620,7 +620,6 @@ recente) é listada.
 | `get_month_investment_net` | month_id | Aportes menos saques do mês. |
 | `get_total_investments` | — | Patrimônio total investido (todos os meses). |
 | `get_benefit_balance_total` | — | Soma o saldo de todos os benefícios VR/VA ativos. |
-| `get_daily_spending` | — | Gasto real somado por dia, últimos N dias (usado no widget "Gastos dos últimos 7 dias"). |
 | `billing_month` | date, cutoff_day | Calcula (ano, mês) de cobrança de uma data sob um dia de corte — réplica de `utils/helpers.py:billing_month`. |
 | `recompute_cutoff_months` | cutoff_day | Remove lançamentos importados pro mês certo quando o usuário muda o dia de corte. |
 | `create_month` / `ensure_month` | nome/ano/mês | Cria um período se não existir; `create_month` também copia pro novo mês as compras no cartão feitas após o fechamento do ciclo anterior. |
@@ -790,8 +789,17 @@ parser em ordem), e `inter/` com um parser por formato do Banco Inter
 **Outros arquivos**: `FinancasApp.spec` (build PyInstaller),
 `requirements.txt`, `report.py` (gera o PDF do Relatório Financeiro
 Completo com reportlab + matplotlib), `file_version_info.txt`
-(metadados de versão do .exe), `assets/` (ícones), `supabase/functions/`
-(Edge Functions, compartilhadas com o web).
+(metadados de versão do .exe), `assets/` (ícones).
+
+**`supabase/functions/quick-tx/index.ts`** — a única Edge Function do
+projeto (Deno/TypeScript, roda no Supabase, fora do desktop e do web).
+Não faz parte de nenhum dos dois builds normais — deploy é manual pelo
+painel do Supabase (ver seção 14). Tem sua própria implementação de
+categorização por palavra-chave (`detectCategory`/`CATEGORY_KEYWORDS`),
+com a mesma ideia de `parsers/base.py:guess_category`/
+`web/src/lib/parsers/base.ts:guessCategory` mas copiada, não importada
+— é um terceiro lugar a lembrar de atualizar se a lista de categorias
+por palavra-chave mudar.
 
 ### 18.2 Web (React + TypeScript + Vite)
 
@@ -883,6 +891,9 @@ possível, ou **manter dois portes fiéis comentados um pro outro**
 quando a lógica precisa rodar no cliente (ex.: `ui/dashboard.py:
 _build_tips` ↔ `web/src/lib/tips.ts`; `utils/plan_strategy.py` ↔
 `web/src/lib/planStrategy.ts`; `parsers/base.py` ↔
-`web/src/lib/parsers/base.ts`). Mudar uma dessas regras exige lembrar
-de replicar no par — não há teste automatizado que garanta a
-sincronia, é convenção mantida manualmente.
+`web/src/lib/parsers/base.ts`; `database.py:get_daily_spending` ↔
+`web/src/lib/api.ts:fetchDailySpending` — este último **não** é uma
+RPC: cada plataforma busca todas as `transactions` e agrega os últimos
+N dias no próprio cliente). Mudar uma dessas regras exige lembrar de
+replicar no par — não há teste automatizado que garanta a sincronia, é
+convenção mantida manualmente.
