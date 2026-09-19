@@ -20,6 +20,21 @@ _PLACEHOLDER = {
 _METHOD_LABELS = list(PAYMENT_METHODS.values())
 _LABEL_TO_METHOD_KEY = {v: k for k, v in PAYMENT_METHODS.items()}
 
+# Troca de tipo na edição — sempre dentro da mesma natureza (nunca
+# entrada↔saída), espelhando o seletor Fixa/Variável do TxForm no web.
+_SIBLING_TYPE = {
+    "entrada_fixa": "entrada_variavel", "entrada_variavel": "entrada_fixa",
+    "saida_fixa": "saida_variavel", "saida_variavel": "saida_fixa",
+}
+_TYPE_LABEL = {
+    "entrada_fixa": "Fixa", "entrada_variavel": "Variável",
+    "saida_fixa": "Fixa", "saida_variavel": "Variável",
+}
+_LABEL_TO_TYPE = {
+    ("entrada", "Fixa"): "entrada_fixa", ("entrada", "Variável"): "entrada_variavel",
+    ("saida", "Fixa"): "saida_fixa", ("saida", "Variável"): "saida_variavel",
+}
+
 
 def _today_br() -> str:
     return datetime.now().strftime("%d/%m/%Y")
@@ -77,11 +92,17 @@ def _tx_display_desc(tx: dict) -> str:
 
 
 class TransactionsTab(ctk.CTkFrame):
-    def __init__(self, parent, month_id: int, tx_type: str, on_change: Callable):
+    def __init__(self, parent, month_id: int, tx_type: str, on_change: Callable,
+                 on_type_changed: Optional[Callable] = None):
         super().__init__(parent, fg_color=T.BG, corner_radius=0)
         self.month_id  = month_id
         self.tx_type   = tx_type
         self.on_change = on_change
+        # Chamado (além de on_change) quando uma edição troca o tipo do
+        # lançamento pra fora desta aba — precisa marcar a aba "irmã"
+        # (ex.: Entradas Fixas) como desatualizada, senão o lançamento só
+        # aparece lá depois de alguma outra ação disparar o refresh dela.
+        self.on_type_changed = on_type_changed
         self.is_expense      = tx_type in EXPENSE_TYPES
         self._is_var_expense = tx_type == "saida_variavel"
 
@@ -129,6 +150,19 @@ class TransactionsTab(ctk.CTkFrame):
             # pra popular o seletor secundário (crédito/débito/VR-VA).
             self._load_payment_sources_async()
         # Não chama refresh() aqui — a aba carrega ao ser exibida pela primeira vez
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _type_label(tx_type: str) -> str:
+        return _TYPE_LABEL.get(tx_type, tx_type)
+
+    @staticmethod
+    def _sibling_type(tx_type: str) -> str:
+        return _SIBLING_TYPE.get(tx_type, tx_type)
+
+    def _label_to_type(self, label: str) -> str:
+        nature = "entrada" if self.tx_type.startswith("entrada") else "saida"
+        return _LABEL_TO_TYPE.get((nature, label), self.tx_type)
 
     # ------------------------------------------------------------------
     def _load_payment_sources_async(self) -> None:
@@ -413,6 +447,21 @@ class TransactionsTab(ctk.CTkFrame):
             fg_color=T.CARD2, hover_color=T.BORDER_L,
             border_width=1, border_color=T.BORDER_L,
             text_color=T.MUTED, font=F(12),
+        )
+
+        # Trocar fixa/variável — só aparece durante a edição (uma nova
+        # transação já nasce com o tipo da aba atual, sem precisar
+        # escolher); restrito à mesma natureza (entrada ou saída) do
+        # lançamento, nunca oferece trocar entrada↔saída aqui.
+        self._type_var = ctk.StringVar(value=self._type_label(self.tx_type))
+        self._type_toggle = ctk.CTkSegmentedButton(
+            btn_wrap, values=[self._type_label(self.tx_type),
+                              self._type_label(self._sibling_type(self.tx_type))],
+            variable=self._type_var,
+            height=30, corner_radius=8, font=F(11),
+            fg_color=T.CARD2, selected_color=T.BLUE,
+            selected_hover_color=T.BLUE_HOVER, unselected_color=T.CARD2,
+            unselected_hover_color=T.BORDER_L, text_color=T.TEXT,
         )
 
         # Forma de pagamento (obrigatória) + origem específica (opcional,
@@ -930,13 +979,16 @@ class TransactionsTab(ctk.CTkFrame):
         self._hide_error()
 
         if self._editing_id is not None:
+            new_type = self._label_to_type(self._type_var.get())
             db.update_transaction(
                 self._editing_id, self.month_id, desc, amount, category,
                 card_id=card_id, is_expectation=self._expectation_active,
                 benefit_id=benefit_id, debit_card_id=debit_card_id,
                 payment_method=payment_method, payment_date=payment_date,
-                payment_time=payment_time)
+                payment_time=payment_time, tx_type=new_type)
             self._cancel_edit()
+            if new_type != self.tx_type and self.on_type_changed:
+                self.on_type_changed()
         else:
             db.add_transaction(
                 self.month_id, self.tx_type, desc, amount, category,
@@ -991,6 +1043,8 @@ class TransactionsTab(ctk.CTkFrame):
         self._form_title.configure(text="✏  Editando lançamento")
         self._add_btn.configure(text="✓ Salvar")
         self._cancel_btn.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        self._type_var.set(self._type_label(tx.get("type") or self.tx_type))
+        self._type_toggle.grid(row=2, column=0, sticky="ew", pady=(4, 0))
         self._desc.focus()
 
     def _cancel_edit(self) -> None:
@@ -1008,6 +1062,8 @@ class TransactionsTab(ctk.CTkFrame):
         self._form_title.configure(text="Novo Lançamento")
         self._add_btn.configure(text="+ Adicionar")
         self._cancel_btn.grid_forget()
+        self._type_toggle.grid_forget()
+        self._type_var.set(self._type_label(self.tx_type))
 
     # ------------------------------------------------------------------
     def refresh(self) -> None:

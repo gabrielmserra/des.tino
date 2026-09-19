@@ -161,6 +161,7 @@ def update_transaction(
     payment_method: Optional[str] = None,
     payment_date: Optional[date] = None,
     payment_time: Optional[time] = None,
+    tx_type: Optional[str] = None,
 ) -> None:
     # Estorna o efeito antigo no saldo do benefício antes de aplicar o novo
     old = _find_tx(month_id, transaction_id)
@@ -180,6 +181,8 @@ def update_transaction(
     }
     if is_expectation is not None:
         update["is_expectation"] = is_expectation
+    if tx_type is not None:
+        update["type"] = tx_type
     get_client().table("transactions").update(update).eq("id", transaction_id).execute()
 
     debit_now = benefit_id is not None and not (

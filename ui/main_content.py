@@ -109,6 +109,7 @@ class MainContent(ctk.CTkFrame):
             frame = TransactionsTab(
                 content, self.month_id, tx_type,
                 on_change=self._refresh_dashboard,
+                on_type_changed=self._on_dashboard_change,
             )
             frame.grid(row=0, column=0, sticky="nsew")
             self._frames[tx_type] = frame

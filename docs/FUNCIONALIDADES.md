@@ -69,11 +69,13 @@ Para cada lançamento:
   o nome de cada cartão cadastrado).
 - **[Ambas]** Percentual de cartão de crédito por lançamento (ver
   [Cartões](#4-cartões-débito-crédito-e-benefícios)).
-- **[Web]** Trocar o **tipo** do lançamento (ex.: Entrada Variável → Entrada
-  Fixa, ou Saída Fixa → Saída Variável) direto no formulário de edição, via
-  seletor Fixa/Variável — muda o lançamento de aba sem precisar excluir e
-  recriar. O desktop não tem esse seletor na edição (o tipo é definido pela
-  aba em que o lançamento foi criado e não muda depois).
+- **[Ambas]** Trocar o **tipo** do lançamento (ex.: Entrada Variável →
+  Entrada Fixa, ou Saída Fixa → Saída Variável) direto no formulário de
+  edição, via seletor Fixa/Variável — muda o lançamento de aba sem
+  precisar excluir e recriar. Restrito à mesma natureza (nunca troca
+  entrada↔saída). **[Desktop]** o seletor só aparece durante a edição
+  (uma linha "Fixa"/"Variável" abaixo de Salvar/Cancelar) — criar um
+  lançamento novo continua usando o tipo da aba atual, sem escolha.
 
 ## 4. Cartões (débito, crédito e benefícios)
 
