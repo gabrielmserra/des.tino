@@ -138,6 +138,13 @@ Para cada lançamento:
   quando o mês anterior não tinha plano (ex.: primeiro mês de uso do
   app) — nesse caso, cai no fluxo manual de sempre. Nunca sobrescreve um
   plano já existente.
+- **[Ambas]** A tela de acompanhamento (planejado x realizado) se
+  atualiza sozinha quando um lançamento muda em outra tela (novo
+  lançamento, importação de extrato, pagamento de fatura/dívida etc.),
+  sem precisar sair e voltar pro Planejamento — no desktop, via o mesmo
+  mecanismo de aba desatualizada já usado no Dashboard; na web, a tela
+  observa os mesmos dados de lançamentos que as outras telas já
+  invalidam ao salvar.
 
 ## 6. Compromissos (Dívidas, Metas e Contas Fixas)
 

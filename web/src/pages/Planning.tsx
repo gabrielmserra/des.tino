@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useMonths } from '../lib/month'
 import {
   fetchPlan,
@@ -7,6 +8,7 @@ import {
   fetchPlanRealized,
   fetchPlanHistory,
   fetchMonthIncome,
+  fetchTransactions,
   savePlan,
   syncDebtsIntoPlan,
 } from '../lib/api'
@@ -81,6 +83,35 @@ export function Planning() {
     if (selectedId != null) load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId])
+
+  // Observa a mesma query de lançamentos que Lançamentos/Dashboard já invalidam
+  // ao criar/editar/importar/pagar — permite recarregar o acompanhamento
+  // automaticamente quando algo muda em outra tela, sem precisar trocar de aba.
+  const txWatchQ = useQuery({
+    queryKey: ['transactions', selectedId],
+    queryFn: () => fetchTransactions(selectedId!),
+    enabled: selectedId != null,
+  })
+  const viewRef = useRef(view)
+  viewRef.current = view
+  const lastTxUpdate = useRef(0)
+
+  useEffect(() => {
+    lastTxUpdate.current = 0
+  }, [selectedId])
+
+  useEffect(() => {
+    if (!txWatchQ.dataUpdatedAt) return
+    if (lastTxUpdate.current === 0) {
+      lastTxUpdate.current = txWatchQ.dataUpdatedAt
+      return
+    }
+    if (txWatchQ.dataUpdatedAt !== lastTxUpdate.current) {
+      lastTxUpdate.current = txWatchQ.dataUpdatedAt
+      if (viewRef.current.kind === 'tracking') load()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [txWatchQ.dataUpdatedAt])
 
   async function load() {
     if (selectedId == null) return
