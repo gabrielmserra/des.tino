@@ -1600,6 +1600,14 @@ def get_pending_fixed_bills_total(year: int, month: int) -> float:
     return float(resp.data or 0)
 
 
+def get_fixed_bill_watch_data(months: int = 2) -> dict:
+    """Dados brutos pro Guru Financeiro cruzar contas fixas ativas com o
+    extrato importado recente (detectar conta parada / assinatura sem
+    conta fixa cadastrada) — a comparação de texto roda em _build_tips."""
+    resp = get_client().rpc("get_fixed_bill_watch_data", {"p_months": months}).execute()
+    return resp.data or {"bills": [], "transactions": []}
+
+
 # ---------------------------------------------------------------------------
 # Benefícios (VR / VA)
 # ---------------------------------------------------------------------------

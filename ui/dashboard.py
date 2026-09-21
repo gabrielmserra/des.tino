@@ -4,6 +4,7 @@ Configurável: o usuário escolhe quais widgets aparecem e em que ordem (botão
 "Editar Dashboard"), config salva em user_settings.dashboard_widgets e
 sincronizada com o site/celular (mesma coluna, mesmo formato)."""
 import customtkinter as ctk
+import difflib
 from datetime import date
 from typing import Optional, Callable
 
@@ -11,6 +12,7 @@ import database as db
 import ui.theme as T
 from ui.theme import F
 from ui.dialogs import show_info
+from parsers.base import _strip_accents
 from utils.helpers import format_currency, MONTHS_PT, PAYMENT_METHODS
 
 
@@ -606,6 +608,10 @@ class Dashboard(ctk.CTkScrollableFrame):
             except Exception:
                 overdue_debts = 0
             try:
+                fixed_bill_watch = db.get_fixed_bill_watch_data()
+            except Exception:
+                fixed_bill_watch = {"bills": [], "transactions": []}
+            try:
                 card_warning = self._compute_card_warning(overview, s)
             except Exception:
                 card_warning = ""
@@ -708,8 +714,9 @@ class Dashboard(ctk.CTkScrollableFrame):
             self.after(0, lambda t=saldo_apos_contas, w=contas_warning: self._update_saldo_apos_contas(t, w))
             if hasattr(self, "_tips_frame"):
                 self.after(0, lambda g=goals, c=pie_data, h=history,
-                           iv=investments, ti=total_inv, uc=total_unpaid_cards, od=overdue_debts:
-                           self._draw_tips(s, g, c, h, iv, ti, uc, od))
+                           iv=investments, ti=total_inv, uc=total_unpaid_cards, od=overdue_debts,
+                           fbw=fixed_bill_watch:
+                           self._draw_tips(s, g, c, h, iv, ti, uc, od, fbw))
             if saldo_evo_fig is not None:
                 self.after(0, lambda: self._embed_host("_saldo_evo_host", saldo_evo_fig))
             if cat_evo_fig is not None:
@@ -1131,14 +1138,14 @@ class Dashboard(ctk.CTkScrollableFrame):
     def _draw_tips(self, s: dict, goals: list = None, categories: list = None,
                    history: list = None, investments: list = None,
                    total_inv: float = 0.0, unpaid_cards: float = 0.0,
-                   overdue_debts: int = 0) -> None:
+                   overdue_debts: int = 0, fixed_bill_watch: dict = None) -> None:
         if not hasattr(self, "_tips_frame"):
             return
         for w in self._tips_frame.winfo_children():
             w.destroy()
 
         tips = _build_tips(s, goals, categories, history, investments, total_inv,
-                            unpaid_cards, overdue_debts)
+                            unpaid_cards, overdue_debts, fixed_bill_watch)
         if not tips:
             ctk.CTkLabel(self._tips_frame,
                          text="Adicione lançamentos para receber dicas personalizadas.",
@@ -1573,6 +1580,39 @@ def _fv(pmt: float, annual_rate: float, years: int) -> float:
     return pmt * ((1 + r) ** n - 1) / r if r > 0 else pmt * n
 
 
+# Limiar do MAIOR TRECHO CONTÍNUO em comum, como fração do texto mais
+# curto, pra considerar que o nome de uma conta fixa "bate" com a
+# descrição de um lançamento importado — réplica de
+# web/src/lib/tips.ts:FIXED_BILL_MATCH_MIN. Precisa ser um trecho
+# CONTÍNUO (find_longest_match), não a soma de vários pedaços espalhados
+# (get_matching_blocks somado) — testado contra dados reais e a soma de
+# pedaços dava falso positivo feio em nomes curtos (ex.: "Luz" "batendo"
+# 0.67 com "MINIMERCADO NEGRELLI" só por coincidência de letras soltas
+# em posições diferentes, sem nenhum trecho de verdade em comum). Também
+# não é a razão simétrica usada na detecção de duplicata da importação
+# (_find_duplicate) — ali os dois textos vêm da mesma fonte (extrato vs.
+# extrato) e têm tamanho parecido; aqui é um apelido curto ("Internet")
+# contra o texto verboso do banco ("OI FIBRA INTERNET RESIDENCIAL"). 0.8
+# (não 0.7) por causa de outro caso real encontrado no teste: "Internet"
+# batia 0.75 com "IATA INTERNATIONAL..." só pelo prefixo comum
+# "INTERN" — coincidência entre duas palavras diferentes de verdade, não
+# um bug do algoritmo. Como todo match verdadeiro observado até agora
+# fica em 1.00 (contido por completo), subir o limiar não perde nada de
+# precisão nos casos reais, só corta essa faixa intermediária arriscada.
+_FIXED_BILL_MATCH_MIN = 0.8
+
+
+def _normalize_for_match(s: str) -> str:
+    return _strip_accents(s or "").upper().strip()
+
+
+def _bill_match_ratio(name: str, desc: str) -> float:
+    if not name or not desc:
+        return 0.0
+    block = difflib.SequenceMatcher(None, name, desc).find_longest_match(0, len(name), 0, len(desc))
+    return block.size / min(len(name), len(desc))
+
+
 def _build_tips(
     s: dict,
     goals:         list  = None,
@@ -1582,6 +1622,7 @@ def _build_tips(
     total_inv:     float = 0.0,
     unpaid_cards:  float = 0.0,    # total de faturas em aberto nos cartões
     overdue_debts: int   = 0,      # nº de parcelas de dívida atrasadas
+    fixed_bill_watch: dict = None, # {"bills":[...], "transactions":[...]}
 ) -> list:
     entradas    = s.get("total_entradas", 0)
     if entradas <= 0:
@@ -1788,6 +1829,56 @@ def _build_tips(
             neutral.append(("💡", f"{len(paradas)} metas sem nenhum aporte",
                 f'"{paradas[0]["name"]}" e "{paradas[1]["name"]}" ainda não têm '
                 "progresso. Aportes regulares, mesmo pequenos, fazem a diferença.",
+                T.GOLD, gold_dim))
+
+    # 11b/11c. Conta fixa parada ou assinatura sem conta fixa — cruza contas
+    # fixas ativas (criadas há mais de alguns meses, pra não pegar cadastro
+    # recente) com o extrato importado recente. Só roda se houver de fato
+    # extrato importado na janela (sem isso, toda conta pareceria "sumida"
+    # só porque o usuário não importa/não importou recentemente).
+    fbw = fixed_bill_watch or {}
+    fbw_bills = fbw.get("bills") or []
+    fbw_txs   = fbw.get("transactions") or []
+    if fbw_bills and fbw_txs:
+        tx_descs = [_normalize_for_match(t.get("description", "")) for t in fbw_txs]
+
+        # 11b. Conta fixa sem nenhum débito parecido no extrato recente
+        dormant = [
+            b for b in fbw_bills
+            if not any(_bill_match_ratio(_normalize_for_match(b["name"]), d) >= _FIXED_BILL_MATCH_MIN
+                       for d in tx_descs)
+        ]
+        if len(dormant) == 1:
+            neutral.append(("💡", "Conta fixa sem débito recente",
+                f'"{dormant[0]["name"]}" ({format_currency(dormant[0]["amount"])}) não '
+                "aparece em nenhum extrato importado recentemente. Ainda está ativa?",
+                T.GOLD, gold_dim))
+        elif len(dormant) >= 2:
+            neutral.append(("💡", f"{len(dormant)} contas fixas sem débito recente",
+                f'"{dormant[0]["name"]}" e "{dormant[1]["name"]}" não aparecem em '
+                "nenhum extrato importado recentemente. Ainda estão ativas?",
+                T.GOLD, gold_dim))
+
+        # 11c. Gasto recorrente (2+ meses) sem nenhuma conta fixa parecida
+        groups: dict = {}
+        for t in fbw_txs:
+            key = _normalize_for_match(t.get("description", ""))
+            g = groups.setdefault(key, {"count": 0, "sample": t.get("description", ""), "total": 0.0})
+            g["count"] += 1
+            g["total"] += float(t.get("amount") or 0)
+        bill_names = [_normalize_for_match(b["name"]) for b in fbw_bills]
+        unmatched = [
+            g for g in groups.values()
+            if g["count"] >= 2
+            and not any(_bill_match_ratio(n, _normalize_for_match(g["sample"])) >= _FIXED_BILL_MATCH_MIN
+                        for n in bill_names)
+        ]
+        if unmatched:
+            g = unmatched[0]
+            neutral.append(("💡", "Gasto recorrente sem conta fixa",
+                f'"{g["sample"]}" aparece em pelo menos {g["count"]} extratos importados '
+                f'recentes (~{format_currency(g["total"] / g["count"])}/mês) e não está '
+                "cadastrado como conta fixa. Quer cadastrar pra acompanhar o vencimento?",
                 T.GOLD, gold_dim))
 
     # =========================================================

@@ -213,6 +213,8 @@ Três tipos de meta, lado a lado:
   saldo atual menos as contas do mês real ainda não pagas — mostra também
   um aviso compacto quando alguma conta pendente já passou do vencimento
   (ex.: "Internet venceu dia 20"), sem aumentar o tamanho do card.
+- **[Ambas]** O Guru Financeiro cruza as contas fixas ativas com o extrato
+  importado recente — ver [10.1](#101-guru-financeiro).
 
 ## 7. Investimentos
 
@@ -331,8 +333,15 @@ dívidas) e mostra até 3 cartões, sempre nesta ordem de prioridade:
    nenhum alerta mais forte já cobrindo o mesmo problema), taxa de
    poupança em queda ao longo de 3 meses, renda predominantemente
    variável, reserva de emergência abaixo de 6 meses de despesas,
-   portfólio de investimentos concentrado, metas sem nenhum aporte, e
-   sugestões de quanto investir pra chegar a 10%/20% da renda.
+   portfólio de investimentos concentrado, metas sem nenhum aporte,
+   sugestões de quanto investir pra chegar a 10%/20% da renda, conta fixa
+   ativa sem nenhum débito parecido no extrato importado recente ("ainda
+   está ativa?"), e gasto recorrente (2+ meses) no extrato que não bate
+   com nenhuma conta fixa cadastrada ("quer cadastrar?"). Essas duas
+   últimas cruzam contas fixas ativas com o extrato importado — só
+   avaliadas se houver extrato importado na janela recente (evita falso
+   alarme pra quem não usa a importação) e contas fixas criadas há pouco
+   tempo não entram na checagem (evita alarme prematuro).
 3. **Positivos** (verde) — reconhecimento quando algo vai bem: projeção de
    data de conclusão de meta no ritmo atual de aportes, projeção de juros
    compostos em 5 e 10 anos, reserva de emergência completa, metas
@@ -691,6 +700,7 @@ recente) é listada.
 | `update_fixed_bill_instance_amount` | instance_id, amount | Edita o valor de uma instância (ex.: luz/água variam mês a mês). |
 | `pay_fixed_bill_instance` / `undo_fixed_bill_payment` | instance_id | Marca paga/pendente — checklist puro (desde a migração 025). |
 | `get_pending_fixed_bills_total` | year, month | Soma das instâncias pendentes do mês real. |
+| `get_fixed_bill_watch_data` | months (default 2) | Contas fixas ativas (criadas há mais de `months`) + lançamentos importados dos últimos `months` — dados brutos pro Guru Financeiro cruzar (a comparação de texto roda no cliente, não aqui). |
 
 **Metas**
 | Função | Parâmetros | O que faz |

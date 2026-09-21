@@ -806,6 +806,19 @@ export async function fetchPendingFixedBillsTotal(year: number, month: number): 
   return Number(data ?? 0)
 }
 
+// Dados brutos pro Guru Financeiro cruzar contas fixas ativas com o
+// extrato importado recente (detectar conta parada / assinatura sem
+// conta fixa cadastrada) — a comparação de texto roda em tips.ts.
+export type FixedBillWatchBill = { id: number; name: string; amount: number }
+export type FixedBillWatchTransaction = { description: string; amount: number; payment_date: string }
+export type FixedBillWatchData = { bills: FixedBillWatchBill[]; transactions: FixedBillWatchTransaction[] }
+
+export async function fetchFixedBillWatchData(months = 2): Promise<FixedBillWatchData> {
+  const { data, error } = await supabase.rpc('get_fixed_bill_watch_data', { p_months: months })
+  if (error) throw error
+  return (data ?? { bills: [], transactions: [] }) as FixedBillWatchData
+}
+
 // ── Investimentos ─────────────────────────────────────────────────────
 // Leituras e edições simples (nome/categoria/valor/nota) são diretas na
 // tabela. Criar (2 inserts: investimento + aporte inicial) e excluir

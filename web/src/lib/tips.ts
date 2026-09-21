@@ -2,7 +2,9 @@
 // (desktop). Mantido em sincronia manual com o Python — mesmas regras, mesmos
 // limiares, mesmo texto.
 import { formatCurrency, MONTHS_PT } from './format'
+import { billMatchRatio } from './textSimilarity'
 import type { MonthSummary, CategoryTotal, Goal, Investment } from './types'
+import type { FixedBillWatchData } from './api'
 
 export type TipTone = 'red' | 'gold' | 'green' | 'blue'
 
@@ -35,10 +37,33 @@ type BuildTipsOptions = {
   totalInv?: number
   unpaidCards?: number
   overdueDebts?: number // nº de parcelas de dívida atrasadas
+  fixedBillWatch?: FixedBillWatchData // contas fixas ativas x extrato importado recente
+}
+
+// Limiar de CONTENÇÃO (ver textSimilarity.ts:billMatchRatio) pra considerar
+// que o nome de uma conta fixa "bate" com a descrição de um lançamento
+// importado. Usa contenção, não a razão simétrica (descriptionSimilarity)
+// usada na detecção de duplicata da importação — ali os dois textos vêm da
+// mesma fonte (extrato vs. extrato) e têm tamanho parecido; aqui é um
+// apelido curto ("Internet") contra o texto verboso do banco ("OI FIBRA
+// INTERNET RESIDENCIAL"), e a razão simétrica penaliza demais a diferença
+// de tamanho mesmo quando o apelido está 100% contido na descrição. 0.8
+// (não 0.7) por causa de outro caso real encontrado no teste: "Internet"
+// batia 0.75 com "IATA INTERNATIONAL..." só pelo prefixo comum
+// "INTERN" — coincidência entre duas palavras diferentes de verdade, não
+// um bug do algoritmo. Como todo match verdadeiro observado até agora
+// fica em 1.00 (contido por completo), subir o limiar não perde nada de
+// precisão nos casos reais, só corta essa faixa intermediária arriscada.
+const FIXED_BILL_MATCH_MIN = 0.8
+
+const DIACRITICS_RE = new RegExp('[̀-ͯ]', 'g')
+
+function normalizeForMatch(s: string): string {
+  return s.normalize('NFD').replace(DIACRITICS_RE, '').toUpperCase().trim()
 }
 
 export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
-  const { goals, categories, history, investments, totalInv = 0, unpaidCards = 0, overdueDebts = 0 } = opts
+  const { goals, categories, history, investments, totalInv = 0, unpaidCards = 0, overdueDebts = 0, fixedBillWatch } = opts
 
   const entradas = s.total_entradas ?? 0
   if (entradas <= 0) return []
@@ -284,6 +309,60 @@ export function buildTips(s: MonthSummary, opts: BuildTipsOptions = {}): Tip[] {
         icon: '💡',
         title: `${paradas.length} metas sem nenhum aporte`,
         body: `"${paradas[0].name}" e "${paradas[1].name}" ainda não têm progresso. Aportes regulares, mesmo pequenos, fazem a diferença.`,
+        tone: 'gold',
+      })
+    }
+  }
+
+  // 11b/11c. Conta fixa parada ou assinatura sem conta fixa — cruza contas
+  // fixas ativas (criadas há mais de alguns meses, pra não pegar cadastro
+  // recente) com o extrato importado recente. Só roda se houver de fato
+  // extrato importado na janela (sem isso, toda conta pareceria "sumida"
+  // só porque o usuário não importa/não importou recentemente).
+  if (fixedBillWatch && fixedBillWatch.bills.length > 0 && fixedBillWatch.transactions.length > 0) {
+    const txDescs = fixedBillWatch.transactions.map((t) => normalizeForMatch(t.description))
+
+    // 11b. Conta fixa sem nenhum débito parecido no extrato recente
+    const dormant = fixedBillWatch.bills.filter((b) => {
+      const nameNorm = normalizeForMatch(b.name)
+      return !txDescs.some((d) => billMatchRatio(nameNorm, d) >= FIXED_BILL_MATCH_MIN)
+    })
+    if (dormant.length === 1) {
+      neutral.push({
+        icon: '💡',
+        title: 'Conta fixa sem débito recente',
+        body: `"${dormant[0].name}" (${formatCurrency(dormant[0].amount)}) não aparece em nenhum extrato importado recentemente. Ainda está ativa?`,
+        tone: 'gold',
+      })
+    } else if (dormant.length >= 2) {
+      neutral.push({
+        icon: '💡',
+        title: `${dormant.length} contas fixas sem débito recente`,
+        body: `"${dormant[0].name}" e "${dormant[1].name}" não aparecem em nenhum extrato importado recentemente. Ainda estão ativas?`,
+        tone: 'gold',
+      })
+    }
+
+    // 11c. Gasto recorrente (2+ meses) sem nenhuma conta fixa parecida
+    const groups = new Map<string, { count: number; sample: string; total: number }>()
+    for (const t of fixedBillWatch.transactions) {
+      const key = normalizeForMatch(t.description)
+      const g = groups.get(key) ?? { count: 0, sample: t.description, total: 0 }
+      g.count += 1
+      g.total += t.amount
+      groups.set(key, g)
+    }
+    const billNames = fixedBillWatch.bills.map((b) => normalizeForMatch(b.name))
+    const unmatched = [...groups.entries()]
+      .filter(([, g]) => g.count >= 2)
+      .filter(([key]) => !billNames.some((n) => billMatchRatio(n, key) >= FIXED_BILL_MATCH_MIN))
+      .map(([, g]) => g)
+    if (unmatched.length > 0) {
+      const g = unmatched[0]
+      neutral.push({
+        icon: '💡',
+        title: 'Gasto recorrente sem conta fixa',
+        body: `"${g.sample}" aparece em pelo menos ${g.count} extratos importados recentes (~${formatCurrency(g.total / g.count)}/mês) e não está cadastrado como conta fixa. Quer cadastrar pra acompanhar o vencimento?`,
         tone: 'gold',
       })
     }

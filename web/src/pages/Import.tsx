@@ -5,6 +5,7 @@ import type { NormalizedRow } from '../lib/parsers/types'
 import { ensureMonth, importTransactionsBulk, fetchMonths, fetchTransactions, fetchImportCutoffDay, fetchCardsBasic } from '../lib/api'
 import { formatCurrency, formatDate, MONTHS_PT, billingMonth } from '../lib/format'
 import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants'
+import { descriptionSimilarity } from '../lib/textSimilarity'
 import type { Transaction } from '../lib/types'
 
 type Candidate = NormalizedRow & {
@@ -19,26 +20,6 @@ type Candidate = NormalizedRow & {
   // usuário na revisão — usada só pra checagem de duplicata em futuras
   // reimportações (ver findDuplicate), nunca mostrada/editada na UI.
   importRaw: string
-}
-
-// Razão de similaridade baseada em maior subsequência comum (LCS) — mesmo
-// espírito do difflib.SequenceMatcher usado no desktop: 1 = idênticas, 0 =
-// nada em comum.
-function descriptionSimilarity(a: string, b: string): number {
-  const s1 = a.toLowerCase()
-  const s2 = b.toLowerCase()
-  const n = s1.length
-  const m = s2.length
-  if (n === 0 || m === 0) return n === m ? 1 : 0
-  let prev = new Array(m + 1).fill(0)
-  for (let i = 1; i <= n; i++) {
-    const cur = new Array(m + 1).fill(0)
-    for (let j = 1; j <= m; j++) {
-      cur[j] = s1[i - 1] === s2[j - 1] ? prev[j - 1] + 1 : Math.max(prev[j], cur[j - 1])
-    }
-    prev = cur
-  }
-  return (2 * prev[m]) / (n + m)
 }
 
 const DUPLICATE_DESC_RATIO_MIN = 0.6
