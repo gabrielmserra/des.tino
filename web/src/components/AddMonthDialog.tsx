@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { MONTHS_PT } from '../lib/format'
-import { createMonth } from '../lib/api'
+import { createMonth, autoGeneratePlan } from '../lib/api'
 import type { Month } from '../lib/types'
 
 function Sheet({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
@@ -57,6 +57,8 @@ export function AddMonthDialog({ months, onClose, onCreated }: Props) {
     setBusy(true)
     try {
       const id = await createMonth(name, year, month + 1)
+      const newMonth: Month = { id, name, year, month: month + 1, opening_balance: null }
+      await autoGeneratePlan(months, newMonth)
       onCreated(id)
     } catch (e) {
       setError('Erro ao criar período: ' + (e as Error).message)

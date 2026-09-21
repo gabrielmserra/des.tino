@@ -12,6 +12,7 @@ from ui.sidebar      import Sidebar
 from ui.main_content import MainContent
 from ui.investments  import InvestmentsTab
 from utils.helpers   import MONTHS_PT, APP_NAME, APP_VERSION, apply_app_icon
+from utils.plan_strategy import suggest_allocations
 
 
 class FinanceApp(ctk.CTkFrame):
@@ -343,6 +344,7 @@ class FinanceApp(ctk.CTkFrame):
                     new_month = next((m for m in months if m["name"] == name), None)
                     if new_month:
                         db.copy_transactions_to_month(prev_id, new_month["id"])
+                        self._auto_generate_plan(new_month["id"], prev_id)
                 self._after_add_month(name, months)
             except Exception as e:
                 from ui.dialogs import show_error
@@ -354,6 +356,55 @@ class FinanceApp(ctk.CTkFrame):
             if m["name"] == name:
                 self._select_month(m["id"], m["name"])
                 break
+
+    def _auto_generate_plan(self, month_id: int, prev_month_id: int) -> None:
+        """Cria o plano do mês novo sozinho, sem exigir clique em "Salvar
+        plano": copia as entradas de renda esperadas do mês anterior (mesmo
+        dia, mesmo valor -- corrente contínua, editável depois em Editar
+        entradas) e gera a sugestão de categorias com a mesma fórmula do
+        botão manual (suggest_allocations, histórico ponderado). Não faz
+        nada se o mês anterior não tinha plano (nada pra copiar -- ex.:
+        primeiro mês de uso) ou se o mês novo já tem plano por algum motivo
+        (nunca sobrescreve um plano existente)."""
+        try:
+            if db.get_plan(month_id) is not None:
+                return
+            prev_plan = db.get_plan(prev_month_id)
+            if prev_plan is None:
+                return
+            prev_income_items = db.get_plan_income_items(prev_plan["id"])
+            if not prev_income_items:
+                return
+            income_items = [{"amount": float(it["amount"]), "expected_day": int(it["expected_day"])}
+                            for it in prev_income_items]
+            income = sum(it["amount"] for it in income_items)
+
+            expenses_hist, income_hist = db.get_plan_history(month_id)
+            debt_totals = db.get_month_debt_totals_for(month_id)
+            free_income = max(0.0, income - sum(debt_totals.values()))
+            suggestions = suggest_allocations(expenses_hist, income_hist, free_income)
+
+            rows = [{
+                "category":         cat,
+                "planned_amount":   round(total, 2),
+                "suggested_amount": round(total, 2),
+                "is_eventual":      False,
+                "is_mandatory":     True,
+            } for cat, total in debt_totals.items()]
+            rows += [{
+                "category":         cat,
+                "planned_amount":   s["amount"],
+                "suggested_amount": s["amount"],
+                "is_eventual":      s["eventual"],
+                "is_mandatory":     False,
+            } for cat, s in suggestions.items() if cat not in debt_totals]
+
+            db.save_plan(month_id, income, rows, income_items)
+        except Exception:
+            # Auto-geração é um bônus, não pode travar a criação do mês --
+            # se falhar, o usuário sempre pode gerar o plano manualmente
+            # na aba Planejamento, igual antes desta feature existir.
+            pass
 
     # ------------------------------------------------------------------
     def _rename_month(self, month_id: int) -> None:

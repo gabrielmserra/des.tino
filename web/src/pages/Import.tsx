@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { detectParser } from '../lib/parsers/registry'
 import type { NormalizedRow } from '../lib/parsers/types'
-import { ensureMonth, importTransactionsBulk, fetchMonths, fetchTransactions, fetchImportCutoffDay, fetchCardsBasic } from '../lib/api'
+import { ensureMonth, importTransactionsBulk, fetchMonths, fetchTransactions, fetchImportCutoffDay, fetchCardsBasic, autoGeneratePlan } from '../lib/api'
 import { formatCurrency, formatDate, MONTHS_PT, billingMonth } from '../lib/format'
 import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants'
 import { descriptionSimilarity } from '../lib/textSimilarity'
@@ -86,7 +86,12 @@ export function Import() {
       const name = `${MONTHS_PT[m - 1]} ${y}`
       if (!byName.has(name)) {
         const id = await ensureMonth(name, y, m)
-        byName.set(name, { id, name, year: y, month: m, opening_balance: null })
+        const newMonth = { id, name, year: y, month: m, opening_balance: null }
+        // Usa os meses já vistos nesta mesma importação (não só o snapshot
+        // inicial) -- um extrato que precisa criar vários meses seguidos
+        // (raro, mas possível) encontra o mês anterior certo pra copiar.
+        await autoGeneratePlan(Array.from(byName.values()), newMonth)
+        byName.set(name, newMonth)
         createdAny = true
       }
     }

@@ -129,6 +129,15 @@ Para cada lançamento:
   botão "✎ Editar entradas" abre a lista pra adicionar/remover/ajustar.
   Continua sendo só uma estimativa/meta do Planejamento — **nunca lança
   nenhuma transação real**, igual Dívidas/Metas/Contas Fixas.
+- **[Ambas]** Plano gerado **automaticamente** ao criar um período novo —
+  sem precisar clicar em "Gerar plano do mês": as entradas de renda
+  esperadas são copiadas do mês imediatamente anterior (mesmo dia, mesmo
+  valor — corrente contínua: editar num mês vira a base copiada pros
+  seguintes, sem afetar meses passados) e as categorias usam a mesma
+  sugestão por histórico ponderado do botão manual. Só não acontece
+  quando o mês anterior não tinha plano (ex.: primeiro mês de uso do
+  app) — nesse caso, cai no fluxo manual de sempre. Nunca sobrescreve um
+  plano já existente.
 
 ## 6. Compromissos (Dívidas, Metas e Contas Fixas)
 

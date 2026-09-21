@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { DEFAULT_IMPORT_CUTOFF_DAY } from './format'
+import { suggestAllocations } from './planStrategy'
 import type {
   Month,
   MonthSummary,
@@ -594,6 +595,48 @@ export async function savePlan(
     p_income_items: incomeItems,
   })
   if (error) throw error
+}
+
+/** Gera o plano do mês novo sozinho, sem exigir clique em "Salvar plano":
+ * copia as entradas de renda esperadas do mês anterior (mesmo dia, mesmo
+ * valor -- corrente contínua, editável depois em "Editar entradas") e
+ * sugere categorias com a mesma fórmula do fluxo manual
+ * (suggestAllocations, histórico ponderado). Não faz nada se o mês
+ * anterior não tinha plano (nada pra copiar -- ex.: primeiro mês de uso)
+ * ou se o mês novo já tem plano por algum motivo (nunca sobrescreve um
+ * plano existente). Itens obrigatórios de dívida entram depois, pelo
+ * syncDebtsIntoPlan já chamado ao abrir o Planejamento -- não duplicado
+ * aqui, igual o fluxo manual do site também não faz. */
+export async function autoGeneratePlan(months: Month[], newMonth: Month): Promise<void> {
+  try {
+    const existing = await fetchPlan(newMonth.id)
+    if (existing) return
+    const prevMonth = priorMonths(months, newMonth, 1)[0]
+    if (!prevMonth) return
+    const prevPlan = await fetchPlan(prevMonth.id)
+    if (!prevPlan) return
+    const prevIncomeItems = await fetchPlanIncomeItems(prevPlan.id)
+    if (prevIncomeItems.length === 0) return
+    const incomeItems: PlanIncomeItemInput[] = prevIncomeItems.map((it) => ({
+      amount: it.amount,
+      expected_day: it.expected_day,
+    }))
+    const income = incomeItems.reduce((a, i) => a + i.amount, 0)
+
+    const { expensesHistory, incomeHistory } = await fetchPlanHistory(months, newMonth)
+    const suggestions = suggestAllocations(expensesHistory, incomeHistory, income)
+    const items: PlanItemInput[] = Object.entries(suggestions).map(([category, s]) => ({
+      category,
+      planned_amount: s.amount,
+      suggested_amount: s.amount,
+      is_eventual: s.eventual,
+      is_mandatory: false,
+    }))
+    await savePlan(newMonth.id, income, items, incomeItems)
+  } catch {
+    // Auto-geração é um bônus -- se falhar, o usuário sempre pode gerar o
+    // plano manualmente na aba Planejamento, igual antes desta feature.
+  }
 }
 
 // ── Cartões de débito (exclusivo web/mobile) ─────────────────────────
