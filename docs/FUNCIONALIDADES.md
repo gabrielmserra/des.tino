@@ -285,6 +285,35 @@ Três tipos de meta, lado a lado:
 - **[Ambas]** Aviso adicional quando o **mês seguinte** já tem mais de
   R$300 em parcelas de cartão previstas.
 
+### 9.1 Alerta de saldo projetado negativo
+
+- **[Ambas]** Banner no Dashboard (mesmo estilo do aviso de risco de
+  cartão) que simula, dia a dia, do dia de hoje até o fim do mês
+  corrente, como o saldo vai se comportar — descontando o que vence em
+  cada dia (contas fixas, parcelas de dívida, fatura de cartão em aberto
+  e parcelas futuras previstas) e somando as entradas esperadas
+  cadastradas no Planejamento (`plan_income_items`, uma por dia
+  esperado). Existe pra pegar um "buraco" que nenhum outro resumo
+  mostra: o mês pode fechar positivo no total, mas ter um dia específico
+  em que várias contas vencem antes da próxima entrada cair — nesse dia
+  o saldo ficaria negativo na vida real, mesmo sem aparecer em nenhum
+  balanço mensal. Ex.: *"⚠ Saldo projetado fica negativo no dia 21
+  (-R$180,00), antes da sua próxima entrada esperada no dia 24."*
+  Silêncio total quando não encontra nenhum dia problemático, e só
+  simula quando o mês selecionado é o mês corrente de verdade (não faz
+  sentido projetar um mês passado ou futuro).
+- **[Ambas]** Contas fixas e fatura de cartão têm dia certo; se já
+  venceram e continuam não pagas, contam como devidas **hoje** na
+  simulação. Parcela de dívida não tem dia certo cadastrado (só
+  mês/ano) — por decisão de produto, toda parcela de dívida não paga do
+  mês corrente conta como devida **hoje** também (mais conservador:
+  nunca deixa passar batido, mesmo que avise um pouco cedo demais em
+  relação ao vencimento real).
+- **[Ambas]** Depende do Planejamento do mês estar com as entradas de
+  renda cadastradas (`plan_income_items` — ver item "planejamento gerado
+  automaticamente" na seção 5); sem plano no mês, a simulação só
+  desconta contas/dívidas/cartão e nunca soma entrada nenhuma.
+
 ## 10. Dashboard
 
 - **[Ambas]** 18 widgets configuráveis, cada usuário escolhe quais quer ver
@@ -738,6 +767,7 @@ recente) é listada.
 | Função | Parâmetros | O que faz |
 |---|---|---|
 | `get_future_commitments` | months (default 6) | Soma, mês a mês, parcelas de cartão previstas + fatura em aberto (rotulada pelo mês em que o ciclo começou) + dívidas em aberto + contas fixas pendentes. |
+| `get_balance_projection` (043) | month_id | Simula dia a dia, de hoje até o fim do mês, o saldo esperado (contas fixas + dívidas + fatura de cartão em aberto + parcelas futuras vs. entradas do Planejamento) — retorna `{day, balance, next_income_day}` do primeiro dia em que cruzaria zero, ou `null` se não é o mês corrente ou não acha nenhum dia problemático. |
 
 Grants: toda função é `grant execute ... to authenticated` — nunca
 exposta a `anon`.

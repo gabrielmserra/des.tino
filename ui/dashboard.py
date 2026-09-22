@@ -117,6 +117,15 @@ class Dashboard(ctk.CTkScrollableFrame):
         )
         self._card_alert_lbl.pack(side="left", padx=16, pady=10)
 
+        # ── Alerta de saldo projetado negativo (simulação dia a dia) ────
+        self._balance_alert = ctk.CTkFrame(alerts_box, fg_color=T.RED_DIM, corner_radius=10,
+                                           border_width=1, border_color=T.RED)
+        self._balance_alert_lbl = ctk.CTkLabel(
+            self._balance_alert, text="",
+            font=F(12, "bold"), text_color=T.RED, anchor="w",
+        )
+        self._balance_alert_lbl.pack(side="left", padx=16, pady=10)
+
         # ── Widgets configuráveis ────────────────────────────────────
         content = ctk.CTkFrame(self, fg_color="transparent")
         content.grid(row=2, column=0, sticky="nsew", padx=28, pady=(16, 28))
@@ -616,6 +625,10 @@ class Dashboard(ctk.CTkScrollableFrame):
             except Exception:
                 card_warning = ""
             try:
+                balance_projection = db.get_balance_projection(self.month_id)
+            except Exception:
+                balance_projection = None
+            try:
                 plan          = db.get_plan(self.month_id)
                 plan_items    = db.get_plan_items(plan["id"]) if plan else []
                 plan_realized = db.get_plan_realized(self.month_id) if plan else {}
@@ -699,6 +712,7 @@ class Dashboard(ctk.CTkScrollableFrame):
             self.after(0, lambda p=plan, it=plan_items, pr=plan_realized:
                        self._update_plan_alert(p, it, pr))
             self.after(0, lambda w=card_warning: self._update_card_alert(w))
+            self.after(0, lambda bp=balance_projection: self._update_balance_alert(bp))
             if pie_fig is not None:
                 self.after(0, lambda: self._embed_pie(pie_fig))
             if bar_fig is not None:
@@ -780,6 +794,19 @@ class Dashboard(ctk.CTkScrollableFrame):
             self._card_alert.grid(row=1, column=0, sticky="ew", pady=(8, 0))
         else:
             self._card_alert.grid_remove()
+
+    def _update_balance_alert(self, projection: Optional[dict]) -> None:
+        if not projection:
+            self._balance_alert.grid_remove()
+            return
+        day = projection.get("day")
+        balance = float(projection.get("balance") or 0)
+        next_income_day = projection.get("next_income_day")
+        text = f"⚠ Saldo projetado fica negativo no dia {day} ({format_currency(balance)})"
+        text += (f", antes da sua próxima entrada esperada no dia {next_income_day}."
+                 if next_income_day else ".")
+        self._balance_alert_lbl.configure(text=text)
+        self._balance_alert.grid(row=2, column=0, sticky="ew", pady=(8, 0))
 
     def _update_plan_alert(self, plan, items: list, spent: dict) -> None:
         """Mostra alerta quando categorias do plano ativo estouram o planejado."""

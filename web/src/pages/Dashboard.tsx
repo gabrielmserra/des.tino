@@ -15,6 +15,7 @@ import { EditableWidgetCard } from '../components/EditableWidgetCard'
 import { AddWidgetPicker } from '../components/AddWidgetPicker'
 import { AddMonthDialog } from '../components/AddMonthDialog'
 import { CardRiskBanner } from '../components/CardRiskBanner'
+import { BalanceProjectionBanner } from '../components/BalanceProjectionBanner'
 import { DEFAULT_WIDGET_ORDER, WIDGET_REGISTRY, widgetById, type WidgetDef } from '../lib/dashboardWidgets'
 import type { DashboardWidgetEntry } from '../lib/types'
 
@@ -175,6 +176,7 @@ export function Dashboard() {
       </div>
 
       {!editMode && <CardRiskBanner />}
+      {!editMode && <BalanceProjectionBanner />}
 
       {activeDefs.length === 0 && !editMode ? (
         <p className="py-8 text-center text-sm" style={{ color: 'var(--muted)' }}>

@@ -1608,6 +1608,15 @@ def get_fixed_bill_watch_data(months: int = 2) -> dict:
     return resp.data or {"bills": [], "transactions": []}
 
 
+def get_balance_projection(month_id: int) -> Optional[dict]:
+    """Simulação dia a dia (feita inteira no banco, migration 043) do saldo
+    projetado até o fim do mês corrente — retorna None quando o mês não é
+    o mês corrente de verdade, ou quando não acha nenhum dia em que o
+    saldo cruzaria zero."""
+    resp = get_client().rpc("get_balance_projection", {"p_month_id": month_id}).execute()
+    return resp.data or None
+
+
 # ---------------------------------------------------------------------------
 # Benefícios (VR / VA)
 # ---------------------------------------------------------------------------

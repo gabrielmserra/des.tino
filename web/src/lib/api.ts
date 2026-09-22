@@ -687,6 +687,22 @@ export async function fetchFutureCommitments(months = 6): Promise<FutureCommitme
   return (data ?? []) as FutureCommitment[]
 }
 
+export type BalanceProjection = {
+  day: number
+  balance: number
+  next_income_day: number | null
+}
+
+// Simulação dia a dia (feita inteira no banco, migration 043) do saldo
+// projetado até o fim do mês corrente — null quando o mês não é o mês
+// corrente de verdade, ou quando não há nenhum dia em que o saldo
+// cruzaria zero.
+export async function fetchBalanceProjection(monthId: number): Promise<BalanceProjection | null> {
+  const { data, error } = await supabase.rpc('get_balance_projection', { p_month_id: monthId })
+  if (error) throw error
+  return (data ?? null) as BalanceProjection | null
+}
+
 export async function createDebt(
   description: string,
   creditor: string,
