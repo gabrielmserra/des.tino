@@ -6,12 +6,16 @@ from parsers.inter.csv_extrato import InterCsvExtratoParser
 from parsers.inter.credit_card_csv import InterCreditCardCsvParser
 from parsers.inter.ofx import InterOfxParser
 from parsers.inter.pdf_extrato import InterPdfExtratoParser
+from parsers.bradesco.csv_extrato import BradescoCsvExtratoParser
+from parsers.bradesco.pdf_extrato import BradescoPdfExtratoParser
 
 PARSERS: List[BankParser] = [
     InterCreditCardCsvParser(),
     InterCsvExtratoParser(),
     InterOfxParser(),
     InterPdfExtratoParser(),
+    BradescoCsvExtratoParser(),
+    BradescoPdfExtratoParser(),
 ]
 
 

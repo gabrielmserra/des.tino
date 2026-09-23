@@ -2,14 +2,10 @@
 // (pdfjs-dist). Mesma lógica de parsers/inter/pdf_extrato.py (desktop) —
 // ver ali para detalhes do formato observado (agrupado por dia, acentos
 // removidos na extração, lançamentos que quebram em mais de uma linha).
-import * as pdfjsLib from 'pdfjs-dist'
-// eslint-disable-next-line import/no-unresolved
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import type { BankParser, NormalizedRow } from '../types'
 import { guessCategory, looksLikeInvestment } from '../base'
 import { cleanDescription, guessPaymentMethod, parseBrlAmount, stripAccents } from '../common'
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
+import { extractPdfText } from '../pdfText'
 
 const MONTHS_NO_ACCENT = [
   'janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho',
@@ -27,32 +23,6 @@ function parseDayHeader(m: RegExpMatchArray): string {
   const year = parseInt(m[3], 10)
   const month = MONTHS_NO_ACCENT.indexOf(monthName) + 1
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-}
-
-export async function extractPdfText(bytes: ArrayBuffer): Promise<string> {
-  const doc = await pdfjsLib.getDocument({ data: bytes }).promise
-  const parts: string[] = []
-  for (let i = 1; i <= doc.numPages; i++) {
-    const page = await doc.getPage(i)
-    const content = await page.getTextContent()
-    // Agrupa por linha usando a coordenada Y, na ordem em que os itens vêm
-    // (pdf.js já entrega em ordem de leitura na maioria dos casos).
-    let lastY: number | null = null
-    let line = ''
-    const lines: string[] = []
-    for (const item of content.items as { str: string; transform: number[] }[]) {
-      const y = item.transform[5]
-      if (lastY !== null && Math.abs(y - lastY) > 2) {
-        lines.push(line)
-        line = ''
-      }
-      line += item.str
-      lastY = y
-    }
-    if (line) lines.push(line)
-    parts.push(lines.join('\n'))
-  }
-  return parts.join('\n')
 }
 
 export function parseText(text: string): NormalizedRow[] {

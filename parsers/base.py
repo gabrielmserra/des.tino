@@ -6,9 +6,55 @@ from datetime import date, time as _time
 from typing import List, Optional, Protocol
 
 
-def _strip_accents(text: str) -> str:
+def strip_accents(text: str) -> str:
     normalized = unicodedata.normalize("NFKD", text)
     return "".join(c for c in normalized if not unicodedata.combining(c))
+
+
+# Mantido por compatibilidade com quem já importava o nome privado.
+_strip_accents = strip_accents
+
+
+def decode_bytes(data: bytes) -> str:
+    """Tenta decodificar o arquivo em várias codificações comuns — bancos já
+    foram vistos exportando tanto UTF-8 quanto Latin-1/cp1252."""
+    for enc in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
+        try:
+            return data.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("latin-1", errors="replace")
+
+
+def parse_brl_amount(raw: str) -> float:
+    """Converte "-1.234,56" ou "1234.56" em float. Sinal decide entrada/saída
+    fora daqui — este helper sempre retorna o valor absoluto."""
+    s = raw.strip().replace("R$", "").strip()
+    negative = s.startswith("-")
+    s = s.lstrip("+-").strip()
+    s = s.replace(".", "").replace(",", ".")
+    try:
+        val = float(s)
+    except ValueError:
+        val = 0.0
+    return -val if negative else val
+
+
+_WS_RE = re.compile(r"\s+")
+
+
+def clean_description(text: str) -> str:
+    return _WS_RE.sub(" ", text).strip()
+
+
+def guess_payment_method_from_table(text: str, table) -> str:
+    """table: lista de (keywords_tuple, method) — primeira tupla cuja
+    palavra-chave aparecer em `text` (maiúsculo, sem acento) vence."""
+    upper = strip_accents(text).upper()
+    for keywords, method in table:
+        if any(k in upper for k in keywords):
+            return method
+    return "outro"
 
 
 @dataclass

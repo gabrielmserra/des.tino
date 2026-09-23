@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { detectParser } from '../lib/parsers/registry'
+import { detectAndParse } from '../lib/parsers/registry'
 import type { NormalizedRow } from '../lib/parsers/types'
 import { ensureMonth, importTransactionsBulk, fetchMonths, fetchTransactions, fetchImportCutoffDay, fetchCardsBasic, autoGeneratePlan } from '../lib/api'
 import { formatCurrency, formatDate, MONTHS_PT, billingMonth } from '../lib/format'
@@ -147,17 +147,17 @@ export function Import() {
     setBusy(true)
     try {
       const buf = await file.arrayBuffer()
-      const parser = detectParser(buf, file.name)
-      if (!parser) {
-        setStatus('Formato não reconhecido. Verifique se é um extrato do Banco Inter (.ofx, .csv ou .pdf).')
+      const result = await detectAndParse(buf, file.name)
+      if (!result.parser) {
+        setStatus(
+          result.sniffMatched
+            ? 'Nenhum lançamento encontrado nesse arquivo.'
+            : 'Formato não reconhecido. Verifique se é um extrato do Banco Inter '
+              + '(.ofx, .csv ou .pdf) ou do Bradesco (.csv ou .pdf).',
+        )
         return
       }
-      const rows = await parser.parse(buf)
-      if (rows.length === 0) {
-        setStatus('Nenhum lançamento encontrado nesse arquivo.')
-        return
-      }
-      await loadCandidates(rows)
+      await loadCandidates(result.rows)
     } catch (e) {
       setStatus('Erro ao ler o arquivo: ' + (e as Error).message)
     } finally {
@@ -212,7 +212,7 @@ export function Import() {
     <div className="p-4 pb-8">
       <h1 className="mb-1 text-2xl font-bold">Importar extrato</h1>
       <p className="mb-4 text-xs" style={{ color: 'var(--muted)' }}>
-        Banco Inter — extrato da conta corrente (.ofx, .csv, .pdf) ou fatura do cartão de crédito (.csv)
+        Banco Inter (.ofx, .csv, .pdf — ou fatura do cartão em .csv) ou Bradesco (.csv, .pdf) — extrato da conta corrente
       </p>
 
       <div className="mb-4 rounded-2xl border p-4" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>

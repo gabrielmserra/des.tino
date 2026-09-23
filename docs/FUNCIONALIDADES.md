@@ -407,6 +407,17 @@ dívidas) e mostra até 3 cartões, sempre nesta ordem de prioridade:
     esse formato ter um tipo de arquivo reconhecido pelo sistema (UTI) —
     sem isso, o app Arquivos do iPhone escondia/bloqueava os .ofx,
     deixando só .csv/.pdf selecionáveis.
+- **[Ambas]** Importação de extrato da conta corrente do **Bradesco** em
+  CSV e PDF (sem OFX nem fatura de cartão — não suportados por não haver
+  amostra validada desses formatos). O arquivo é detectado automaticamente
+  pelo conteúdo (sem precisar escolher o banco na tela) — mesmo mecanismo
+  do Inter. Duas particularidades do formato do Bradesco tratadas no
+  parser: o CSV traz crédito/débito em colunas separadas (em vez de uma
+  única coluna com sinal) e, ao contrário do PDF, **não** traz o nome da
+  contraparte de um Pix (só o tipo, ex. "PIX RECEBIDO") — limitação real
+  do que o banco exporta em CSV, não um bug da importação; quem quiser a
+  descrição completa (com nome de quem enviou/recebeu) deve importar o
+  PDF em vez do CSV.
 - **[Ambas]** Importação da **fatura do cartão de crédito** do Banco Inter
   (só exportável em .csv) — pede qual cartão cadastrado é o dono da fatura
   (um seletor único pra todo o arquivo) e já lança tudo com forma de
@@ -858,10 +869,15 @@ próprio).
 
 **`parsers/`** (extrato bancário, exclusivo desktop): `base.py`
 (`NormalizedRow`, `BankParser`, `guess_category`,
-`looks_like_investment`), `registry.py` (`detect_parser`, tenta cada
-parser em ordem), e `inter/` com um parser por formato do Banco Inter
-(`csv_extrato.py`, `ofx.py`, `pdf_extrato.py`, `credit_card_csv.py`) —
-único banco suportado hoje.
+`looks_like_investment`, e os helpers genéricos de decodificação/valor
+BR/forma de pagamento — `decode_bytes`, `strip_accents`,
+`parse_brl_amount`, `clean_description`, `guess_payment_method_from_table`
+— usados por todos os bancos), `registry.py` (`detect_parser`, tenta cada
+parser em ordem), `inter/` com um parser por formato do Banco Inter
+(`csv_extrato.py`, `ofx.py`, `pdf_extrato.py`, `credit_card_csv.py`) e
+`bradesco/` com um parser por formato do Bradesco (`csv_extrato.py`,
+`pdf_extrato.py` — cada `common.py` de banco só guarda a tabela de
+palavras-chave de forma de pagamento, que muda de redação por banco).
 
 **Outros arquivos**: `FinancasApp.spec` (build PyInstaller),
 `requirements.txt`, `report.py` (gera o PDF do Relatório Financeiro
@@ -948,10 +964,13 @@ roda `useRenewalCheck()`/`useCardInvoicesSettle()` uma vez por sessão),
   demanda.
 
 **`src/lib/parsers/`** (extrato bancário, web): mesmo desenho do
-desktop — `types.ts`/`base.ts`/`common.ts`/`registry.ts` +
-`inter/creditCardCsv.ts`, `inter/csvExtrato.ts`, `inter/ofx.ts`,
-`inter/pdfExtrato.ts` (este último usa `pdfjs-dist` direto no
-navegador). Só Banco Inter, igual ao desktop.
+desktop — `types.ts`/`base.ts`/`common.ts`/`pdfText.ts` (extração de
+texto de PDF via `pdfjs-dist`, compartilhada entre bancos)/`registry.ts`
+(`detectAndParse` — tenta `parse()` de cada sniff-match em ordem até
+achar linhas, não só o primeiro sniff que bate, porque o sniff de PDF só
+confere a extensão de forma síncrona) + `inter/creditCardCsv.ts`,
+`inter/csvExtrato.ts`, `inter/ofx.ts`, `inter/pdfExtrato.ts` e
+`bradesco/csvExtrato.ts`, `bradesco/pdfExtrato.ts`.
 
 **PWA/config**: `vite.config.ts` (plugin React + Tailwind v4 +
 `vite-plugin-pwa`, manifest com nome/ícones/cor do des.tino),

@@ -1,4 +1,5 @@
-"""Importação de extrato/fatura bancária (Banco Inter — OFX, CSV, PDF)."""
+"""Importação de extrato/fatura bancária (Banco Inter: OFX, CSV, PDF —
+Bradesco: CSV, PDF)."""
 import threading
 import difflib
 from datetime import date
@@ -56,8 +57,8 @@ class ImportTab(ctk.CTkFrame):
         ctk.CTkLabel(header, text="Importar Extrato",
                      font=F(26, "bold"), text_color=T.TEXT, anchor="w").grid(
             row=0, column=0, sticky="w")
-        ctk.CTkLabel(header, text="Banco Inter — extrato da conta corrente (.ofx, .csv, .pdf) "
-                                   "ou fatura do cartão de crédito (.csv)",
+        ctk.CTkLabel(header, text="Banco Inter (.ofx, .csv, .pdf — ou fatura do cartão em .csv) "
+                                   "ou Bradesco (.csv, .pdf) — extrato da conta corrente",
                      font=F(12), text_color=T.MUTED, anchor="w").grid(
             row=1, column=0, sticky="w", pady=(2, 0))
 
@@ -151,7 +152,8 @@ class ImportTab(ctk.CTkFrame):
                 parser = detect_parser(data, filename)
                 if parser is None:
                     self.after(0, lambda: self._show_error(
-                        "Formato não reconhecido. Verifique se é um extrato do Banco Inter (.ofx, .csv ou .pdf)."))
+                        "Formato não reconhecido. Verifique se é um extrato do Banco Inter "
+                        "(.ofx, .csv ou .pdf) ou do Bradesco (.csv ou .pdf)."))
                     return
                 rows = parser.parse(data)
                 if not rows:
