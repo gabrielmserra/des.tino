@@ -455,14 +455,14 @@ class Dashboard(ctk.CTkScrollableFrame):
             label_row.pack(pady=(10, 2))
             ctk.CTkLabel(label_row, text=label, font=F(10, "bold"),
                          text_color=T.MUTED).pack(side="left")
-            info_btn = ctk.CTkLabel(
-                label_row, text="i", font=F(8, "bold"), text_color=T.MUTED,
-                width=13, height=13, corner_radius=7,
-                fg_color="transparent", cursor="hand2")
+            info_btn = ctk.CTkButton(
+                label_row, text="i", font=F(9, "bold"), text_color=T.MUTED,
+                width=16, height=16, corner_radius=8,
+                fg_color="transparent", hover_color=T.CARD2,
+                border_width=1, border_color=T.MUTED,
+                cursor="hand2",
+                command=lambda l=label, m=info: show_info(self.winfo_toplevel(), l, m))
             info_btn.pack(side="left", padx=(4, 0))
-            info_btn.bind(
-                "<Button-1>",
-                lambda _e, l=label, m=info: show_info(self.winfo_toplevel(), l, m))
         else:
             ctk.CTkLabel(card, text=label, font=F(10, "bold"), text_color=T.MUTED).pack(pady=(10, 2))
         card.val_lbl = ctk.CTkLabel(card, text="R$ 0,00",
