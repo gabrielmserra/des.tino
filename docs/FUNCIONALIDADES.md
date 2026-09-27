@@ -225,7 +225,7 @@ Três tipos de meta, lado a lado:
   Dívidas e Metas, **não lança despesa nem mexe no saldo automaticamente**.
   Valor de cada instância do mês é editável antes de marcar como paga
   (ex.: luz/água variam mês a mês).
-- **[Ambas]** Novo widget no Dashboard: **"Saldo após contas em aberto"** =
+- **[Ambas]** Novo card no Dashboard: **"Saldo após contas em aberto"** =
   saldo atual menos as contas do mês real ainda não pagas — mostra também
   um aviso compacto quando alguma conta pendente já passou do vencimento
   (ex.: "Internet venceu dia 20"), sem aumentar o tamanho do card.
@@ -316,10 +316,10 @@ Três tipos de meta, lado a lado:
 
 ## 10. Dashboard
 
-- **[Ambas]** 18 widgets configuráveis, cada usuário escolhe quais quer ver
+- **[Ambas]** 18 cards configuráveis, cada usuário escolhe quais quer ver
   e em que ordem:
 
-  | Widget | Tipo |
+  | Card | Tipo |
   |---|---|
   | Saldo acumulado (destaque) | KPI grande |
   | Entradas | KPI |
@@ -342,7 +342,7 @@ Três tipos de meta, lado a lado:
   | Gastos dos últimos 7 dias | Gráfico de barras |
 
 - **[Desktop]** Edição via diálogo "Editar Dashboard" (`EditDashboardDialog`)
-  — liga/desliga widgets e reordena numa lista.
+  — liga/desliga cards e reordena numa lista.
 - **[Web]** Mesma ideia via sheet de edição arrastável (drag & drop,
   `@dnd-kit`).
 - **[Ambas]** Gráficos de pizza (categoria, forma de pagamento): fatias
@@ -351,7 +351,7 @@ Três tipos de meta, lado a lado:
 - **[Web]** Gráficos de linha mostram o valor de cada ponto direto no
   gráfico (não precisa passar o mouse em cima), com tooltip formatado em
   R$ ao passar o mouse.
-- **[Ambas]** No widget "Gastos por categoria ao longo do tempo", as
+- **[Ambas]** No card "Gastos por categoria ao longo do tempo", as
   categorias menos usadas no mês são agrupadas num grupo à parte,
   rotulado "Demais categorias" pra não confundir com a categoria
   "Outros" de verdade (que continua aparecendo do seu próprio jeito
@@ -363,7 +363,7 @@ Três tipos de meta, lado a lado:
 
 ### 10.1 Guru Financeiro
 
-Widget de dicas automáticas — analisa o mês corrente (saldo, gastos por
+Card de dicas automáticas — analisa o mês corrente (saldo, gastos por
 categoria, histórico dos últimos meses, investimentos, metas, cartões e
 dívidas) e mostra até 3 cartões, sempre nesta ordem de prioridade:
 
@@ -673,10 +673,11 @@ da migração 025 (pagar deixou de gerar lançamento); a coluna continua
 existindo mas sempre null em instâncias novas.
 
 **`user_settings`** — uma linha por usuário (`user_id` é a PK).
-`user_id, theme, updated_at, dashboard_widgets, import_cutoff_day`.
-`dashboard_widgets` é um array json `[{id, enabled}]` na ordem de
-exibição; `import_cutoff_day` (padrão 1) desloca lançamentos importados
-pro mês seguinte a partir desse dia.
+`user_id, theme, updated_at, dashboard_cards, import_cutoff_day`.
+`dashboard_cards` (renomeada de `dashboard_widgets` na migração 044) é
+um array json `[{id, enabled}]` na ordem de exibição; `import_cutoff_day`
+(padrão 1) desloca lançamentos importados pro mês seguinte a partir
+desse dia.
 
 **`card_transactions`** e **`credit_card_payments`** — tabelas legadas,
 anteriores a `docs/migrations`, de uma versão antiga do controle de
@@ -841,7 +842,7 @@ exportação (`export_month_xlsx`), config do dashboard e dia de corte.
 | `splash.py` | `SplashFrame` | Tela de transição durante a restauração automática de sessão. |
 | `main_content.py` | `MainContent` | Área de conteúdo: cabeçalho + abas (Dashboard/Lançamentos/Planejamento). |
 | `sidebar.py` | `Sidebar` | Navegação lateral: lista/seleção de mês, botões de navegação. |
-| `dashboard.py` | `Dashboard`, `EditDashboardDialog` | KPIs + gráficos (matplotlib) + Guru Financeiro; widgets configuráveis pelo usuário. |
+| `dashboard.py` | `Dashboard`, `EditDashboardDialog` | KPIs + gráficos (matplotlib) + Guru Financeiro; cards configuráveis pelo usuário. |
 | `transactions.py` | `TransactionsTab` | Aba de Lançamentos: adicionar/editar/excluir, filtros, confirmação de previsão. |
 | `credit_cards.py` | `CardPresetsBar`, `_PayBillDialog`, `_CardInvoiceHistoryDialog`, `_CardDialog`, `_NewCardPurchaseDialog` | Gestão de cartão de crédito: CRUD, pagar fatura, histórico de faturas, compra parcelada. |
 | `debts.py` | `DebtsTab` + diálogos | Dívidas: cadastro com parcelas, pagar/desfazer, reagendar. |
@@ -936,8 +937,8 @@ roda `useRenewalCheck()`/`useCardInvoicesSettle()` uma vez por sessão),
 (cartões), `BenefitForm.tsx`, `DebtForm.tsx`/`EditDebtForm.tsx`/
 `DebtDialogs.tsx`, `GoalDialogs.tsx`/`RecurringGoalForm.tsx`,
 `InvestmentDialogs.tsx`, `IncomeDialog.tsx`, `AddMonthDialog.tsx`/
-`EditMonthDialog.tsx`, `ThemeDialog.tsx`, `AddWidgetPicker.tsx`/
-`EditableWidgetCard.tsx` (dashboard arrastável, `@dnd-kit`),
+`EditMonthDialog.tsx`, `ThemeDialog.tsx`, `AddCardPicker.tsx`/
+`EditableCard.tsx` (dashboard arrastável, `@dnd-kit`),
 `Skeleton.tsx`, `ChunkErrorBoundary.tsx`, `Sidebar.tsx`.
 
 **`src/lib/`** (camada compartilhada):
@@ -947,8 +948,8 @@ roda `useRenewalCheck()`/`useCardInvoicesSettle()` uma vez por sessão),
 - `types.ts` (~310 linhas) — tipos TypeScript espelhando o schema.
 - `tips.ts` — motor do Guru Financeiro (porte fiel de
   `ui/dashboard.py:_build_tips`, ver seção 10.1).
-- `dashboardWidgets.tsx` (~870 linhas) — registro + implementação dos
-  ~19 widgets do Dashboard (gráficos via `recharts`).
+- `dashboardCards.tsx` (~870 linhas) — registro + implementação dos
+  ~19 cards do Dashboard (gráficos via `recharts`).
 - `format.ts`, `constants.ts` — formatação (moeda, datas) e listas
   estáticas (categorias, formas de pagamento).
 - `month.tsx`, `auth.tsx`, `theme.tsx`, `txform.tsx` — contexts React

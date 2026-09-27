@@ -116,7 +116,7 @@ export function Kpi({
 }
 
 // ── Saldo do mês (destaque) ───────────────────────────────────────────
-function SaldoMesWidget() {
+function SaldoMesCard() {
   const summary = useSummary()
   const s = summary.data
   const saldoColor = (s?.saldo_acumulado ?? 0) >= 0 ? 'var(--primary)' : 'var(--red)'
@@ -149,7 +149,7 @@ function SaldoMesWidget() {
 const INVESTMENT_INFO_TEXT =
   'Não inclui aporte/resgate de investimento — esse dinheiro só mudou de lugar (conta ↔ investimento), não é renda nem gasto real. Ele continua contando no Saldo, que reflete o valor real da sua conta.'
 
-function KpiEntradasWidget() {
+function KpiEntradasCard() {
   const summary = useSummary()
   const s = summary.data
   return (
@@ -162,7 +162,7 @@ function KpiEntradasWidget() {
   )
 }
 
-function KpiSaidasWidget() {
+function KpiSaidasCard() {
   const summary = useSummary()
   const s = summary.data
   return (
@@ -175,7 +175,7 @@ function KpiSaidasWidget() {
   )
 }
 
-function KpiSaldoVrVaWidget() {
+function KpiSaldoVrVaCard() {
   const benefit = useQuery({ queryKey: ['benefitTotal'], queryFn: fetchBenefitTotal })
   return (
     <Kpi
@@ -186,7 +186,7 @@ function KpiSaldoVrVaWidget() {
   )
 }
 
-function KpiSaldoAposContasWidget() {
+function KpiSaldoAposContasCard() {
   // Contas Fixas usa o calendário REAL (hoje), não o mês de cobrança que o
   // dia de corte da importação desloca — vencimento é uma data real.
   const summary = useSummary()
@@ -238,7 +238,7 @@ function KpiSaldoAposContasWidget() {
   )
 }
 
-function KpiInvestimentosMesWidget() {
+function KpiInvestimentosMesCard() {
   const summary = useSummary()
   const s = summary.data
   return (
@@ -251,7 +251,7 @@ function KpiInvestimentosMesWidget() {
   )
 }
 
-function KpiInvestimentosTotalWidget() {
+function KpiInvestimentosTotalCard() {
   const totalInv = useQuery({ queryKey: ['totalInv'], queryFn: fetchTotalInvestments })
   return (
     <Kpi
@@ -264,7 +264,7 @@ function KpiInvestimentosTotalWidget() {
 }
 
 // ── Metas de poupança ──────────────────────────────────────────────────
-function MetasWidget() {
+function MetasCard() {
   const goalsQ = useQuery({ queryKey: ['goals'], queryFn: fetchGoals })
   const goals = goalsQ.data ?? []
   const done = goals.filter((g) => (g.target_amount ?? 0) > 0 && g.saved_amount >= g.target_amount!).length
@@ -317,7 +317,7 @@ function MetasWidget() {
 }
 
 // ── Gráfico de pizza genérico (categoria / forma de pagamento) ────────
-function PieWidget({ title, empty, data }: { title: string; empty: string; data: { name: string; value: number }[] }) {
+function PieCard({ title, empty, data }: { title: string; empty: string; data: { name: string; value: number }[] }) {
   const total = data.reduce((a, d) => a + d.value, 0) || 1
   // Fatias pequenas (<4%) não mostram o rótulo dentro do gráfico pra não
   // sobrepor — a % de cada uma continua na legenda, igual no desktop.
@@ -372,7 +372,7 @@ function PieWidget({ title, empty, data }: { title: string; empty: string; data:
   )
 }
 
-function ChartCategoriaWidget() {
+function ChartCategoriaCard() {
   const { selectedId } = useMonths()
   const cats = useQuery({
     queryKey: ['cats', selectedId],
@@ -380,10 +380,10 @@ function ChartCategoriaWidget() {
     enabled: selectedId != null,
   })
   const data = (cats.data ?? []).map((c) => ({ name: c.category, value: c.total }))
-  return <PieWidget title="Despesas por categoria" empty="Nenhuma despesa registrada." data={data} />
+  return <PieCard title="Despesas por categoria" empty="Nenhuma despesa registrada." data={data} />
 }
 
-function ChartFormaPagamentoWidget() {
+function ChartFormaPagamentoCard() {
   const { selectedId } = useMonths()
   const byMethod = useQuery({
     queryKey: ['expensesByMethod', selectedId],
@@ -391,11 +391,11 @@ function ChartFormaPagamentoWidget() {
     enabled: selectedId != null,
   })
   const data = (byMethod.data ?? []).map((c) => ({ name: PAYMENT_METHODS[c.category] ?? c.category, value: c.total }))
-  return <PieWidget title="Gastos por forma de pagamento" empty="Nenhuma despesa registrada." data={data} />
+  return <PieCard title="Gastos por forma de pagamento" empty="Nenhuma despesa registrada." data={data} />
 }
 
 // ── Entradas vs Saídas vs Investimentos ────────────────────────────────
-function ChartEntradasSaidasInvestimentosWidget() {
+function ChartEntradasSaidasInvestimentosCard() {
   const summary = useSummary()
   const s = summary.data
   const data = [
@@ -434,7 +434,7 @@ function ChartEntradasSaidasInvestimentosWidget() {
 }
 
 // ── Taxa de poupança ────────────────────────────────────────────────────
-function TaxaPoupancaWidget() {
+function TaxaPoupancaCard() {
   const summary = useSummary()
   const s = summary.data
   const entradas = s?.total_entradas ?? 0
@@ -464,7 +464,7 @@ function TaxaPoupancaWidget() {
 }
 
 // ── Situação dos cartões (versão compacta, reaproveita Cards.tsx) ─────
-function CartoesSituacaoWidget() {
+function CartoesSituacaoCard() {
   const { selectedId } = useMonths()
   const qc = useQueryClient()
   const [payBusy, setPayBusy] = useState<number | null>(null)
@@ -567,7 +567,7 @@ function CartoesSituacaoWidget() {
 }
 
 // ── Guru Financeiro (dicas) ────────────────────────────────────────────
-function GuruFinanceiroWidget() {
+function GuruFinanceiroCard() {
   const { months, selected, selectedId } = useMonths()
   const summary = useSummary()
   const goalsQ = useQuery({ queryKey: ['goals'], queryFn: fetchGoals })
@@ -647,7 +647,7 @@ function GuruFinanceiroWidget() {
 }
 
 // ── Evolução do saldo (últimos 6 meses) ────────────────────────────────
-function SaldoEvolucaoWidget() {
+function SaldoEvolucaoCard() {
   const seriesQ = useMonthSeries(6)
   const points = (seriesQ.data ?? []).map((p: MonthSeriesPoint) => ({
     name: monthShortLabel(p.month),
@@ -683,7 +683,7 @@ function SaldoEvolucaoWidget() {
 }
 
 // ── Gastos dos últimos 7 dias ───────────────────────────────────────────
-function GastosUltimos7DiasWidget() {
+function GastosUltimos7DiasCard() {
   const dailyQ = useQuery({ queryKey: ['dailySpending', 7], queryFn: () => fetchDailySpending(7) })
   const points = (dailyQ.data ?? []).map((p) => {
     const [, m, d] = p.date.split('-')
@@ -732,7 +732,7 @@ function useCategorySeries(n = 6) {
   })
 }
 
-function ChartGastosCategoriaEvolucaoWidget() {
+function ChartGastosCategoriaEvolucaoCard() {
   const seriesQ = useCategorySeries(6)
   const rows = seriesQ.data ?? []
 
@@ -789,7 +789,7 @@ function ChartGastosCategoriaEvolucaoWidget() {
 }
 
 // ── Maiores gastos do mês ───────────────────────────────────────────────
-function MaioresGastosWidget() {
+function MaioresGastosCard() {
   const { selectedId } = useMonths()
   const txQ = useQuery({
     queryKey: ['transactions', selectedId],
@@ -832,7 +832,7 @@ function MaioresGastosWidget() {
 }
 
 // ── Evolução do patrimônio investido (últimos 6 meses) ──────────────────
-function PatrimonioEvolucaoWidget() {
+function PatrimonioEvolucaoCard() {
   const seriesQ = useMonthSeries(6)
   const totalInvQ = useQuery({ queryKey: ['totalInv'], queryFn: fetchTotalInvestments })
 
@@ -877,39 +877,39 @@ function PatrimonioEvolucaoWidget() {
 }
 
 // ── Registro ─────────────────────────────────────────────────────────
-export type WidgetSize = 'compact' | 'full'
+export type CardSize = 'compact' | 'full'
 
-export type WidgetDef = {
+export type CardDef = {
   id: string
   label: string
-  size: WidgetSize
+  size: CardSize
   Component: ComponentType
 }
 
-export const WIDGET_REGISTRY: WidgetDef[] = [
-  { id: 'saldo_mes', label: 'Saldo acumulado (destaque)', size: 'full', Component: SaldoMesWidget },
-  { id: 'kpi_entradas', label: 'Entradas', size: 'compact', Component: KpiEntradasWidget },
-  { id: 'kpi_saidas', label: 'Saídas', size: 'compact', Component: KpiSaidasWidget },
-  { id: 'kpi_saldo_vrva', label: 'Saldo VR/VA', size: 'compact', Component: KpiSaldoVrVaWidget },
-  { id: 'kpi_saldo_apos_contas', label: 'Saldo após contas em aberto', size: 'compact', Component: KpiSaldoAposContasWidget },
-  { id: 'kpi_investimentos_mes', label: 'Investimentos do mês', size: 'compact', Component: KpiInvestimentosMesWidget },
-  { id: 'kpi_investimentos_total', label: 'Investimentos totais', size: 'compact', Component: KpiInvestimentosTotalWidget },
-  { id: 'chart_categoria', label: 'Despesas por categoria', size: 'full', Component: ChartCategoriaWidget },
-  { id: 'chart_forma_pagamento', label: 'Gastos por forma de pagamento', size: 'full', Component: ChartFormaPagamentoWidget },
-  { id: 'chart_entradas_saidas_investimentos', label: 'Entradas vs Saídas vs Investimentos', size: 'full', Component: ChartEntradasSaidasInvestimentosWidget },
-  { id: 'taxa_poupanca', label: 'Taxa de poupança', size: 'full', Component: TaxaPoupancaWidget },
-  { id: 'metas', label: 'Metas de poupança', size: 'full', Component: MetasWidget },
-  { id: 'cartoes_situacao', label: 'Situação dos cartões', size: 'full', Component: CartoesSituacaoWidget },
-  { id: 'guru_financeiro', label: 'Guru Financeiro (dicas)', size: 'full', Component: GuruFinanceiroWidget },
-  { id: 'saldo_evolucao', label: 'Evolução do saldo (6 meses)', size: 'full', Component: SaldoEvolucaoWidget },
-  { id: 'gastos_categoria_evolucao', label: 'Gastos por categoria ao longo do tempo', size: 'full', Component: ChartGastosCategoriaEvolucaoWidget },
-  { id: 'maiores_gastos', label: 'Maiores gastos do mês', size: 'full', Component: MaioresGastosWidget },
-  { id: 'patrimonio_evolucao', label: 'Evolução do patrimônio investido', size: 'full', Component: PatrimonioEvolucaoWidget },
-  { id: 'gastos_7_dias', label: 'Gastos dos últimos 7 dias', size: 'full', Component: GastosUltimos7DiasWidget },
+export const CARD_REGISTRY: CardDef[] = [
+  { id: 'saldo_mes', label: 'Saldo acumulado (destaque)', size: 'full', Component: SaldoMesCard },
+  { id: 'kpi_entradas', label: 'Entradas', size: 'compact', Component: KpiEntradasCard },
+  { id: 'kpi_saidas', label: 'Saídas', size: 'compact', Component: KpiSaidasCard },
+  { id: 'kpi_saldo_vrva', label: 'Saldo VR/VA', size: 'compact', Component: KpiSaldoVrVaCard },
+  { id: 'kpi_saldo_apos_contas', label: 'Saldo após contas em aberto', size: 'compact', Component: KpiSaldoAposContasCard },
+  { id: 'kpi_investimentos_mes', label: 'Investimentos do mês', size: 'compact', Component: KpiInvestimentosMesCard },
+  { id: 'kpi_investimentos_total', label: 'Investimentos totais', size: 'compact', Component: KpiInvestimentosTotalCard },
+  { id: 'chart_categoria', label: 'Despesas por categoria', size: 'full', Component: ChartCategoriaCard },
+  { id: 'chart_forma_pagamento', label: 'Gastos por forma de pagamento', size: 'full', Component: ChartFormaPagamentoCard },
+  { id: 'chart_entradas_saidas_investimentos', label: 'Entradas vs Saídas vs Investimentos', size: 'full', Component: ChartEntradasSaidasInvestimentosCard },
+  { id: 'taxa_poupanca', label: 'Taxa de poupança', size: 'full', Component: TaxaPoupancaCard },
+  { id: 'metas', label: 'Metas de poupança', size: 'full', Component: MetasCard },
+  { id: 'cartoes_situacao', label: 'Situação dos cartões', size: 'full', Component: CartoesSituacaoCard },
+  { id: 'guru_financeiro', label: 'Guru Financeiro (dicas)', size: 'full', Component: GuruFinanceiroCard },
+  { id: 'saldo_evolucao', label: 'Evolução do saldo (6 meses)', size: 'full', Component: SaldoEvolucaoCard },
+  { id: 'gastos_categoria_evolucao', label: 'Gastos por categoria ao longo do tempo', size: 'full', Component: ChartGastosCategoriaEvolucaoCard },
+  { id: 'maiores_gastos', label: 'Maiores gastos do mês', size: 'full', Component: MaioresGastosCard },
+  { id: 'patrimonio_evolucao', label: 'Evolução do patrimônio investido', size: 'full', Component: PatrimonioEvolucaoCard },
+  { id: 'gastos_7_dias', label: 'Gastos dos últimos 7 dias', size: 'full', Component: GastosUltimos7DiasCard },
 ]
 
-export const DEFAULT_WIDGET_ORDER: string[] = WIDGET_REGISTRY.map((w) => w.id)
+export const DEFAULT_CARD_ORDER: string[] = CARD_REGISTRY.map((w) => w.id)
 
-export function widgetById(id: string): WidgetDef | undefined {
-  return WIDGET_REGISTRY.find((w) => w.id === id)
+export function cardById(id: string): CardDef | undefined {
+  return CARD_REGISTRY.find((w) => w.id === id)
 }

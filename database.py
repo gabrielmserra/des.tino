@@ -1950,28 +1950,28 @@ def export_month_xlsx(month_id: int, month_name: str):
 
 
 # ---------------------------------------------------------------------------
-# Configuração do Dashboard (widgets habilitados/ordem) — sincronizada com
-# o site via user_settings.dashboard_widgets. Ao contrário do tema, não
+# Configuração do Dashboard (cards habilitados/ordem) — sincronizada com
+# o site via user_settings.dashboard_cards. Ao contrário do tema, não
 # precisa de cache local: o Dashboard só existe depois do login.
 # ---------------------------------------------------------------------------
 
-def get_dashboard_widgets() -> Optional[list]:
+def get_dashboard_cards() -> Optional[list]:
     """Lista ordenada de {"id": ..., "enabled": ...}, ou None se o usuário
     nunca customizou (o chamador usa o catálogo padrão nesse caso)."""
-    resp = get_client().table("user_settings").select("dashboard_widgets").execute()
+    resp = get_client().table("user_settings").select("dashboard_cards").execute()
     if not resp.data:
         return None
-    return resp.data[0].get("dashboard_widgets")
+    return resp.data[0].get("dashboard_cards")
 
 
-def save_dashboard_widgets(config: list) -> None:
+def save_dashboard_cards(config: list) -> None:
     client  = get_client()
     user_id = client.auth.get_user().user.id
     existing = client.table("user_settings").select("user_id").eq("user_id", user_id).execute()
     if existing.data:
-        client.table("user_settings").update({"dashboard_widgets": config}).eq("user_id", user_id).execute()
+        client.table("user_settings").update({"dashboard_cards": config}).eq("user_id", user_id).execute()
     else:
-        client.table("user_settings").insert({"user_id": user_id, "dashboard_widgets": config}).execute()
+        client.table("user_settings").insert({"user_id": user_id, "dashboard_cards": config}).execute()
 
 
 # ---------------------------------------------------------------------------

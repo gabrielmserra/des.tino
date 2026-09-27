@@ -6,7 +6,7 @@ export type Month = {
   opening_balance: number | null
 }
 
-export type DashboardWidgetEntry = {
+export type DashboardCardEntry = {
   id: string
   enabled: boolean
 }

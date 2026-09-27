@@ -1,23 +1,23 @@
 import { GripVertical, X } from 'lucide-react'
 import { useSortable, defaultAnimateLayoutChanges, type AnimateLayoutChanges } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import type { WidgetDef } from '../lib/dashboardWidgets'
+import type { CardDef } from '../lib/dashboardCards'
 
 // Anima o reflow mesmo quando a mudança não veio de um arrasto ativo (ex:
-// remover/adicionar um widget também desliza os vizinhos suavemente).
+// remover/adicionar um card também desliza os vizinhos suavemente).
 const animateLayoutChanges: AnimateLayoutChanges = (args) =>
   defaultAnimateLayoutChanges({ ...args, wasDragging: true })
 
-export function EditableWidgetCard({
-  widget, onRemove, removing, entering,
+export function EditableCard({
+  card, onRemove, removing, entering,
 }: {
-  widget: WidgetDef
+  card: CardDef
   onRemove: () => void
   removing?: boolean
   entering?: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: widget.id,
+    id: card.id,
     animateLayoutChanges,
   })
 
@@ -25,9 +25,9 @@ export function EditableWidgetCard({
     <div
       ref={setNodeRef}
       className={
-        (widget.size === 'full' ? 'relative col-span-2' : 'relative col-span-1') +
-        (entering ? ' widget-enter' : '') +
-        (removing ? ' widget-exit' : '')
+        (card.size === 'full' ? 'relative col-span-2' : 'relative col-span-1') +
+        (entering ? ' card-enter' : '') +
+        (removing ? ' card-exit' : '')
       }
       style={{
         transform: CSS.Transform.toString(transform),
@@ -35,8 +35,8 @@ export function EditableWidgetCard({
         zIndex: isDragging ? 1 : undefined,
       }}
     >
-      {/* Conteúdo real do widget, desarmado (links/botões internos não recebem clique
-          enquanto em modo de edição) — evita ter que mexer em cada um dos widgets. */}
+      {/* Conteúdo real do card, desarmado (links/botões internos não recebem clique
+          enquanto em modo de edição) — evita ter que mexer em cada um dos cards. */}
       <div
         style={{
           pointerEvents: 'none',
@@ -49,7 +49,7 @@ export function EditableWidgetCard({
           transition: 'opacity 150ms ease, outline-color 150ms ease',
         }}
       >
-        <widget.Component />
+        <card.Component />
       </div>
 
       {/* O grip continua no DOM e com os listeners mesmo durante o arrasto (o
@@ -63,7 +63,7 @@ export function EditableWidgetCard({
           background: 'var(--card2)', color: 'var(--text)', border: '1px solid var(--border-l)',
           opacity: isDragging ? 0 : 1,
         }}
-        aria-label={`Arrastar ${widget.label}`}
+        aria-label={`Arrastar ${card.label}`}
       >
         <GripVertical size={15} />
       </button>
@@ -75,7 +75,7 @@ export function EditableWidgetCard({
           opacity: isDragging ? 0 : 1,
           pointerEvents: isDragging ? 'none' : undefined,
         }}
-        aria-label={`Remover ${widget.label}`}
+        aria-label={`Remover ${card.label}`}
       >
         <X size={15} />
       </button>

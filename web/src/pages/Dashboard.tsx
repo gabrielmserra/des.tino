@@ -11,13 +11,13 @@ import { useMonths } from '../lib/month'
 import { fetchDashboardConfig, saveDashboardConfig } from '../lib/api'
 import { todayLabel } from '../lib/format'
 import { DashboardSkeleton } from '../components/Skeleton'
-import { EditableWidgetCard } from '../components/EditableWidgetCard'
-import { AddWidgetPicker } from '../components/AddWidgetPicker'
+import { EditableCard } from '../components/EditableCard'
+import { AddCardPicker } from '../components/AddCardPicker'
 import { AddMonthDialog } from '../components/AddMonthDialog'
 import { CardRiskBanner } from '../components/CardRiskBanner'
 import { BalanceProjectionBanner } from '../components/BalanceProjectionBanner'
-import { DEFAULT_WIDGET_ORDER, WIDGET_REGISTRY, widgetById, type WidgetDef } from '../lib/dashboardWidgets'
-import type { DashboardWidgetEntry } from '../lib/types'
+import { DEFAULT_CARD_ORDER, CARD_REGISTRY, cardById, type CardDef } from '../lib/dashboardCards'
+import type { DashboardCardEntry } from '../lib/types'
 
 const REMOVE_ANIM_MS = 200
 const ENTER_ANIM_MS = 320
@@ -30,10 +30,10 @@ const dropAnimationConfig: DropAnimation = {
   }),
 }
 
-function resolveConfig(saved: DashboardWidgetEntry[] | null): DashboardWidgetEntry[] {
-  const valid = (saved ?? []).filter((e) => widgetById(e.id))
+function resolveConfig(saved: DashboardCardEntry[] | null): DashboardCardEntry[] {
+  const valid = (saved ?? []).filter((e) => cardById(e.id))
   const known = new Set(valid.map((e) => e.id))
-  const missing = DEFAULT_WIDGET_ORDER.filter((id) => !known.has(id)).map((id) => ({ id, enabled: true }))
+  const missing = DEFAULT_CARD_ORDER.filter((id) => !known.has(id)).map((id) => ({ id, enabled: true }))
   return [...valid, ...missing]
 }
 
@@ -51,7 +51,7 @@ export function Dashboard() {
   const [editMode, setEditMode] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [showAddMonth, setShowAddMonth] = useState(false)
-  const [config, setConfig] = useState<DashboardWidgetEntry[] | null>(null)
+  const [config, setConfig] = useState<DashboardCardEntry[] | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [activeSize, setActiveSize] = useState<{ width: number; height: number } | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
@@ -63,7 +63,7 @@ export function Dashboard() {
     if (configQ.data !== undefined) setConfig(resolveConfig(configQ.data))
   }, [configQ.data])
 
-  const applyChange = (next: DashboardWidgetEntry[]) => {
+  const applyChange = (next: DashboardCardEntry[]) => {
     setConfig(next)
     saveDashboardConfig(next).then(() => qc.invalidateQueries({ queryKey: ['dashboardConfig'] }))
   }
@@ -101,11 +101,11 @@ export function Dashboard() {
       </>
     )
 
-  const enabledEntries = config.filter((e) => e.enabled && widgetById(e.id))
-  const activeDefs = enabledEntries.map((e) => widgetById(e.id) as WidgetDef)
+  const enabledEntries = config.filter((e) => e.enabled && cardById(e.id))
+  const activeDefs = enabledEntries.map((e) => cardById(e.id) as CardDef)
   const enabledIds = new Set(enabledEntries.map((e) => e.id))
-  const available = WIDGET_REGISTRY.filter((w) => !enabledIds.has(w.id))
-  const activeWidget = activeId ? (activeDefs.find((w) => w.id === activeId) ?? null) : null
+  const available = CARD_REGISTRY.filter((w) => !enabledIds.has(w.id))
+  const activeCard = activeId ? (activeDefs.find((w) => w.id === activeId) ?? null) : null
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(String(event.active.id))
@@ -121,7 +121,7 @@ export function Dashboard() {
     const oldIndex = enabledEntries.findIndex((e) => e.id === active.id)
     const newIndex = enabledEntries.findIndex((e) => e.id === over.id)
     const reordered = arrayMove(enabledEntries, oldIndex, newIndex)
-    const rest = config.filter((e) => !e.enabled || !widgetById(e.id))
+    const rest = config.filter((e) => !e.enabled || !cardById(e.id))
     applyChange([...reordered, ...rest])
   }
 
@@ -130,7 +130,7 @@ export function Dashboard() {
     setActiveSize(null)
   }
 
-  const removeWidget = (id: string) => {
+  const removeCard = (id: string) => {
     setRemovingId(id)
     setTimeout(() => {
       applyChange(config.map((e) => (e.id === id ? { ...e, enabled: false } : e)))
@@ -138,9 +138,9 @@ export function Dashboard() {
     }, REMOVE_ANIM_MS)
   }
 
-  const addWidget = (id: string) => {
+  const addCard = (id: string) => {
     const existing = config.find((e) => e.id === id)
-    const newEntry: DashboardWidgetEntry = existing ? { ...existing, enabled: true } : { id, enabled: true }
+    const newEntry: DashboardCardEntry = existing ? { ...existing, enabled: true } : { id, enabled: true }
     const rest = config.filter((e) => e.id !== id)
     applyChange([...enabledEntries, newEntry, ...rest.filter((e) => !e.enabled)])
     setShowAdd(false)
@@ -193,24 +193,24 @@ export function Dashboard() {
           <SortableContext items={enabledEntries.map((e) => e.id)} strategy={rectSortingStrategy}>
             <div className="grid grid-cols-2 gap-3">
               {activeDefs.map((w) => (
-                <EditableWidgetCard
+                <EditableCard
                   key={w.id}
-                  widget={w}
-                  onRemove={() => removeWidget(w.id)}
+                  card={w}
+                  onRemove={() => removeCard(w.id)}
                   removing={removingId === w.id}
                   entering={enteringId === w.id}
                 />
               ))}
               <div className="col-span-2">
                 {showAdd ? (
-                  <AddWidgetPicker available={available} onAdd={addWidget} onClose={() => setShowAdd(false)} />
+                  <AddCardPicker available={available} onAdd={addCard} onClose={() => setShowAdd(false)} />
                 ) : (
                   <button
                     onClick={() => setShowAdd(true)}
                     className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed py-6 text-sm font-bold transition-colors active:bg-[var(--card2)]"
                     style={{ borderColor: 'var(--border-l)', color: 'var(--muted)' }}
                   >
-                    <Plus size={18} /> Adicionar widget
+                    <Plus size={18} /> Adicionar card
                   </button>
                 )}
               </div>
@@ -221,7 +221,7 @@ export function Dashboard() {
               sem ficar preso à distorção da grade (fica muito mais fluido que animar
               o próprio item da grade). */}
           <DragOverlay dropAnimation={dropAnimationConfig}>
-            {activeWidget && activeSize ? (
+            {activeCard && activeSize ? (
               <div
                 style={{
                   position: 'relative',
@@ -234,7 +234,7 @@ export function Dashboard() {
                   pointerEvents: 'none',
                 }}
               >
-                <activeWidget.Component />
+                <activeCard.Component />
                 <div
                   className="absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-full"
                   style={{ background: 'var(--card2)', color: 'var(--text)', border: '1px solid var(--border-l)' }}

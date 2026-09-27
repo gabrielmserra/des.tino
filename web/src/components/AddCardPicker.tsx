@@ -1,10 +1,10 @@
 import { Plus } from 'lucide-react'
-import type { WidgetDef } from '../lib/dashboardWidgets'
+import type { CardDef } from '../lib/dashboardCards'
 
-export function AddWidgetPicker({
+export function AddCardPicker({
   available, onAdd, onClose,
 }: {
-  available: WidgetDef[]
+  available: CardDef[]
   onAdd: (id: string) => void
   onClose: () => void
 }) {
@@ -15,7 +15,7 @@ export function AddWidgetPicker({
     >
       <div className="mb-1 flex items-center justify-between">
         <span className="text-xs font-bold" style={{ color: 'var(--muted)' }}>
-          Adicionar widget
+          Adicionar card
         </span>
         <button onClick={onClose} style={{ color: 'var(--muted)' }} className="text-lg leading-none">
           ×
@@ -23,7 +23,7 @@ export function AddWidgetPicker({
       </div>
       {available.length === 0 ? (
         <p className="py-2 text-xs" style={{ color: 'var(--muted)' }}>
-          Todos os widgets já estão no dashboard.
+          Todos os cards já estão no dashboard.
         </p>
       ) : (
         available.map((w) => (

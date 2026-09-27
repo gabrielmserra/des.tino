@@ -30,7 +30,7 @@ import type {
   Goal,
   GoalInstallment,
   GoalInstallmentInput,
-  DashboardWidgetEntry,
+  DashboardCardEntry,
   CardPurchaseInstallmentInput,
   FutureCommitment,
 } from './types'
@@ -81,16 +81,16 @@ export async function saveTheme(theme: string): Promise<void> {
   if (error) throw error
 }
 
-export async function fetchDashboardConfig(): Promise<DashboardWidgetEntry[] | null> {
-  const { data, error } = await supabase.from('user_settings').select('dashboard_widgets').maybeSingle()
+export async function fetchDashboardConfig(): Promise<DashboardCardEntry[] | null> {
+  const { data, error } = await supabase.from('user_settings').select('dashboard_cards').maybeSingle()
   if (error) throw error
-  return (data?.dashboard_widgets as DashboardWidgetEntry[] | null) ?? null
+  return (data?.dashboard_cards as DashboardCardEntry[] | null) ?? null
 }
 
-export async function saveDashboardConfig(config: DashboardWidgetEntry[]): Promise<void> {
+export async function saveDashboardConfig(config: DashboardCardEntry[]): Promise<void> {
   const { error } = await supabase
     .from('user_settings')
-    .upsert({ dashboard_widgets: config }, { onConflict: 'user_id' })
+    .upsert({ dashboard_cards: config }, { onConflict: 'user_id' })
   if (error) throw error
 }
 
