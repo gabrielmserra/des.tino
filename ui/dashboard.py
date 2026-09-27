@@ -487,12 +487,14 @@ class Dashboard(ctk.CTkScrollableFrame):
         _apply(widget)
 
     # ------------------------------------------------------------------
-    def _month_series(self, n: int = 6) -> list:
-        """Até n meses terminando no mês atual (mais antigo → mais novo),
+    def _month_series(self, n: int = 6, month_id: int = None) -> list:
+        """Até n meses terminando no mês dado (mais antigo → mais novo),
         cada item como (month_dict, summary_dict). Só chamar em background
         thread — faz chamadas de rede."""
+        if month_id is None:
+            month_id = self.month_id
         all_months = db.get_months()
-        cur_idx = next((i for i, m in enumerate(all_months) if m["id"] == self.month_id), 0)
+        cur_idx = next((i for i, m in enumerate(all_months) if m["id"] == month_id), 0)
         window = list(reversed(all_months[cur_idx: cur_idx + n]))
         return [(m, db.get_month_summary(m["id"])) for m in window]
 
@@ -502,7 +504,13 @@ class Dashboard(ctk.CTkScrollableFrame):
 
     def refresh(self) -> None:
         import threading
-        s = db.get_month_summary(self.month_id)
+        # Número de geração: se o usuário trocar de mês de novo antes desta
+        # busca terminar, a busca antiga (mais lenta) não pode sobrescrever
+        # os cards com dados de um mês que não é mais o selecionado.
+        self._refresh_gen = getattr(self, "_refresh_gen", 0) + 1
+        my_gen = self._refresh_gen
+        month_id = self.month_id  # snapshot — usado no fim, não self.month_id de novo
+        s = db.get_month_summary(month_id)
 
         for key, (lbl, default_color) in self._card_lbls.items():
             if key in ("investimentos_total", "saldo_beneficios", "saldo_apos_contas"):
@@ -555,7 +563,7 @@ class Dashboard(ctk.CTkScrollableFrame):
             # sem tocar em widget nem em matplotlib) ─────────────────────
             def fetch_pie():
                 try:
-                    return db.get_expenses_by_category(self.month_id)
+                    return db.get_expenses_by_category(month_id)
                 except Exception:
                     return []
 
@@ -563,7 +571,7 @@ class Dashboard(ctk.CTkScrollableFrame):
                 if not hasattr(self, "_pm_host"):
                     return None
                 try:
-                    return db.get_expenses_by_payment_method(self.month_id)
+                    return db.get_expenses_by_payment_method(month_id)
                 except Exception:
                     return None
 
@@ -614,7 +622,7 @@ class Dashboard(ctk.CTkScrollableFrame):
                 try:
                     all_months  = db.get_months()
                     cur_idx     = next((i for i, m in enumerate(all_months)
-                                        if m["id"] == self.month_id), 0)
+                                        if m["id"] == month_id), 0)
                     prev_months = all_months[cur_idx + 1: cur_idx + 4]
                     if prev_months:
                         with cf.ThreadPoolExecutor(max_workers=len(prev_months)) as inner:
@@ -640,15 +648,15 @@ class Dashboard(ctk.CTkScrollableFrame):
 
             def fetch_balance_projection():
                 try:
-                    return db.get_balance_projection(self.month_id)
+                    return db.get_balance_projection(month_id)
                 except Exception:
                     return None
 
             def fetch_plan_block():
                 try:
-                    plan          = db.get_plan(self.month_id)
+                    plan          = db.get_plan(month_id)
                     plan_items    = db.get_plan_items(plan["id"]) if plan else []
-                    plan_realized = db.get_plan_realized(self.month_id) if plan else {}
+                    plan_realized = db.get_plan_realized(month_id) if plan else {}
                     return plan, plan_items, plan_realized
                 except Exception:
                     return None, [], {}
@@ -659,7 +667,7 @@ class Dashboard(ctk.CTkScrollableFrame):
                 if not need_series:
                     return [], []
                 try:
-                    series = self._month_series(6)
+                    series = self._month_series(6, month_id)
                 except Exception:
                     return [], []
                 cats_per_month = []
@@ -684,7 +692,7 @@ class Dashboard(ctk.CTkScrollableFrame):
                 if not hasattr(self, "_top_expenses_frame"):
                     return None
                 try:
-                    return db.get_transactions(self.month_id)
+                    return db.get_transactions(month_id)
                 except Exception:
                     return []
 
@@ -709,7 +717,7 @@ class Dashboard(ctk.CTkScrollableFrame):
                 # buscas acima, na própria thread de fundo.
                 try:
                     cards    = db.get_cards()
-                    overview = db.get_cards_overview(self.month_id) if cards else []
+                    overview = db.get_cards_overview(month_id) if cards else []
                 except Exception:
                     cards, overview = [], []
                 try:
@@ -804,6 +812,12 @@ class Dashboard(ctk.CTkScrollableFrame):
                         gastos7d_fig = self._build_line_figure(labels, values, T.RED)
                 except Exception:
                     gastos7d_fig = None
+
+            # Se o usuário já trocou de mês de novo, esta busca ficou velha —
+            # não sobrescreve os cards com dados de um mês que não é mais o
+            # selecionado (ver comentário no início de refresh()).
+            if my_gen != self._refresh_gen:
+                return
 
             self.after(0, lambda p=plan, it=plan_items, pr=plan_realized:
                        self._update_plan_alert(p, it, pr))
@@ -942,7 +956,7 @@ class Dashboard(ctk.CTkScrollableFrame):
         entry = self._card_lbls.get("saldo_apos_contas")
         if entry:
             lbl, default_color = entry
-            color = T.GREEN if total >= 0 else T.RED
+            color = default_color if total >= 0 else T.RED
             lbl.configure(text=format_currency(total), text_color=color)
         if hasattr(self, "_saldo_contas_warning_lbl"):
             self._saldo_contas_warning_lbl.configure(text=warning)
