@@ -549,149 +549,252 @@ class Dashboard(ctk.CTkScrollableFrame):
                     self._saldo_delta_lbl.grid_configure(pady=(0, 18))
 
         def _background():
-            pie_data = db.get_expenses_by_category(self.month_id)
-            pie_fig  = self._build_pie_figure(pie_data) if hasattr(self, "_pie_host") else None
-            bar_fig  = self._build_bar_figure(s) if hasattr(self, "_bar_host") else None
-            if hasattr(self, "_pm_host"):
-                pm_data = db.get_expenses_by_payment_method(self.month_id)
-                pm_fig  = self._build_pie_figure(
-                    [{"category": PAYMENT_METHODS.get(r["payment_method"], r["payment_method"]),
-                      "total": r["total"]} for r in pm_data])
-            else:
-                pm_fig = None
-            try:
-                total_inv = db.get_total_investments()
-            except Exception:
-                total_inv = 0.0
-            try:
-                benefit_total = sum(float(b.get("balance") or 0) for b in db.get_benefits())
-            except Exception:
-                benefit_total = 0.0
-            try:
-                hoje = date.today()
-                db.ensure_fixed_bill_instances(hoje.year, hoje.month)
-                pending_bills = db.get_pending_fixed_bills_total(hoje.year, hoje.month)
-                saldo_apos_contas = s.get("saldo_acumulado", 0.0) - pending_bills
+            import concurrent.futures as cf
 
-                bills_by_id = {b["id"]: b for b in db.get_fixed_bills()}
-                overdue = []
-                for inst in db.get_fixed_bill_instances():
-                    if (inst["due_year"] == hoje.year and inst["due_month"] == hoje.month
-                            and not inst.get("paid_at")):
-                        bill = bills_by_id.get(inst["bill_id"])
-                        if bill and int(bill["due_day"]) < hoje.day:
-                            overdue.append(bill)
-                if not overdue:
-                    contas_warning = ""
-                elif len(overdue) == 1:
-                    contas_warning = f"⚠ {overdue[0]['name']} venceu dia {overdue[0]['due_day']}"
-                else:
-                    contas_warning = f"⚠ {len(overdue)} contas venceram"
-            except Exception:
-                saldo_apos_contas = s.get("saldo_acumulado", 0.0)
-                contas_warning = ""
-            try:
-                goals = db.get_goals()
-            except Exception:
-                goals = []
-            try:
-                cards    = db.get_cards()
-                overview = db.get_cards_overview(self.month_id) if cards else []
-            except Exception:
-                cards, overview = [], []
-            try:
-                all_months  = db.get_months()
-                cur_idx     = next((i for i, m in enumerate(all_months)
-                                    if m["id"] == self.month_id), 0)
-                prev_months = all_months[cur_idx + 1: cur_idx + 4]
-                history     = [db.get_month_summary(m["id"]) for m in prev_months]
-                investments = db.get_investments()
-            except Exception:
-                history, investments = [], []
-            try:
-                total_unpaid_cards = sum(float(o.get("unpaid") or 0) for o in overview)
-            except Exception:
-                total_unpaid_cards = 0.0
-            try:
-                overdue_debts = db.get_debt_overview().get("n_atrasadas", 0)
-            except Exception:
-                overdue_debts = 0
-            try:
-                fixed_bill_watch = db.get_fixed_bill_watch_data()
-            except Exception:
-                fixed_bill_watch = {"bills": [], "transactions": []}
-            try:
-                card_warning = self._compute_card_warning(overview, s)
-            except Exception:
-                card_warning = ""
-            try:
-                balance_projection = db.get_balance_projection(self.month_id)
-            except Exception:
-                balance_projection = None
-            try:
-                plan          = db.get_plan(self.month_id)
-                plan_items    = db.get_plan_items(plan["id"]) if plan else []
-                plan_realized = db.get_plan_realized(self.month_id) if plan else {}
-            except Exception:
-                plan, plan_items, plan_realized = None, [], {}
+            # ── Fase 1: busca de dados, tudo em paralelo (I/O de rede,
+            # sem tocar em widget nem em matplotlib) ─────────────────────
+            def fetch_pie():
+                try:
+                    return db.get_expenses_by_category(self.month_id)
+                except Exception:
+                    return []
 
-            saldo_evo_fig = cat_evo_fig = patrimonio_evo_fig = None
-            if (hasattr(self, "_saldo_evo_host") or hasattr(self, "_cat_evo_host")
-                    or hasattr(self, "_patrimonio_evo_host")):
+            def fetch_pm():
+                if not hasattr(self, "_pm_host"):
+                    return None
+                try:
+                    return db.get_expenses_by_payment_method(self.month_id)
+                except Exception:
+                    return None
+
+            def fetch_total_inv():
+                try:
+                    return db.get_total_investments()
+                except Exception:
+                    return 0.0
+
+            def fetch_benefit_total():
+                try:
+                    return sum(float(b.get("balance") or 0) for b in db.get_benefits())
+                except Exception:
+                    return 0.0
+
+            def fetch_bills_block():
+                try:
+                    hoje = date.today()
+                    db.ensure_fixed_bill_instances(hoje.year, hoje.month)
+                    pending_bills = db.get_pending_fixed_bills_total(hoje.year, hoje.month)
+                    saldo_apos_contas = s.get("saldo_acumulado", 0.0) - pending_bills
+
+                    bills_by_id = {b["id"]: b for b in db.get_fixed_bills()}
+                    overdue = []
+                    for inst in db.get_fixed_bill_instances():
+                        if (inst["due_year"] == hoje.year and inst["due_month"] == hoje.month
+                                and not inst.get("paid_at")):
+                            bill = bills_by_id.get(inst["bill_id"])
+                            if bill and int(bill["due_day"]) < hoje.day:
+                                overdue.append(bill)
+                    if not overdue:
+                        contas_warning = ""
+                    elif len(overdue) == 1:
+                        contas_warning = f"⚠ {overdue[0]['name']} venceu dia {overdue[0]['due_day']}"
+                    else:
+                        contas_warning = f"⚠ {len(overdue)} contas venceram"
+                    return saldo_apos_contas, contas_warning
+                except Exception:
+                    return s.get("saldo_acumulado", 0.0), ""
+
+            def fetch_goals():
+                try:
+                    return db.get_goals()
+                except Exception:
+                    return []
+
+            def fetch_history_and_investments():
+                try:
+                    all_months  = db.get_months()
+                    cur_idx     = next((i for i, m in enumerate(all_months)
+                                        if m["id"] == self.month_id), 0)
+                    prev_months = all_months[cur_idx + 1: cur_idx + 4]
+                    if prev_months:
+                        with cf.ThreadPoolExecutor(max_workers=len(prev_months)) as inner:
+                            history = list(inner.map(lambda m: db.get_month_summary(m["id"]), prev_months))
+                    else:
+                        history = []
+                    investments = db.get_investments()
+                    return history, investments
+                except Exception:
+                    return [], []
+
+            def fetch_overdue_debts():
+                try:
+                    return db.get_debt_overview().get("n_atrasadas", 0)
+                except Exception:
+                    return 0
+
+            def fetch_fixed_bill_watch():
+                try:
+                    return db.get_fixed_bill_watch_data()
+                except Exception:
+                    return {"bills": [], "transactions": []}
+
+            def fetch_balance_projection():
+                try:
+                    return db.get_balance_projection(self.month_id)
+                except Exception:
+                    return None
+
+            def fetch_plan_block():
+                try:
+                    plan          = db.get_plan(self.month_id)
+                    plan_items    = db.get_plan_items(plan["id"]) if plan else []
+                    plan_realized = db.get_plan_realized(self.month_id) if plan else {}
+                    return plan, plan_items, plan_realized
+                except Exception:
+                    return None, [], {}
+
+            def fetch_series_and_cats():
+                need_series = (hasattr(self, "_saldo_evo_host") or hasattr(self, "_cat_evo_host")
+                               or hasattr(self, "_patrimonio_evo_host"))
+                if not need_series:
+                    return [], []
                 try:
                     series = self._month_series(6)
                 except Exception:
-                    series = []
-                if len(series) > 1:
-                    labels = [self._month_short_label(m) for m, _ in series]
-                    if hasattr(self, "_saldo_evo_host"):
-                        values = [sm.get("saldo", 0.0) for _, sm in series]
-                        saldo_evo_fig = self._build_line_figure(labels, values, T.BLUE)
-                    if hasattr(self, "_cat_evo_host"):
-                        try:
-                            cats_per_month = [db.get_expenses_by_category(m["id"]) for m, _ in series]
-                            total_by_cat: dict = {}
-                            for cats in cats_per_month:
-                                for c in cats:
-                                    total_by_cat[c["category"]] = (
-                                        total_by_cat.get(c["category"], 0.0) + float(c["total"] or 0))
-                            # Rótulo do grupo "demais categorias" — separado do nome
-                            # "Outros" (categoria de verdade), senão os dois aparecem
-                            # juntos no gráfico parecendo duplicados.
-                            OUTRAS_BUCKET = "Demais categorias"
-                            top_cats = [c for c, _ in sorted(total_by_cat.items(), key=lambda kv: -kv[1])[:4]]
-                            has_outras = any(c["category"] not in top_cats
-                                             for cats in cats_per_month for c in cats)
-                            keys = top_cats + ([OUTRAS_BUCKET] if has_outras else [])
-                            series_data = {k: [] for k in keys}
-                            for cats in cats_per_month:
-                                by_cat = {c["category"]: float(c["total"] or 0) for c in cats}
-                                outras = sum(v for c, v in by_cat.items() if c not in top_cats)
-                                for k in top_cats:
-                                    series_data[k].append(by_cat.get(k, 0.0))
-                                if has_outras:
-                                    series_data[OUTRAS_BUCKET].append(outras)
-                            if keys and any(any(v > 0 for v in vals) for vals in series_data.values()):
-                                cat_evo_fig = self._build_stacked_bar_figure(labels, series_data)
-                        except Exception:
-                            cat_evo_fig = None
-                    if hasattr(self, "_patrimonio_evo_host"):
-                        try:
-                            running = db.get_total_investments()
-                            pts_rev = []
-                            for m, sm in reversed(series):
-                                pts_rev.append((self._month_short_label(m), running))
-                                running -= sm.get("total_investimentos", 0.0)
-                            pts = list(reversed(pts_rev))
-                            patrimonio_evo_fig = self._build_line_figure(
-                                [p[0] for p in pts], [p[1] for p in pts], T.VIOLET)
-                        except Exception:
-                            patrimonio_evo_fig = None
+                    return [], []
+                cats_per_month = []
+                if len(series) > 1 and hasattr(self, "_cat_evo_host"):
+                    try:
+                        with cf.ThreadPoolExecutor(max_workers=len(series)) as inner:
+                            cats_per_month = list(inner.map(
+                                lambda ms: db.get_expenses_by_category(ms[0]["id"]), series))
+                    except Exception:
+                        cats_per_month = []
+                return series, cats_per_month
+
+            def fetch_daily_spending():
+                if not hasattr(self, "_gastos7d_host"):
+                    return None
+                try:
+                    return db.get_daily_spending(7)
+                except Exception:
+                    return None
+
+            def fetch_top_expenses():
+                if not hasattr(self, "_top_expenses_frame"):
+                    return None
+                try:
+                    return db.get_transactions(self.month_id)
+                except Exception:
+                    return []
+
+            with cf.ThreadPoolExecutor(max_workers=14) as ex:
+                fut_pie     = ex.submit(fetch_pie)
+                fut_pm      = ex.submit(fetch_pm)
+                fut_inv     = ex.submit(fetch_total_inv)
+                fut_benefit = ex.submit(fetch_benefit_total)
+                fut_bills   = ex.submit(fetch_bills_block)
+                fut_goals   = ex.submit(fetch_goals)
+                fut_hist    = ex.submit(fetch_history_and_investments)
+                fut_series  = ex.submit(fetch_series_and_cats)
+                fut_overdue = ex.submit(fetch_overdue_debts)
+                fut_watch   = ex.submit(fetch_fixed_bill_watch)
+                fut_proj    = ex.submit(fetch_balance_projection)
+                fut_plan    = ex.submit(fetch_plan_block)
+                fut_daily   = ex.submit(fetch_daily_spending)
+                fut_top     = ex.submit(fetch_top_expenses)
+
+                # Cadeia real de dependência (cards -> overview -> unpaid/
+                # aviso) — roda em série aqui, mas em paralelo com as
+                # buscas acima, na própria thread de fundo.
+                try:
+                    cards    = db.get_cards()
+                    overview = db.get_cards_overview(self.month_id) if cards else []
+                except Exception:
+                    cards, overview = [], []
+                try:
+                    total_unpaid_cards = sum(float(o.get("unpaid") or 0) for o in overview)
+                except Exception:
+                    total_unpaid_cards = 0.0
+                try:
+                    card_warning = self._compute_card_warning(overview, s)
+                except Exception:
+                    card_warning = ""
+
+                pie_data                          = fut_pie.result()
+                pm_data                            = fut_pm.result()
+                total_inv                          = fut_inv.result()
+                benefit_total                      = fut_benefit.result()
+                saldo_apos_contas, contas_warning  = fut_bills.result()
+                goals                               = fut_goals.result()
+                history, investments                = fut_hist.result()
+                series, cats_per_month              = fut_series.result()
+                overdue_debts                       = fut_overdue.result()
+                fixed_bill_watch                    = fut_watch.result()
+                balance_projection                  = fut_proj.result()
+                plan, plan_items, plan_realized     = fut_plan.result()
+                daily                                = fut_daily.result()
+                top_expenses                         = fut_top.result()
+
+            # ── Fase 2: montagem dos gráficos — matplotlib/Tk não é
+            # thread-safe, então sempre em série, só depois que todos os
+            # dados já chegaram ───────────────────────────────────────────
+            pie_fig = self._build_pie_figure(pie_data) if hasattr(self, "_pie_host") else None
+            bar_fig = self._build_bar_figure(s) if hasattr(self, "_bar_host") else None
+            pm_fig  = (self._build_pie_figure(
+                           [{"category": PAYMENT_METHODS.get(r["payment_method"], r["payment_method"]),
+                             "total": r["total"]} for r in pm_data])
+                       if pm_data is not None else None)
+
+            saldo_evo_fig = cat_evo_fig = patrimonio_evo_fig = None
+            if len(series) > 1:
+                labels = [self._month_short_label(m) for m, _ in series]
+                if hasattr(self, "_saldo_evo_host"):
+                    values = [sm.get("saldo", 0.0) for _, sm in series]
+                    saldo_evo_fig = self._build_line_figure(labels, values, T.BLUE)
+                if hasattr(self, "_cat_evo_host") and cats_per_month:
+                    try:
+                        total_by_cat: dict = {}
+                        for cats in cats_per_month:
+                            for c in cats:
+                                total_by_cat[c["category"]] = (
+                                    total_by_cat.get(c["category"], 0.0) + float(c["total"] or 0))
+                        # Rótulo do grupo "demais categorias" — separado do nome
+                        # "Outros" (categoria de verdade), senão os dois aparecem
+                        # juntos no gráfico parecendo duplicados.
+                        OUTRAS_BUCKET = "Demais categorias"
+                        top_cats = [c for c, _ in sorted(total_by_cat.items(), key=lambda kv: -kv[1])[:4]]
+                        has_outras = any(c["category"] not in top_cats
+                                         for cats in cats_per_month for c in cats)
+                        keys = top_cats + ([OUTRAS_BUCKET] if has_outras else [])
+                        series_data = {k: [] for k in keys}
+                        for cats in cats_per_month:
+                            by_cat = {c["category"]: float(c["total"] or 0) for c in cats}
+                            outras = sum(v for c, v in by_cat.items() if c not in top_cats)
+                            for k in top_cats:
+                                series_data[k].append(by_cat.get(k, 0.0))
+                            if has_outras:
+                                series_data[OUTRAS_BUCKET].append(outras)
+                        if keys and any(any(v > 0 for v in vals) for vals in series_data.values()):
+                            cat_evo_fig = self._build_stacked_bar_figure(labels, series_data)
+                    except Exception:
+                        cat_evo_fig = None
+                if hasattr(self, "_patrimonio_evo_host"):
+                    try:
+                        running = total_inv  # já buscado na fase 1, sem round-trip novo
+                        pts_rev = []
+                        for m, sm in reversed(series):
+                            pts_rev.append((self._month_short_label(m), running))
+                            running -= sm.get("total_investimentos", 0.0)
+                        pts = list(reversed(pts_rev))
+                        patrimonio_evo_fig = self._build_line_figure(
+                            [p[0] for p in pts], [p[1] for p in pts], T.VIOLET)
+                    except Exception:
+                        patrimonio_evo_fig = None
 
             gastos7d_fig = None
-            if hasattr(self, "_gastos7d_host"):
+            if daily is not None:
                 try:
-                    daily = db.get_daily_spending(7)
                     labels = []
                     for d in daily:
                         y, m, day = d["date"].split("-")
@@ -701,13 +804,6 @@ class Dashboard(ctk.CTkScrollableFrame):
                         gastos7d_fig = self._build_line_figure(labels, values, T.RED)
                 except Exception:
                     gastos7d_fig = None
-
-            top_expenses = None
-            if hasattr(self, "_top_expenses_frame"):
-                try:
-                    top_expenses = db.get_transactions(self.month_id)
-                except Exception:
-                    top_expenses = []
 
             self.after(0, lambda p=plan, it=plan_items, pr=plan_realized:
                        self._update_plan_alert(p, it, pr))

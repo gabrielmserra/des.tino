@@ -10,11 +10,22 @@ from config import get_client
 # Cache em memória: evita re-buscar transações do mesmo mês a cada ação
 _tx_cache: Dict[int, List[dict]] = {}
 
+# Cache da lista de meses — evita re-buscar a mesma lista várias vezes
+# dentro de um único refresh do Dashboard (get_saldo_acumulado chama
+# get_months() internamente pra cada mês que resume, e é chamado várias
+# vezes por refresh).
+_months_cache: Optional[List[dict]] = None
+
 
 def _invalidate(month_id: int) -> None:
     _tx_cache.pop(month_id, None)
     _inv_net_cache.pop(month_id, None)
     _bill_cache.pop(month_id, None)
+
+
+def _invalidate_months() -> None:
+    global _months_cache
+    _months_cache = None
 
 
 def is_cached(month_id: int) -> bool:
@@ -31,12 +42,15 @@ def init_db() -> None:
 
 def get_months() -> List[dict]:
     """Retorna os meses do usuário logado, do mais recente ao mais antigo."""
-    resp = get_client().table("months") \
-        .select("*") \
-        .order("year", desc=True) \
-        .order("month", desc=True) \
-        .execute()
-    return resp.data or []
+    global _months_cache
+    if _months_cache is None:
+        resp = get_client().table("months") \
+            .select("*") \
+            .order("year", desc=True) \
+            .order("month", desc=True) \
+            .execute()
+        _months_cache = resp.data or []
+    return list(_months_cache)
 
 
 def create_month(name: str, year: int, month: int) -> Optional[dict]:
@@ -51,6 +65,7 @@ def create_month(name: str, year: int, month: int) -> Optional[dict]:
     resp = client.table("months").insert({
         "name": name, "year": year, "month": month, "user_id": user_id,
     }).execute()
+    _invalidate_months()
     return resp.data[0] if resp.data else None
 
 
@@ -68,10 +83,12 @@ def rename_month(month_id: int, new_name: str, new_year: int, new_month: int) ->
     client.table("months").update({
         "name": new_name, "year": new_year, "month": new_month,
     }).eq("id", month_id).execute()
+    _invalidate_months()
 
 
 def delete_month(month_id: int) -> None:
     get_client().table("months").delete().eq("id", month_id).execute()
+    _invalidate_months()
 
 
 # ---------------------------------------------------------------------------
@@ -397,6 +414,7 @@ def get_saldo_acumulado(month_id: int) -> float:
 def set_month_opening_balance(month_id: int, value) -> None:
     """value=None limpa a âncora desse mês (volta a herdar do mês anterior)."""
     get_client().table("months").update({"opening_balance": value}).eq("id", month_id).execute()
+    _invalidate_months()
 
 
 def get_daily_spending(days: int = 7) -> list:
