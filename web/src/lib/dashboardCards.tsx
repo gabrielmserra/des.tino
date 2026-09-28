@@ -83,8 +83,8 @@ export function Kpi({
               e.stopPropagation()
               setShowInfo((v) => !v)
             }}
-            className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[9px] font-bold"
-            style={{ color: 'var(--muted)', border: '1px solid var(--border)' }}
+            className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
+            style={{ color, background: 'var(--card2)', border: `1px solid ${color}` }}
           >
             i
           </button>
