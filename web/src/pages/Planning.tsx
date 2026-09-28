@@ -306,8 +306,38 @@ export function Planning() {
       }
     }
 
-    const updateIncomeItems = (incomeItems: PlanIncomeItemInput[]) =>
+    // Reexecuta a sugestão por histórico com a renda corrigida -- sem isso,
+    // os valores sugeridos por categoria ficavam presos na renda usada na
+    // geração original, deixando RENDA e TOTAL ALOCADO sem relação alguma
+    // entre si. Linhas de dívida (travadas) não mudam -- não dependem de
+    // renda. Linhas ainda iguais à sugestão anterior (o usuário não mexeu)
+    // recebem o novo valor sugerido; linhas já editadas manualmente mantêm
+    // o valor digitado, só atualizando a referência "sugerido: R$...".
+    const updateIncomeAndRecalc = async (incomeItems: PlanIncomeItemInput[]) => {
+      setEditingIncome(false)
+      if (!selected) return
       setView((v) => (v.kind !== 'review' ? v : { ...v, incomeItems }))
+      try {
+        const newIncome = incomeItems.reduce((a, i) => a + i.amount, 0)
+        const { expensesHistory, incomeHistory } = await fetchPlanHistory(months, selected)
+        const suggestions = suggestAllocations(expensesHistory, incomeHistory, newIncome)
+        setView((v) => {
+          if (v.kind !== 'review') return v
+          const rows = v.rows.map((r) => {
+            if (r.mandatory) return r
+            const s = suggestions[r.category]
+            if (!s) return r
+            const untouched = r.suggested == null || Math.abs(parseAmount(r.planned) - r.suggested) < 0.005
+            return untouched
+              ? { ...r, planned: toInput(s.amount), suggested: s.amount, eventual: s.eventual, capped: s.capped }
+              : { ...r, suggested: s.amount, eventual: s.eventual, capped: s.capped }
+          })
+          return { ...v, rows }
+        })
+      } catch (e) {
+        setError('Erro ao recalcular sugestão: ' + (e as Error).message)
+      }
+    }
 
     return (
       <div className="p-4 pb-8">
@@ -497,10 +527,7 @@ export function Planning() {
           <IncomeDialog
             items={view.incomeItems}
             onCancel={() => setEditingIncome(false)}
-            onConfirm={(incomeItems) => {
-              updateIncomeItems(incomeItems)
-              setEditingIncome(false)
-            }}
+            onConfirm={(incomeItems) => updateIncomeAndRecalc(incomeItems)}
           />
         )}
       </div>

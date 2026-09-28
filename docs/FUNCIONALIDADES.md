@@ -138,6 +138,12 @@ Para cada lançamento:
   quando o mês anterior não tinha plano (ex.: primeiro mês de uso do
   app) — nesse caso, cai no fluxo manual de sempre. Nunca sobrescreve um
   plano já existente.
+- **[Ambas]** Na revisão (antes de confirmar), editar as entradas de renda
+  recalcula as sugestões por categoria com a renda corrigida — categorias
+  que o usuário ainda não tinha ajustado manualmente recebem o novo
+  valor sugerido; categorias já editadas à mão mantêm o valor digitado
+  (só a referência "sugerido: R$..." é atualizada). Linhas de dívida
+  (travadas) nunca mudam, pois não dependem de renda.
 - **[Ambas]** A tela de acompanhamento (planejado x realizado) se
   atualiza sozinha quando um lançamento muda em outra tela (novo
   lançamento, importação de extrato, pagamento de fatura/dívida etc.),

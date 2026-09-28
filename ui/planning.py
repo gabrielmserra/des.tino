@@ -379,7 +379,56 @@ class PlanningTab(ctk.CTkFrame):
         self.winfo_toplevel().wait_window(dlg)
         if dlg.income_items is not None:
             self._income_items = dlg.income_items
-            self._recalc()
+            self._recalc_suggestions()
+
+    def _recalc_suggestions(self) -> None:
+        """Reexecuta a sugestão por histórico com a renda corrigida, depois
+        de editar as entradas na revisão -- sem isso, os valores sugeridos
+        por categoria ficavam presos na renda usada na geração original,
+        deixando RENDA e TOTAL ALOCADO sem relação nenhuma entre si."""
+        income = sum(i["amount"] for i in self._income_items)
+        month_id = self.month_id
+
+        def _fetch():
+            try:
+                expenses_hist, income_hist = db.get_plan_history(month_id)
+            except Exception:
+                expenses_hist, income_hist = [], []
+            suggestions = suggest_allocations(expenses_hist, income_hist, income)
+            if month_id == self.month_id:
+                self.after(0, lambda: self._apply_recalculated_suggestions(suggestions))
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _apply_recalculated_suggestions(self, suggestions: dict) -> None:
+        """Reconstrói as linhas com a nova sugestão. Linhas de dívida
+        (travadas) não mudam -- não dependem de renda. Linhas ainda iguais
+        à sugestão anterior (o usuário não mexeu) recebem o novo valor
+        sugerido; linhas que o usuário já editou manualmente mantêm o
+        valor digitado, só atualizando a referência "sugerido: R$..."."""
+        rebuilt = []
+        for cat, info in self._review_rows.items():
+            if info["mandatory"]:
+                rebuilt.append((cat, info["value"], info["suggested"], info["eventual"], False, True))
+                continue
+            current = _parse_amount(info["entry"].get())
+            old_suggested = info["suggested"]
+            s = suggestions.get(cat)
+            untouched = old_suggested is None or abs(current - float(old_suggested)) < 0.005
+            if s and untouched:
+                rebuilt.append((cat, s["amount"], s["amount"], s["eventual"], s.get("capped", False), False))
+            elif s:
+                rebuilt.append((cat, current, s["amount"], s["eventual"], s.get("capped", False), False))
+            else:
+                rebuilt.append((cat, current, old_suggested, info["eventual"], False, False))
+
+        for w in self._rows_box.winfo_children():
+            w.destroy()
+        self._review_rows = {}
+        for cat, planned, suggested, eventual, capped, mandatory in rebuilt:
+            self._make_review_row(cat, float(planned or 0), suggested, bool(eventual), bool(capped), bool(mandatory))
+        self._add_combo.configure(values=self._available_categories())
+        self._recalc()
 
     def _recalc(self) -> None:
         income = sum(i["amount"] for i in self._income_items)
