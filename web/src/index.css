@@ -59,6 +59,17 @@ body,
   height: 100dvh;
 }
 
+html,
+body {
+  /* Sem isso, no topo da página (scrollY=0) o Safari do iPhone prioriza o
+     gesto de "elástico"/pull-to-refresh da própria página sobre o
+     touch-action: pan-x de elementos roláveis horizontalmente lá dentro
+     (ex.: título de lançamento) -- os primeiros itens da lista, visíveis
+     sem precisar rolar, ficavam presos nesse conflito; a partir do item
+     que já exige ter rolado a página (scrollY > 0), o conflito some. */
+  overscroll-behavior-y: none;
+}
+
 body {
   margin: 0;
   background: var(--bg);
