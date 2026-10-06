@@ -816,7 +816,12 @@ function MaioresGastosCard() {
               <div className="flex min-w-0 items-center gap-2">
                 <span className="shrink-0 text-xs font-bold" style={{ color: 'var(--muted)' }}>{i + 1}º</span>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">{t.description}</p>
+                  <p
+                    className="no-scrollbar overflow-x-auto whitespace-nowrap text-sm font-semibold"
+                    style={{ WebkitOverflowScrolling: 'touch' }}
+                  >
+                    {t.description}
+                  </p>
                   <p className="truncate text-[11px]" style={{ color: 'var(--muted)' }}>{t.category ?? 'Outros'}</p>
                 </div>
               </div>

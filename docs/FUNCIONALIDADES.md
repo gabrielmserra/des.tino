@@ -67,9 +67,11 @@ Para cada lançamento:
 - **[Web]** Filtro de ordenação na tela de Lançamentos: mais recentes ↔ mais
   antigos primeiro, **pela data real do pagamento** (não pela data em que
   foi importado/cadastrado).
-- **[Web]** Título do lançamento com rolagem horizontal própria na lista —
-  em telas estreitas (mobile), quando o texto não cabe, dá pra arrastar o
-  título pro lado pra ler por completo, em vez de só cortar com "...".
+- **[Web]** Título do lançamento com rolagem horizontal própria, em toda
+  lista que mostra descrição de lançamento (Lançamentos, histórico de
+  fatura do cartão, card "Maiores gastos" do Dashboard) — em telas
+  estreitas (mobile), quando o texto não cabe, dá pra arrastar o título
+  pro lado pra ler por completo, em vez de só cortar com "...".
 - **[Ambas]** Filtro por forma de pagamento — quando "Crédito" é escolhido,
   aparece um subfiltro pra restringir a um cartão específico ("Todos" ou
   o nome de cada cartão cadastrado).
