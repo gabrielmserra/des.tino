@@ -302,8 +302,11 @@ export function Transactions() {
               >
                 <div className="min-w-0 flex-1">
                   <p
-                    className="truncate font-semibold"
-                    style={{ color: t.is_expectation ? 'var(--muted)' : 'var(--text)' }}
+                    className="no-scrollbar overflow-x-auto whitespace-nowrap font-semibold"
+                    style={{
+                      color: t.is_expectation ? 'var(--muted)' : 'var(--text)',
+                      WebkitOverflowScrolling: 'touch',
+                    }}
                   >
                     {txDisplayDesc(t)}
                   </p>

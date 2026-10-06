@@ -68,6 +68,16 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Esconde a barra de rolagem em trechos de texto roláveis horizontalmente
+   (ex.: título truncado de um lançamento) sem perder a rolagem em si. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Cards do Dashboard entrando/saindo do modo de edição (adicionar/remover) */
 @keyframes card-enter {
   from {
