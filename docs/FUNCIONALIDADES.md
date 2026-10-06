@@ -25,6 +25,9 @@ exe · **[Web]** só no site/PWA.
   (`/esqueci-senha`, `/reset-password`).
 - **[Web]** Instalável como PWA no celular (ícone na tela inicial, abre em
   tela cheia sem barra do navegador).
+- **[Web]** PWA se atualiza sozinho: ao detectar uma versão nova publicada,
+  recarrega automaticamente em vez de ficar preso na versão antiga até o
+  usuário fechar e reabrir o app na mão.
 - **[Ambas]** Logout.
 
 ## 2. Períodos (meses)

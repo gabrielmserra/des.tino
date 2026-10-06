@@ -10,6 +10,10 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Registro manual (ver src/main.tsx) -- assim que uma versão nova é
+      // detectada, recarrega sozinho em vez de ficar preso na versão
+      // antiga até o usuário fechar e reabrir o app/PWA na mão.
+      injectRegister: false,
       manifest: {
         name: 'des.tino',
         short_name: 'des.tino',
