@@ -306,6 +306,7 @@ export function Transactions() {
                     style={{
                       color: t.is_expectation ? 'var(--muted)' : 'var(--text)',
                       WebkitOverflowScrolling: 'touch',
+                      touchAction: 'pan-x',
                     }}
                   >
                     {txDisplayDesc(t)}

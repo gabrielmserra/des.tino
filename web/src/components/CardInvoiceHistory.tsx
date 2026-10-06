@@ -33,7 +33,7 @@ function InvoiceTransactions({ invoiceId }: { invoiceId: number }) {
         <div key={t.id} className="flex items-center justify-between gap-2 text-xs">
           <span
             className="no-scrollbar min-w-0 overflow-x-auto whitespace-nowrap"
-            style={{ color: 'var(--text)', WebkitOverflowScrolling: 'touch' }}
+            style={{ color: 'var(--text)', WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
           >
             {t.description}
           </span>

@@ -818,7 +818,7 @@ function MaioresGastosCard() {
                 <div className="min-w-0">
                   <p
                     className="no-scrollbar overflow-x-auto whitespace-nowrap text-sm font-semibold"
-                    style={{ WebkitOverflowScrolling: 'touch' }}
+                    style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
                   >
                     {t.description}
                   </p>
