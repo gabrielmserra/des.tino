@@ -74,6 +74,15 @@ export function Transactions() {
   const [dateTo, setDateTo] = useState<string>('')
   const [dateSingle, setDateSingle] = useState<string>('')
   const [exporting, setExporting] = useState(false)
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
+
+  const toggleExpanded = (id: number) =>
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
 
   const { data, isLoading } = useQuery({
     queryKey: ['transactions', selectedId],
@@ -302,12 +311,12 @@ export function Transactions() {
               >
                 <div className="min-w-0 flex-1">
                   <p
-                    className="no-scrollbar overflow-x-auto whitespace-nowrap font-semibold"
-                    style={{
-                      color: t.is_expectation ? 'var(--muted)' : 'var(--text)',
-                      WebkitOverflowScrolling: 'touch',
-                      touchAction: 'pan-x',
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleExpanded(t.id)
                     }}
+                    className={`font-semibold ${expandedIds.has(t.id) ? 'whitespace-normal break-words' : 'truncate'}`}
+                    style={{ color: t.is_expectation ? 'var(--muted)' : 'var(--text)' }}
                   >
                     {txDisplayDesc(t)}
                   </p>

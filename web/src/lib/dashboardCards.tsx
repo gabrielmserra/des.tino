@@ -791,6 +791,14 @@ function ChartGastosCategoriaEvolucaoCard() {
 // ── Maiores gastos do mês ───────────────────────────────────────────────
 function MaioresGastosCard() {
   const { selectedId } = useMonths()
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
+  const toggleExpanded = (id: number) =>
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   const txQ = useQuery({
     queryKey: ['transactions', selectedId],
     queryFn: () => fetchTransactions(selectedId!),
@@ -817,8 +825,8 @@ function MaioresGastosCard() {
                 <span className="shrink-0 text-xs font-bold" style={{ color: 'var(--muted)' }}>{i + 1}º</span>
                 <div className="min-w-0">
                   <p
-                    className="no-scrollbar overflow-x-auto whitespace-nowrap text-sm font-semibold"
-                    style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
+                    onClick={() => toggleExpanded(t.id)}
+                    className={`text-sm font-semibold ${expandedIds.has(t.id) ? 'whitespace-normal break-words' : 'truncate'}`}
                   >
                     {t.description}
                   </p>
