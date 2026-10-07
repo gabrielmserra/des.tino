@@ -213,12 +213,12 @@ export function Layout() {
   }
 
   return (
-    <div className="flex min-h-full flex-col lg:flex-row">
+    <div className="flex h-full flex-col lg:flex-row">
       <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
-      <div ref={contentRef} className="flex min-h-full min-w-0 flex-1 flex-col">
+      <div ref={contentRef} className="flex h-full min-w-0 flex-1 flex-col">
       {/* Header */}
       <header
-        className={`sticky top-0 z-10 flex flex-wrap items-center justify-center gap-x-2 gap-y-2 border-b px-3 py-3 sm:justify-between sm:px-4 ${
+        className={`z-10 flex flex-wrap items-center justify-center gap-x-2 gap-y-2 border-b px-3 py-3 sm:justify-between sm:px-4 ${
           sidebarCollapsed ? 'lg:justify-between' : 'lg:justify-end'
         }`}
         style={{
@@ -288,8 +288,18 @@ export function Layout() {
         <RenewalToast summary={renewalSummary} onDismiss={() => setShowToast(false)} />
       )}
 
-      {/* Conteúdo */}
-      <main className="flex-1 pb-20 lg:pb-6">
+      {/* Conteúdo -- precisa ser a própria área que rola (min-h-0 +
+          overflow-y-auto), em vez da página/documento inteiro rolar. Sem
+          isso, no topo da página o Safari do iPhone prioriza o elástico/
+          pull-to-refresh do documento sobre o touch-action: pan-x de
+          elementos roláveis horizontalmente lá dentro (ex.: título de
+          lançamento) -- só os primeiros itens, visíveis sem precisar
+          rolar, ficavam presos nesse conflito. Um container próprio de
+          rolagem não sofre dessa limitação do Safari. */}
+      <main
+        className="min-h-0 flex-1 overflow-y-auto pb-20 lg:pb-6"
+        style={{ overscrollBehaviorY: 'contain', WebkitOverflowScrolling: 'touch' }}
+      >
         <Outlet />
       </main>
 
