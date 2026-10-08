@@ -7,6 +7,7 @@ import database as db
 import ui.theme as T
 from ui.theme import F
 from utils.helpers import INVESTMENT_CATEGORIES, format_currency, apply_app_icon
+from utils.asset_classes import ASSET_CLASSES, ASSET_CLASS_LABELS
 
 
 class InvestmentsTab(ctk.CTkScrollableFrame):
@@ -708,7 +709,7 @@ class _EditInvestmentDialog(ctk.CTkToplevel):
         self._on_success = on_success
         apply_app_icon(self)
         self._build()
-        _center_dialog(self, parent, 400, 270)
+        _center_dialog(self, parent, 400, 340)
         self.lift()
         self.focus()
 
@@ -743,6 +744,21 @@ class _EditInvestmentDialog(ctk.CTkToplevel):
             dropdown_text_color=T.TEXT,
         ).grid(row=3, column=0, sticky="ew")
 
+        ctk.CTkLabel(fields, text="Classe de ativo (alocação-alvo)", font=F(11),
+                     text_color=T.MUTED, anchor="w").grid(
+            row=4, column=0, sticky="w", pady=(10, 2))
+        asset_class_values = ["Não classificado"] + [ASSET_CLASS_LABELS[c] for c in ASSET_CLASSES]
+        self._asset_class_label_to_id = {"Não classificado": None,
+                                          **{ASSET_CLASS_LABELS[c]: c for c in ASSET_CLASSES}}
+        current_label = ASSET_CLASS_LABELS.get(self._inv.get("asset_class"), "Não classificado")
+        self._asset_class_var = ctk.StringVar(value=current_label)
+        ctk.CTkComboBox(
+            fields, values=asset_class_values, variable=self._asset_class_var,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            button_color=T.BORDER_L, dropdown_fg_color=T.CARD2,
+            dropdown_text_color=T.TEXT,
+        ).grid(row=5, column=0, sticky="ew")
+
         self._error_lbl = ctk.CTkLabel(
             self, text="", font=F(11), text_color=T.RED)
         self._error_lbl.grid(row=2, column=0, pady=(6, 0), padx=28, sticky="w")
@@ -767,8 +783,9 @@ class _EditInvestmentDialog(ctk.CTkToplevel):
         if not name:
             self._error_lbl.configure(text="  Informe o nome.")
             return
+        asset_class = self._asset_class_label_to_id[self._asset_class_var.get()]
         try:
-            db.update_investment(self._inv["id"], name, self._cat_var.get())
+            db.update_investment(self._inv["id"], name, self._cat_var.get(), asset_class)
         except Exception as e:
             self._error_lbl.configure(text=f"  Erro: {e}")
             return

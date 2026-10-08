@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { DEFAULT_IMPORT_CUTOFF_DAY } from './format'
 import { suggestAllocations } from './planStrategy'
+import { DEFAULT_TARGET_ALLOCATIONS } from './targetAllocationDefaults'
 import type {
   Month,
   MonthSummary,
@@ -27,6 +28,11 @@ import type {
   Investment,
   InvestmentMovement,
   MovementType,
+  InvestorProfileResult,
+  TargetAllocation,
+  MockPortfolio,
+  MockPortfolioItem,
+  MockPortfolioItemInput,
   Goal,
   GoalInstallment,
   GoalInstallmentInput,
@@ -935,8 +941,18 @@ export async function addInvestmentMovement(
   if (error) throw error
 }
 
-export async function updateInvestment(id: number, name: string, category: string): Promise<void> {
-  const { error } = await supabase.from('investments').update({ name, category }).eq('id', id)
+// assetClass omitido não mexe no valor já salvo (evita apagar a
+// classificação em edições que só mudam nome/categoria); passe null
+// explicitamente para "Não classificado".
+export async function updateInvestment(
+  id: number,
+  name: string,
+  category: string,
+  assetClass?: string | null,
+): Promise<void> {
+  const payload: Record<string, unknown> = { name, category }
+  if (assetClass !== undefined) payload.asset_class = assetClass
+  const { error } = await supabase.from('investments').update(payload).eq('id', id)
   if (error) throw error
 }
 
@@ -963,6 +979,148 @@ export async function archiveInvestment(id: number): Promise<void> {
 
 export async function deleteInvestment(id: number): Promise<void> {
   const { error } = await supabase.rpc('delete_investment', { p_investment_id: id })
+  if (error) throw error
+}
+
+// ── Perfil de Investidor ────────────────────────────────────────────
+// Registra uma nova tentativa (nunca atualiza uma existente -- "perfil
+// atual" é sempre a linha mais recente).
+export async function saveInvestorProfileResult(
+  score: number,
+  profile: string,
+  answers: Record<string, string>,
+): Promise<InvestorProfileResult> {
+  const { data, error } = await supabase
+    .from('investor_profile_results')
+    .insert({ score, profile, answers })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+// Mais recente primeiro -- o perfil atual é history[0] (ou undefined
+// se a lista vier vazia).
+export async function fetchInvestorProfileHistory(): Promise<InvestorProfileResult[]> {
+  const { data, error } = await supabase
+    .from('investor_profile_results')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+// ── Metas de Alocação (editáveis pelo usuário) ──────────────────────
+// Na primeira vez (sem nenhuma linha salva ainda), semeia com os
+// valores-padrão de targetAllocationDefaults.ts e retorna já gravado
+// -- depois disso é sempre o que o usuário tiver editado.
+export async function fetchTargetAllocations(profile: string): Promise<TargetAllocation[]> {
+  const { data, error } = await supabase
+    .from('investor_target_allocations')
+    .select('*')
+    .eq('profile', profile)
+  if (error) throw error
+  if (data && data.length > 0) return data
+
+  const defaults = DEFAULT_TARGET_ALLOCATIONS[profile] ?? {}
+  const rows = Object.entries(defaults).map(([asset_class, v]) => ({
+    profile,
+    asset_class,
+    target_pct: v.target_pct,
+    tolerance_pct: v.tolerance_pct,
+  }))
+  if (rows.length === 0) return []
+  const { data: inserted, error: insertError } = await supabase
+    .from('investor_target_allocations')
+    .insert(rows)
+    .select()
+  if (insertError) throw insertError
+  return inserted ?? []
+}
+
+export async function saveTargetAllocation(
+  profile: string,
+  assetClass: string,
+  targetPct: number,
+  tolerancePct: number,
+): Promise<void> {
+  const { error } = await supabase.from('investor_target_allocations').upsert(
+    { profile, asset_class: assetClass, target_pct: targetPct, tolerance_pct: tolerancePct },
+    { onConflict: 'user_id,profile,asset_class' },
+  )
+  if (error) throw error
+}
+
+// Apaga as metas customizadas do usuário pro perfil e semeia de novo
+// com os valores-padrão.
+export async function resetTargetAllocations(profile: string): Promise<TargetAllocation[]> {
+  const { error } = await supabase.from('investor_target_allocations').delete().eq('profile', profile)
+  if (error) throw error
+  return fetchTargetAllocations(profile)
+}
+
+// ── Carteiras Fictícias (simulação -- nunca escreve em transactions
+// nem em investment_movements) ──────────────────────────────────────
+export async function createMockPortfolioBulk(
+  name: string,
+  source: string,
+  valueMode: string,
+  items: MockPortfolioItemInput[],
+): Promise<number> {
+  const { data, error } = await supabase.rpc('create_mock_portfolio_bulk', {
+    p_name: name,
+    p_source: source,
+    p_value_mode: valueMode,
+    p_items: items,
+  })
+  if (error) throw error
+  return data as number
+}
+
+export async function fetchMockPortfolios(): Promise<MockPortfolio[]> {
+  const { data, error } = await supabase
+    .from('mock_portfolios')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function fetchMockPortfolioItems(mockPortfolioId: number): Promise<MockPortfolioItem[]> {
+  const { data, error } = await supabase
+    .from('mock_portfolio_items')
+    .select('*')
+    .eq('mock_portfolio_id', mockPortfolioId)
+  if (error) throw error
+  return data ?? []
+}
+
+export async function renameMockPortfolio(id: number, name: string): Promise<void> {
+  const { error } = await supabase.from('mock_portfolios').update({ name }).eq('id', id)
+  if (error) throw error
+}
+
+// Cascade apaga os itens (on delete cascade na migração 048).
+export async function deleteMockPortfolio(id: number): Promise<void> {
+  const { error } = await supabase.from('mock_portfolios').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function updateMockPortfolioItem(
+  id: number,
+  assetClass: string,
+  label: string | null,
+  value: number,
+): Promise<void> {
+  const { error } = await supabase
+    .from('mock_portfolio_items')
+    .update({ asset_class: assetClass, label, value })
+    .eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteMockPortfolioItem(id: number): Promise<void> {
+  const { error } = await supabase.from('mock_portfolio_items').delete().eq('id', id)
   if (error) throw error
 }
 

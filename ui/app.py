@@ -10,7 +10,7 @@ import ui.theme as T
 from ui.theme import F
 from ui.sidebar      import Sidebar
 from ui.main_content import MainContent
-from ui.investments  import InvestmentsTab
+from ui.investments_hub import InvestmentsHub
 from utils.helpers   import MONTHS_PT, APP_NAME, APP_VERSION, apply_app_icon
 from utils.plan_strategy import suggest_allocations
 
@@ -24,7 +24,7 @@ class FinanceApp(ctk.CTkFrame):
         self._current_id:          int | None          = None
         self._main_content:        MainContent | None  = None
         self._placeholder:         ctk.CTkFrame | None = None
-        self._investments_content: InvestmentsTab|None = None
+        self._investments_content: InvestmentsHub|None = None
         self._commitments_content                      = None
         self._import_content                           = None
         self._future_commitments_content               = None
@@ -185,7 +185,7 @@ class FinanceApp(ctk.CTkFrame):
         if self._future_commitments_content:
             self._future_commitments_content.grid_remove()
         if self._investments_content is None:
-            self._investments_content = InvestmentsTab(
+            self._investments_content = InvestmentsHub(
                 self, on_change=self._on_investments_change,
             )
         else:

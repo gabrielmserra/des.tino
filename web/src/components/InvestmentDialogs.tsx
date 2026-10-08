@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { INVESTMENT_CATEGORIES } from '../lib/constants'
+import { ASSET_CLASSES, ASSET_CLASS_LABELS, type AssetClass } from '../lib/assetClasses'
 import type { Month } from '../lib/types'
 
 function parseAmount(raw: string): number {
@@ -109,22 +110,28 @@ export function MovementDialog({ mode, investmentName, months, onClose, onConfir
   )
 }
 
-// ── Editar investimento (nome/categoria) ─────────────────────────────
+// ── Editar investimento (nome/categoria/classe de ativo) ─────────────
+const NAO_CLASSIFICADO = '__nao_classificado__'
+
 type EditInvestmentProps = {
   name: string
   category: string
+  assetClass: string | null
   onClose: () => void
-  onConfirm: (name: string, category: string) => void
+  onConfirm: (name: string, category: string, assetClass: string | null) => void
 }
 
-export function EditInvestmentDialog({ name, category, onClose, onConfirm }: EditInvestmentProps) {
+export function EditInvestmentDialog({
+  name, category, assetClass, onClose, onConfirm,
+}: EditInvestmentProps) {
   const [n, setN] = useState(name)
   const [c, setC] = useState(category)
+  const [ac, setAc] = useState(assetClass ?? NAO_CLASSIFICADO)
   const [error, setError] = useState('')
 
   const confirm = () => {
     if (!n.trim()) return setError('Digite um nome.')
-    onConfirm(n.trim(), c)
+    onConfirm(n.trim(), c, ac === NAO_CLASSIFICADO ? null : ac)
   }
 
   return (
@@ -147,6 +154,22 @@ export function EditInvestmentDialog({ name, category, onClose, onConfirm }: Edi
           {INVESTMENT_CATEGORIES.map((cat) => (
             <option key={cat} value={cat}>
               {cat}
+            </option>
+          ))}
+        </select>
+        <label className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>
+          Classe de ativo (alocação-alvo)
+        </label>
+        <select
+          value={ac}
+          onChange={(e) => setAc(e.target.value)}
+          className="rounded-lg border px-3 py-3 text-sm outline-none"
+          style={inputStyle}
+        >
+          <option value={NAO_CLASSIFICADO}>Não classificado</option>
+          {ASSET_CLASSES.map((cls) => (
+            <option key={cls} value={cls}>
+              {ASSET_CLASS_LABELS[cls as AssetClass]}
             </option>
           ))}
         </select>

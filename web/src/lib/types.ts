@@ -236,10 +236,54 @@ export type FixedBillInstance = {
   created_at: string
 }
 
+export type InvestorProfileResult = {
+  id: number
+  score: number
+  profile: string
+  answers: Record<string, string>
+  created_at: string
+}
+
+export type TargetAllocation = {
+  id: number
+  profile: string
+  asset_class: string
+  target_pct: number
+  tolerance_pct: number
+  updated_at: string
+}
+
+export type MockPortfolioSource = 'scratch' | 'copy_real' | 'copy_target' | 'import'
+export type MockPortfolioValueMode = 'absolute' | 'percentage'
+
+export type MockPortfolio = {
+  id: number
+  name: string
+  source: MockPortfolioSource
+  value_mode: MockPortfolioValueMode
+  created_at: string
+}
+
+export type MockPortfolioItem = {
+  id: number
+  mock_portfolio_id: number
+  asset_class: string
+  label: string | null
+  value: number
+  created_at: string
+}
+
+export type MockPortfolioItemInput = {
+  asset_class: string
+  label: string | null
+  value: number
+}
+
 export type Investment = {
   id: number
   name: string
   category: string
+  asset_class: string | null
   archived_at: string | null
   created_at: string
 }

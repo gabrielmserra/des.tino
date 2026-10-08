@@ -6,6 +6,7 @@ Cada usuário vê apenas os próprios dados via Row Level Security (RLS).
 from typing import Optional, List, Dict
 from datetime import date, time
 from config import get_client
+from utils.target_allocation_defaults import DEFAULT_TARGET_ALLOCATIONS
 
 # Cache em memória: evita re-buscar transações do mesmo mês a cada ação
 _tx_cache: Dict[int, List[dict]] = {}
@@ -1017,10 +1018,18 @@ def add_movement(
     _inv_net_cache.pop(month_id, None)
 
 
-def update_investment(investment_id: int, name: str, category: str) -> None:
-    get_client().table("investments").update({
-        "name": name, "category": category,
-    }).eq("id", investment_id).execute()
+_ASSET_CLASS_UNSET = object()
+
+
+def update_investment(investment_id: int, name: str, category: str,
+                       asset_class=_ASSET_CLASS_UNSET) -> None:
+    """asset_class omitido não mexe no valor já salvo (evita apagar a
+    classificação em edições que só mudam nome/categoria); passe None
+    explicitamente para "Não classificado"."""
+    payload = {"name": name, "category": category}
+    if asset_class is not _ASSET_CLASS_UNSET:
+        payload["asset_class"] = asset_class
+    get_client().table("investments").update(payload).eq("id", investment_id).execute()
 
 
 def update_movement(movement_id: int, amount: float, note: str) -> None:
@@ -1061,6 +1070,127 @@ def get_all_investment_movements() -> List[dict]:
         .order("created_at", desc=True) \
         .execute()
     return resp.data or []
+
+
+# ---------------------------------------------------------------------------
+# Perfil de Investidor
+# ---------------------------------------------------------------------------
+
+def save_investor_profile_result(score: float, profile: str, answers: dict) -> dict:
+    """Registra uma nova tentativa do questionário (nunca atualiza uma
+    existente -- "perfil atual" é sempre a linha mais recente)."""
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    resp = client.table("investor_profile_results").insert({
+        "user_id": user_id, "score": score, "profile": profile, "answers": answers,
+    }).execute()
+    return resp.data[0] if resp.data else None
+
+
+def get_investor_profile_history() -> List[dict]:
+    """Todas as tentativas do usuário, mais recente primeiro. O perfil
+    atual é history[0] (ou None se a lista vier vazia)."""
+    resp = get_client().table("investor_profile_results") \
+        .select("*") \
+        .order("created_at", desc=True) \
+        .execute()
+    return resp.data or []
+
+
+# ---------------------------------------------------------------------------
+# Metas de Alocação (editáveis pelo usuário)
+# ---------------------------------------------------------------------------
+
+def get_target_allocations(profile: str) -> List[dict]:
+    """Metas de alocação do usuário pro perfil. Na primeira vez (sem
+    nenhuma linha salva ainda), semeia com os valores-padrão de
+    utils/target_allocation_defaults.py e retorna já gravado -- depois
+    disso é sempre o que o usuário tiver editado."""
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    resp = client.table("investor_target_allocations").select("*") \
+        .eq("profile", profile).execute()
+    if resp.data:
+        return resp.data
+
+    defaults = DEFAULT_TARGET_ALLOCATIONS.get(profile, {})
+    if not defaults:
+        return []
+    rows = [{
+        "user_id": user_id, "profile": profile, "asset_class": cls,
+        "target_pct": vals["target_pct"], "tolerance_pct": vals["tolerance_pct"],
+    } for cls, vals in defaults.items()]
+    insert_resp = client.table("investor_target_allocations").insert(rows).execute()
+    return insert_resp.data or []
+
+
+def save_target_allocation(profile: str, asset_class: str,
+                            target_pct: float, tolerance_pct: float) -> None:
+    client  = get_client()
+    user_id = client.auth.get_user().user.id
+    client.table("investor_target_allocations").upsert({
+        "user_id": user_id, "profile": profile, "asset_class": asset_class,
+        "target_pct": target_pct, "tolerance_pct": tolerance_pct,
+    }, on_conflict="user_id,profile,asset_class").execute()
+
+
+def reset_target_allocations(profile: str) -> List[dict]:
+    """Apaga as metas customizadas do usuário pro perfil e semeia de
+    novo com os valores-padrão."""
+    get_client().table("investor_target_allocations").delete() \
+        .eq("profile", profile).execute()
+    return get_target_allocations(profile)
+
+
+# ---------------------------------------------------------------------------
+# Carteiras Fictícias (simulação -- nunca escreve em transactions nem
+# em investment_movements)
+# ---------------------------------------------------------------------------
+
+def create_mock_portfolio_bulk(name: str, source: str, value_mode: str,
+                                items: List[dict]) -> int:
+    """Cria a carteira fictícia + todos os itens numa única operação.
+    items: [{"asset_class": str, "label": str|None, "value": float}]."""
+    resp = get_client().rpc("create_mock_portfolio_bulk", {
+        "p_name": name, "p_source": source, "p_value_mode": value_mode,
+        "p_items": items,
+    }).execute()
+    return resp.data
+
+
+def get_mock_portfolios() -> List[dict]:
+    resp = get_client().table("mock_portfolios").select("*") \
+        .order("created_at", desc=True).execute()
+    return resp.data or []
+
+
+def get_mock_portfolio_items(mock_portfolio_id: int) -> List[dict]:
+    resp = get_client().table("mock_portfolio_items").select("*") \
+        .eq("mock_portfolio_id", mock_portfolio_id).execute()
+    return resp.data or []
+
+
+def rename_mock_portfolio(mock_portfolio_id: int, name: str) -> None:
+    get_client().table("mock_portfolios").update({"name": name}) \
+        .eq("id", mock_portfolio_id).execute()
+
+
+def delete_mock_portfolio(mock_portfolio_id: int) -> None:
+    """Cascade apaga os itens (on delete cascade na migração 048)."""
+    get_client().table("mock_portfolios").delete() \
+        .eq("id", mock_portfolio_id).execute()
+
+
+def update_mock_portfolio_item(item_id: int, asset_class: str,
+                                label: str, value: float) -> None:
+    get_client().table("mock_portfolio_items").update({
+        "asset_class": asset_class, "label": label, "value": value,
+    }).eq("id", item_id).execute()
+
+
+def delete_mock_portfolio_item(item_id: int) -> None:
+    get_client().table("mock_portfolio_items").delete() \
+        .eq("id", item_id).execute()
 
 
 # ---------------------------------------------------------------------------

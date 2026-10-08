@@ -268,6 +268,88 @@ Três tipos de meta, lado a lado:
   não depende da categoria escolhida — trocar a categoria de um
   lançamento depois não muda esse comportamento.
 
+### 7.1 Perfil de Investidor, Alocação e Carteiras Fictícias
+
+A aba Investimentos ganhou sub-abas (`?tab=` no site, igual
+Compromissos; abas internas no desktop): **Carteira** (a tela acima,
+sem mudanças) · **Perfil de Investidor** · **Alocação** · **Carteiras
+Fictícias**. As três novas sub-abas trazem um aviso permanente e
+discreto: *"Conteúdo educativo e informativo, não é recomendação de
+investimento e não substitui a orientação de um profissional
+certificado."* — o tom em todo texto de diagnóstico é sempre apontar
+desbalanceamento em relação à meta, nunca recomendar comprar/vender um
+produto específico.
+
+- **[Ambas] Perfil de Investidor** — questionário de 10 perguntas de
+  múltipla escolha (horizonte, reação a queda de 20%, objetivo,
+  experiência prévia, estabilidade de renda, reserva de emergência, %
+  do patrimônio investido, reação a alta de 30%, conhecimento do
+  mercado, diversificação atual). Cada resposta vale pontos
+  (perguntas de horizonte e tolerância a perda pesam mais); a
+  pontuação normalizada (0-100) mapeia pra **Conservador** (até 33),
+  **Moderado** (até 66) ou **Arrojado** (acima de 66). Perguntas,
+  pesos e faixas de corte ficam num único par de arquivos
+  (`utils/investor_profile_quiz.py` /
+  `web/src/lib/investorProfileQuiz.ts`). Cada tentativa é salva como
+  uma linha nova em `investor_profile_results` (nunca sobrescreve) —
+  o perfil atual é sempre a tentativa mais recente; histórico completo
+  fica visível na tela, com opção de refazer o teste a qualquer
+  momento (confirmação "Tem certeza?" antes de refazer).
+- **[Ambas] Classe de ativo por investimento** — campo opcional
+  `investments.asset_class` (7 classes: Reserva/Liquidez, Renda Fixa
+  Pós-fixada, Renda Fixa Inflação/Prefixada, Ações, FIIs,
+  Internacional, Criptomoedas), editável no diálogo de editar
+  investimento, separado da `category` existente (que continua
+  alimentando o dropdown de categoria e a heurística de concentração
+  do Guru Financeiro, sem nenhuma mudança). Investimentos sem classe
+  definida aparecem como "Não classificado" na comparação. Migração
+  046 faz um backfill automático por categoria (ex.: "Tesouro Direto"
+  vira "Renda Fixa Pós-fixada"), sempre sobrescrevível depois.
+- **[Ambas] Metas de alocação por perfil (editáveis)** — % alvo e
+  faixa de tolerância por classe de ativo, por perfil
+  (`investor_target_allocations`, uma linha por usuário × perfil ×
+  classe). Semeada sob demanda: a primeira vez que o usuário abre
+  "Editar metas" pra um perfil, grava os valores-padrão de
+  `utils/target_allocation_defaults.py` /
+  `targetAllocationDefaults.ts` — dali em diante é 100% editável pelo
+  próprio usuário (inclui "Restaurar padrão").
+- **[Ambas] Comparação carteira real × alvo** — tabela por classe
+  (valor atual, % atual, % alvo, desvio, status dentro/acima/abaixo da
+  faixa de tolerância) + diagnóstico em texto no mesmo estilo do Guru
+  Financeiro (ícone, título, corpo com números concretos, até 5 dicas,
+  alertas primeiro): desvio fora da faixa por classe, concentração
+  (um único investimento acima de 25% do total) e reserva de
+  emergência (classe "Reserva/Liquidez" comparada a 3-6 meses do gasto
+  do mês mais recente). Sugestão de quanto mover entre classes é só
+  informativa — nunca cria nenhum lançamento nem movimentação.
+  Cálculo centralizado em `utils/allocation_strategy.py` /
+  `web/src/lib/allocationStrategy.ts` (função pura, mesmo resultado
+  nas duas plataformas).
+- **[Ambas] Carteiras fictícias** — simulações sem nenhum efeito em
+  saldo, lançamentos ou totais reais (`mock_portfolios` +
+  `mock_portfolio_items`, nunca escrevem em `transactions` nem
+  `investment_movements`). Três formas de criar: do zero (escolhe
+  classe + valor de cada item), copiando a carteira real atual, ou
+  partindo da meta do perfil (informa um valor total hipotético, os
+  itens são pré-preenchidos proporcionalmente à meta). Tela de
+  comparação lado a lado (Real × Fictícia × Alvo) reaproveita o mesmo
+  módulo de cálculo da comparação acima.
+- **[Ambas] Exportar/importar carteira** — exporta a carteira atual ou
+  uma fictícia pra um arquivo `.json` versionado (`schema_version`),
+  com valores em R$ ou só percentuais por classe (pra compartilhar sem
+  revelar o patrimônio) — nunca inclui identificador pessoal
+  (user_id/e-mail/nome). Importar um arquivo **sempre cria uma
+  carteira fictícia nova**, nunca sobrescreve dado real nem uma
+  carteira existente, com prévia antes de confirmar. Validação
+  estrita (rejeita o arquivo inteiro em qualquer problema: versão não
+  suportada, tipo errado, valor negativo, soma de percentuais fora de
+  100%±1%, mais de 200 itens, arquivo maior que 1 MB) — diferente do
+  import de extrato bancário, que tolera linha malformada; aqui o
+  arquivo é pequeno e autoral, então importação parcial seria
+  enganosa. Campos desconhecidos no JSON são ignorados, não rejeitam.
+  Lógica de validação/montagem do arquivo centralizada em
+  `utils/portfolio_io.py` / `web/src/lib/portfolioIo.ts`.
+
 ## 8. Resumo dos Compromissos (Compromissos Futuros)
 
 - **[Ambas]** Tela dedicada que soma, mês a mês (próximos 6 meses a partir
@@ -631,12 +713,40 @@ verdade — mantém os gastos já vinculados intactos.
 automática aplicada. `id, benefit_id, user_id, renewed_at, amount,
 balance_before, balance_after, created_at`.
 
-**`investments`** — `id, user_id, name, category, archived_at,
-created_at`.
+**`investments`** — `id, user_id, name, category, asset_class
+(migração 046, nullable), archived_at, created_at`. `asset_class` é
+separado de `category` de propósito (ver 7.1) — editável por
+investimento, não tem dropdown fixo com check constraint no banco.
 
 **`investment_movements`** — cada aporte/saque. `id, investment_id,
 user_id, month_id, movement_type ('aporte_inicial'|'aporte'|'saque'),
 amount, note, created_at`.
+
+**`investor_profile_results`** (migração 045) — histórico de
+tentativas do questionário de perfil, só-de-inserção (nunca
+update/delete). `id, user_id, score, profile
+('Conservador'|'Moderado'|'Arrojado'), answers (jsonb,
+{question_id: option_value}), created_at`. "Perfil atual" = linha mais
+recente por `user_id`, sem tabela separada.
+
+**`investor_target_allocations`** (migração 047) — meta de alocação
+editável pelo usuário, por perfil e classe de ativo. `id, user_id,
+profile, asset_class, target_pct, tolerance_pct, updated_at`,
+`unique(user_id, profile, asset_class)`. Semeada sob demanda com os
+valores-padrão de `utils/target_allocation_defaults.py` na primeira
+leitura sem linhas pra aquele perfil (ver `get_target_allocations`).
+
+**`mock_portfolios`** (migração 048) — carteira fictícia (simulação).
+`id, user_id, name, source
+('scratch'|'copy_real'|'copy_target'|'import'), value_mode
+('absolute'|'percentage'), created_at`. Nunca vinculada a
+`transactions`/`investment_movements`.
+
+**`mock_portfolio_items`** (migração 048) — itens de uma carteira
+fictícia. `id, mock_portfolio_id (→ mock_portfolios, on delete
+cascade), user_id, asset_class, label, value, created_at`. `value` é
+R$ no modo `absolute`, fração 0-1 no modo `percentage` (conforme
+`mock_portfolios.value_mode`).
 
 **`goals`** — `id, user_id, name, target_amount, saved_amount,
 created_at, monthly_amount, schedule_type`. `target_amount` é opcional
@@ -789,6 +899,7 @@ recente) é listada.
 |---|---|---|
 | `create_investment` | name, category, month_id, amount, note? | Cria o investimento + registra o aporte inicial. |
 | `delete_investment` | investment_id | Exclui o investimento e todas as suas movimentações. |
+| `create_mock_portfolio_bulk` | name, source, value_mode, items (jsonb) | Cria a carteira fictícia + todos os itens numa única operação (igual `create_investment`). |
 
 **Compromissos futuros**
 | Função | Parâmetros | O que faz |
@@ -862,7 +973,13 @@ exportação (`export_month_xlsx`), config do dashboard e dia de corte.
 | `credit_cards.py` | `CardPresetsBar`, `_PayBillDialog`, `_CardInvoiceHistoryDialog`, `_CardDialog`, `_NewCardPurchaseDialog` | Gestão de cartão de crédito: CRUD, pagar fatura, histórico de faturas, compra parcelada. |
 | `debts.py` | `DebtsTab` + diálogos | Dívidas: cadastro com parcelas, pagar/desfazer, reagendar. |
 | `goals.py` | `GoalsTab` + diálogos | Metas: simples, recorrente e cronograma personalizado. |
-| `investments.py` | `InvestmentsTab` + diálogos | Investimentos: criar, aportar/sacar, editar/excluir movimentação. |
+| `investments_hub.py` | `InvestmentsHub` | Investimentos: sub-abas Carteira/Perfil de Investidor/Alocação/Carteiras Fictícias (mesma estrutura de `commitments.py`). |
+| `investments.py` | `InvestmentsTab` + diálogos | Sub-aba Carteira: criar, aportar/sacar, editar/excluir movimentação. |
+| `investor_profile.py` | `InvestorProfileTab` | Sub-aba Perfil de Investidor: questionário, resultado, histórico. |
+| `investment_allocation.py` | `InvestmentAllocationTab`, `_EditTargetsDialog` | Sub-aba Alocação: comparação carteira real × alvo, diagnóstico, editar metas. |
+| `mock_portfolios.py` | `MockPortfoliosTab` + diálogos | Sub-aba Carteiras Fictícias: CRUD, 3 formas de criar, comparação lado a lado. |
+| `portfolio_export_ui.py` | `export_portfolio`, `import_portfolio` | UI compartilhada de exportar/importar carteira em JSON (usada por Alocação e Carteiras Fictícias). |
+| `disclaimer.py` | `make_disclaimer` | Aviso legal reutilizável nas telas de perfil/alocação/carteiras fictícias. |
 | `planning.py` | `PlanningTab`, `_IncomeItemsDialog` | Planejamento mensal: sugestão de alocação por categoria, entradas de renda. |
 | `import_statement.py` | `_Candidate`, `ImportTab` | Importação de extrato/fatura: seleção de arquivo, revisão/dedupe, confirmação. |
 | `fixed_bills.py` | `FixedBillsTab` + diálogos | Contas fixas: checklist de vencimento, nunca lança gasto. |
@@ -931,7 +1048,7 @@ enquanto a aba estava aberta). Rotas antigas (`/beneficios`, `/dividas`,
 | `/cartoes` | `Cards` |
 | `/planejamento` | `Planning` |
 | `/compromissos` (`?tab=dividas\|metas\|contas-fixas`) | `Commitments` |
-| `/investimentos` | `Investments` |
+| `/investimentos` (`?tab=carteira\|perfil\|alocacao\|ficticias`) | `Investments` |
 | `/compromissos-futuros` | `FutureCommitments` |
 | `/importar` | `Import` (lazy) |
 | `/mais` | `More` |
@@ -940,9 +1057,12 @@ enquanto a aba estava aberta). Rotas antigas (`/beneficios`, `/dividas`,
 **`src/pages/`**: um componente por tela (`Dashboard.tsx`,
 `Transactions.tsx`, `Cards.tsx`, `Commitments.tsx` com `Debts.tsx`/
 `Goals.tsx`/`FixedBills.tsx` como abas, `Planning.tsx`,
-`Investments.tsx`, `FutureCommitments.tsx`, `Import.tsx`, `More.tsx`,
-`Settings.tsx`, mais as telas de autenticação `Login.tsx`/`SignUp.tsx`/
-`ForgotPassword.tsx`/`ResetPassword.tsx`).
+`Investments.tsx` com `InvestmentsList.tsx`/`InvestorProfile.tsx`/
+`AllocationComparison.tsx`/`MockPortfolios.tsx` como abas (mesmo
+mecanismo `?tab=` de `Commitments.tsx`), `FutureCommitments.tsx`,
+`Import.tsx`, `More.tsx`, `Settings.tsx`, mais as telas de
+autenticação `Login.tsx`/`SignUp.tsx`/`ForgotPassword.tsx`/
+`ResetPassword.tsx`).
 
 **`src/components/`** — principais: `Layout.tsx` (shell: sidebar/nav
 inferior, seletor de mês, tema, botão flutuante de novo lançamento,
@@ -951,7 +1071,9 @@ roda `useRenewalCheck()`/`useCardInvoicesSettle()` uma vez por sessão),
 `CardPurchaseForm.tsx`/`CardInvoiceHistory.tsx`/`CardRiskBanner.tsx`
 (cartões), `BenefitForm.tsx`, `DebtForm.tsx`/`EditDebtForm.tsx`/
 `DebtDialogs.tsx`, `GoalDialogs.tsx`/`RecurringGoalForm.tsx`,
-`InvestmentDialogs.tsx`, `IncomeDialog.tsx`, `AddMonthDialog.tsx`/
+`InvestmentDialogs.tsx`, `MockPortfolioDialogs.tsx` (criar/renomear/
+excluir carteira fictícia + export/import), `Disclaimer.tsx`,
+`IncomeDialog.tsx`, `AddMonthDialog.tsx`/
 `EditMonthDialog.tsx`, `ThemeDialog.tsx`, `AddCardPicker.tsx`/
 `EditableCard.tsx` (dashboard arrastável, `@dnd-kit`),
 `Skeleton.tsx`, `ChunkErrorBoundary.tsx`, `Sidebar.tsx`.
@@ -975,6 +1097,12 @@ roda `useRenewalCheck()`/`useCardInvoicesSettle()` uma vez por sessão),
 - `debtStatus.ts`, `investmentBalance.ts`, `planStrategy.ts` — portes
   puros de lógica do desktop (status de parcela, saldo de investimento,
   sugestão de orçamento).
+- `investorProfileQuiz.ts`, `assetClasses.ts`,
+  `targetAllocationDefaults.ts`, `allocationStrategy.ts`,
+  `portfolioIo.ts` — portes puros do perfil de investidor/alocação
+  (ver 7.1): perguntas/pontuação do questionário, taxonomia de classe
+  de ativo, valores-padrão de meta por perfil, comparação carteira ×
+  alvo + diagnóstico, e validação/montagem do JSON de export/import.
 - `exportXlsx.ts`, `reportCharts.ts`, `reportPdf.ts` — exportação
   .xlsx e geração do Relatório PDF (ver seção 12), carregados sob
   demanda.
@@ -1006,6 +1134,11 @@ _build_tips` ↔ `web/src/lib/tips.ts`; `utils/plan_strategy.py` ↔
 `web/src/lib/parsers/base.ts`; `database.py:get_daily_spending` ↔
 `web/src/lib/api.ts:fetchDailySpending` — este último **não** é uma
 RPC: cada plataforma busca todas as `transactions` e agrega os últimos
-N dias no próprio cliente). Mudar uma dessas regras exige lembrar de
+N dias no próprio cliente; `utils/investor_profile_quiz.py` ↔
+`web/src/lib/investorProfileQuiz.ts`; `utils/allocation_strategy.py` ↔
+`web/src/lib/allocationStrategy.ts`; `utils/asset_classes.py` ↔
+`web/src/lib/assetClasses.ts`; `utils/target_allocation_defaults.py` ↔
+`web/src/lib/targetAllocationDefaults.ts`; `utils/portfolio_io.py` ↔
+`web/src/lib/portfolioIo.ts`). Mudar uma dessas regras exige lembrar de
 replicar no par — não há teste automatizado que garanta a sincronia, é
 convenção mantida manualmente.
