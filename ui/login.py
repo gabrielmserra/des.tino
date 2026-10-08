@@ -194,16 +194,22 @@ class LoginFrame(ctk.CTkFrame):
     def _field(self, parent, label_text: str, placeholder: str, secret: bool = False):
         wrap = ctk.CTkFrame(parent, fg_color="transparent")
         ctk.CTkLabel(wrap, text=label_text, font=F(10, "bold"), text_color=T.SUBTLE, anchor="w").pack(fill="x")
+        # Mesmo estilo do login do site: sem caixa fechada, só uma linha
+        # embaixo que acende na cor de destaque ao focar -- fundo
+        # levemente diferente do resto da tela só pra dar a pista de
+        # onde é clicável (pedido do usuário: "pelo menos um contorno").
         entry = ctk.CTkEntry(
             wrap, placeholder_text=placeholder, show="•" if secret else "",
-            fg_color=T.CARD2, border_width=1, border_color=T.BORDER_L, corner_radius=8,
+            fg_color=T.CARD2, border_width=0, corner_radius=6,
             text_color=T.TEXT, placeholder_text_color=T.SUBTLE, font=F(14),
         )
-        entry.pack(fill="x", pady=(8, 0))
+        entry.pack(fill="x", pady=(8, 0), ipady=3)
+        bar = ctk.CTkFrame(wrap, height=2, fg_color=T.BORDER_L, corner_radius=1)
+        bar.pack(fill="x")
         # CTkEntry delega o foco de teclado pro tkinter.Entry interno (_entry) —
         # bind direto na CTkEntry nunca recebe FocusIn/FocusOut.
-        entry._entry.bind("<FocusIn>", lambda _e: entry.configure(border_color=T.GREEN), add="+")
-        entry._entry.bind("<FocusOut>", lambda _e: entry.configure(border_color=T.BORDER_L), add="+")
+        entry._entry.bind("<FocusIn>", lambda _e: bar.configure(fg_color=T.GREEN), add="+")
+        entry._entry.bind("<FocusOut>", lambda _e: bar.configure(fg_color=T.BORDER_L), add="+")
         return wrap, entry
 
     def _divider(self, parent, text: str = "OU") -> None:
