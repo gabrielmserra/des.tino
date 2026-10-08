@@ -219,6 +219,9 @@ class MockPortfoliosTab(ctk.CTkScrollableFrame):
     # Comparação
     # ==================================================================
     def _render_comparison(self, portfolio_id: int) -> None:
+        for w in self.winfo_children():
+            w.destroy()
+
         portfolio = next((p for p in self._portfolios if p["id"] == portfolio_id), None)
         if not portfolio:
             self._selected_id = None
@@ -246,6 +249,8 @@ class MockPortfoliosTab(ctk.CTkScrollableFrame):
 
     def _back_to_list(self) -> None:
         self._selected_id = None
+        for w in self.winfo_children():
+            w.destroy()
         self._render_list()
 
     def _export_current(self) -> None:

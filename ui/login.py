@@ -196,16 +196,14 @@ class LoginFrame(ctk.CTkFrame):
         ctk.CTkLabel(wrap, text=label_text, font=F(10, "bold"), text_color=T.SUBTLE, anchor="w").pack(fill="x")
         entry = ctk.CTkEntry(
             wrap, placeholder_text=placeholder, show="•" if secret else "",
-            fg_color=T.BG, border_width=0, corner_radius=0,
+            fg_color=T.CARD2, border_width=1, border_color=T.BORDER_L, corner_radius=8,
             text_color=T.TEXT, placeholder_text_color=T.SUBTLE, font=F(14),
         )
         entry.pack(fill="x", pady=(8, 0))
-        bar = ctk.CTkFrame(wrap, height=1, fg_color=T.BORDER_L, corner_radius=0)
-        bar.pack(fill="x")
         # CTkEntry delega o foco de teclado pro tkinter.Entry interno (_entry) —
         # bind direto na CTkEntry nunca recebe FocusIn/FocusOut.
-        entry._entry.bind("<FocusIn>", lambda _e: bar.configure(fg_color=T.GREEN), add="+")
-        entry._entry.bind("<FocusOut>", lambda _e: bar.configure(fg_color=T.BORDER_L), add="+")
+        entry._entry.bind("<FocusIn>", lambda _e: entry.configure(border_color=T.GREEN), add="+")
+        entry._entry.bind("<FocusOut>", lambda _e: entry.configure(border_color=T.BORDER_L), add="+")
         return wrap, entry
 
     def _divider(self, parent, text: str = "OU") -> None:
