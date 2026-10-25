@@ -270,9 +270,29 @@ Deno.serve(async (req) => {
 
   const label = isIncome ? "Entrada" : "Saída";
   const prev = expectation ? " (previsto)" : "";
+
+  // 6. "Livre para gastar" depois deste lançamento (migração 053). Só um
+  // complemento da resposta — qualquer falha aqui não afeta o lançamento.
+  let livreMsg = "";
+  try {
+    const { data: lv } = await supabase.rpc("get_livre_para_gastar_as", {
+      p_user_id: userId, p_horizon_days: 45,
+    });
+    if (lv) {
+      const crit = String(lv.dia_critico ?? "").slice(0, 10);
+      const critBr = crit ? `${crit.slice(8, 10)}/${crit.slice(5, 7)}` : "";
+      livreMsg = Number(lv.saldo_minimo) < 0
+        ? `\n⚠ Pelos compromissos, o saldo fica negativo em ${critBr} (${formatBRL(Number(lv.saldo_minimo))}).`
+        : `\nRestam ${formatBRL(Number(lv.limite_dia))} pra hoje e ${formatBRL(Number(lv.livre))} livres `
+          + (crit && crit !== todayInSaoPaulo() ? `até ${critBr}.` : "nos próximos 45 dias.");
+    }
+  } catch {
+    // ignora
+  }
+
   return json({
     ok: true,
-    message: `✅ ${label}${prev}: ${formatBRL(amt.value)} — ${desc} [${category}] em ${monthName}`,
+    message: `✅ ${label}${prev}: ${formatBRL(amt.value)} — ${desc} [${category}] em ${monthName}${livreMsg}`,
     type, amount: amt.value, description: desc, category, month: monthName,
     is_expectation: expectation,
   });

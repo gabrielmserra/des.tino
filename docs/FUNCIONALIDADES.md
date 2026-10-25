@@ -432,7 +432,10 @@ produto específico.
   quando uma entrada real é lançada.
 - **[Ambas]** "+ Adicionar" dentro do dia cria um lançamento previsto
   (`is_expectation=true`) com a data daquele dia — mesmo mecanismo de
-  previsto usado no resto do app.
+  previsto usado no resto do app. Numa saída, a opção **"Despesa
+  dividida — vou receber parte de volta"** cria junto uma entrada
+  prevista "(parte que volta)" com o valor e a data informados (padrão:
+  metade, 7 dias depois), na categoria Receita.
 - **[Ambas]** Dívida ou parcela de meta recorrente sem dia certo
   cadastrado (não é obrigatório) cai no dia 1 do mês como padrão
   visível. Saída já vencida e não paga (de qualquer fonte, de qualquer
@@ -491,6 +494,10 @@ produto específico.
   até serem marcadas como feitas, mesmo sendo só checklist (não mexem no
   saldo) — se o dinheiro já saiu da conta e você não marcou, o card
   desconta duas vezes; marque "Feito" no Calendário.
+- **[Ambas]** **Simulação "E se eu gastar hoje R$ X?"** dentro do card
+  (migração 053): recalcula o mesmo cálculo com uma saída hipotética
+  hoje e responde "Cabe. Sobraria R$ Y livre (R$ Z/dia)" ou "Não cabe: o
+  saldo ficaria negativo em dd/mm". Nada é gravado.
 - **[Ambas]** O alerta de saldo projetado negativo (9.1) continua
   existindo em paralelo.
 
@@ -700,9 +707,15 @@ dívidas) e mostra até 3 cartões, sempre nesta ordem de prioridade:
   texto (ex. de um atalho de voz do celular) e cria um lançamento
   automaticamente, aplicando a mesma lógica de categorização por
   palavra-chave usada na importação de extrato.
-- Requer redeploy manual (via painel do Supabase) sempre que o código da
-  function muda — não é publicado automaticamente pelo pipeline normal do
-  app.
+- **[Web/Automação]** A resposta termina com o "Livre para gastar" já
+  descontando o lançamento recém-feito (migração 053): *"Restam R$ 93,12
+  pra hoje e R$ 2.512,10 livres até 10/11."* — ou um aviso, se pelos
+  compromissos o saldo ficar negativo em algum dia. Usa
+  `get_livre_para_gastar_as` (só a chave de serviço pode chamar). Se essa
+  parte falhar, a resposta sai só com o lançamento.
+- Publicada automaticamente pelo GitHub Actions (`deploy-quick-tx.yml`) a
+  cada push que muda `supabase/functions/quick-tx/` (precisa do secret
+  `SUPABASE_ACCESS_TOKEN` no repositório).
 
 ## 15. Infraestrutura e sincronização
 
@@ -1019,7 +1032,8 @@ recente) é listada.
 |---|---|---|
 | `get_future_commitments` | months (default 6) | Soma, mês a mês, parcelas de cartão previstas + fatura em aberto (rotulada pelo mês em que o ciclo começou) + dívidas em aberto + contas fixas pendentes. |
 | `get_balance_projection` (043) | month_id | Simula dia a dia, de hoje até o fim do mês, o saldo esperado (contas fixas + dívidas + fatura de cartão em aberto + parcelas futuras vs. entradas do Planejamento) — retorna `{day, balance, next_income_day}` do primeiro dia em que cruzaria zero, ou `null` se não é o mês corrente ou não acha nenhum dia problemático. |
-| `get_livre_para_gastar` (051) | horizon_days (default 45) | Saldo acumulado real de hoje simulado dia a dia sobre `get_calendar_events`; retorna `{saldo_atual, livre, limite_dia, saldo_minimo, dia_critico, entradas, saidas, dias, sem_renda}` — livre = menor saldo do período, limite_dia = menor saldo(t)/t. Ver seção 9.3. |
+| `get_livre_para_gastar` (051, redefinida na 053) | horizon_days (default 45), extra_amount?, extra_date? | Saldo acumulado real de hoje simulado dia a dia sobre `get_calendar_events`; retorna `{saldo_atual, livre, limite_dia, saldo_minimo, dia_critico, entradas, saidas, dias, sem_renda}` — livre = menor saldo do período, limite_dia = menor saldo(t)/t. `extra_amount`/`extra_date` simulam uma saída hipotética ("e se?") sem gravar. Ver seção 9.3. |
+| `get_livre_para_gastar_as` (053) | user_id, horizon_days | Mesmo cálculo pra um usuário específico — **só a role `service_role`** pode executar (usada pela Edge Function `quick-tx`, que roda com a chave de serviço); fixa o usuário na transação e chama `get_livre_para_gastar`. |
 | `_last_business_day` (052) | year, month | Último dia útil do mês (sexta se o último dia cair no fim de semana). |
 | `get_calendar_events` (049, redefinida na 050, 051 e 052) | start, end | Visão unificada de tudo que tem data no intervalo — contas fixas, dívidas, metas, fatura de cartão (fechada e em aberto, via `_next_cycle_due_date`), parcelas futuras de cartão e previstos/renda planejada. Saída vencida e não paga aparece em `current_date` (mesma regra da 043); entrada fica na data real. Pura leitura — nenhuma tabela nova; ver seção 9.2. |
 | `_next_cycle_due_date` (049) | closing_day, due_day | Data de vencimento projetada do ciclo de cartão **ainda aberto** (quando ele fechar e vencer) — mesma lógica de `_cycle_due_date`, um ciclo à frente. |
