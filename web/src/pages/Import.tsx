@@ -2,7 +2,11 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { detectAndParse } from '../lib/parsers/registry'
 import type { NormalizedRow } from '../lib/parsers/types'
-import { ensureMonth, importTransactionsBulk, fetchMonths, fetchTransactions, fetchImportCutoffDay, fetchCardsBasic, autoGeneratePlan } from '../lib/api'
+import {
+  ensureMonth, importTransactionsBulk, fetchMonths, fetchTransactions, fetchImportCutoffDay, fetchCardsBasic,
+  autoGeneratePlan, fetchCalendarEvents, markCalendarEventDone, type CalendarEvent,
+} from '../lib/api'
+import { matchPendingToLines } from '../lib/pendingMatch'
 import { formatCurrency, formatDate, MONTHS_PT, billingMonth } from '../lib/format'
 import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants'
 import { descriptionSimilarity } from '../lib/textSimilarity'
@@ -20,6 +24,59 @@ type Candidate = NormalizedRow & {
   // usuário na revisão — usada só pra checagem de duplicata em futuras
   // reimportações (ver findDuplicate), nunca mostrada/editada na UI.
   importRaw: string
+  // Pendência do Calendário que esta saída parece estar pagando (só
+  // sugestão — o usuário confirma em `settle`). Ver lib/pendingMatch.ts.
+  pending: CalendarEvent | null
+  settle: boolean
+}
+
+const PENDING_SOURCE_LABEL: Record<string, string> = {
+  fixed_bill: 'conta fixa',
+  fixed_bill_projected: 'conta fixa',
+  debt: 'dívida',
+  goal: 'meta',
+  card_invoice: 'fatura',
+  card_installment: 'parcela de cartão',
+  expectation: 'previsto',
+}
+
+function isoDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function shiftIso(iso: string, days: number): string {
+  const d = new Date(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10))
+  d.setDate(d.getDate() + days)
+  return isoDate(d)
+}
+
+// Pendências do Calendário na janela do extrato (com folga de 5 dias de
+// cada lado, e até hoje — pendência vencida aparece em hoje). Falha aqui
+// nunca bloqueia a importação: só não sugere nada.
+async function suggestPending(cands: Candidate[]): Promise<void> {
+  const dates = cands.map((c) => c.date).sort()
+  if (dates.length === 0) return
+  const today = isoDate(new Date())
+  const end = shiftIso(dates[dates.length - 1], 5)
+  let events: CalendarEvent[] = []
+  try {
+    events = await fetchCalendarEvents(shiftIso(dates[0], -5), end > today ? end : today)
+  } catch {
+    return
+  }
+  const matches = matchPendingToLines(
+    events,
+    cands.map((c) => ({
+      description: c.description,
+      amount: c.amount,
+      date: c.date,
+      isExpense: c.direction === 'saida' && !c.isCreditCardCharge && !c.dupLabel,
+    })),
+  )
+  matches.forEach((m, i) => {
+    cands[i].pending = m
+    cands[i].settle = m != null
+  })
 }
 
 const DUPLICATE_DESC_RATIO_MIN = 0.6
@@ -127,10 +184,13 @@ export function Import() {
         paymentMethod: r.suggestedPaymentMethod,
         description: r.description,
         importRaw: r.description,
+        pending: null,
+        settle: false,
       })
     }
     // Mais recente primeiro.
     cands.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+    await suggestPending(cands)
     setCandidates(cands)
     if (cands.some((c) => c.isCreditCardCharge) && cardId == null) {
       const cards = cardsQ.data ?? (await fetchCardsBasic())
@@ -190,6 +250,20 @@ export function Import() {
           is_investment_movement: c.isInvestmentLike,
         })),
       )
+      // Baixa as pendências que o usuário confirmou — depois do import, e
+      // uma falha aqui não desfaz os lançamentos já importados.
+      let settleErrors = 0
+      for (const c of selected) {
+        if (!c.settle || !c.pending) continue
+        try {
+          await markCalendarEventDone(c.pending.ref_table, c.pending.ref_id, c.pending.event_date)
+        } catch {
+          settleErrors += 1
+        }
+      }
+      if (settleErrors > 0) {
+        setStatus(`${settleErrors} pendência(s) não puderam ser baixadas — marque "Feito" no Calendário.`)
+      }
       setDoneCount(selected.length)
       setCandidates([])
       setFileName('')
@@ -198,6 +272,13 @@ export function Import() {
         qc.invalidateQueries({ queryKey: ['summary'] }),
         qc.invalidateQueries({ queryKey: ['cats'] }),
         qc.invalidateQueries({ queryKey: ['expensesByMethod'] }),
+        qc.invalidateQueries({ queryKey: ['calendarEvents'] }),
+        qc.invalidateQueries({ queryKey: ['livreParaGastar'] }),
+        qc.invalidateQueries({ queryKey: ['fixedBillInstances'] }),
+        qc.invalidateQueries({ queryKey: ['installments'] }),
+        qc.invalidateQueries({ queryKey: ['goals'] }),
+        qc.invalidateQueries({ queryKey: ['goalInstallments'] }),
+        qc.invalidateQueries({ queryKey: ['cardsOverview'] }),
       ])
     } catch (e) {
       setStatus('Erro ao importar: ' + (e as Error).message)
@@ -326,6 +407,25 @@ export function Import() {
                       {c.dupLabel && ` · ⚠ possível duplicata: ${c.dupLabel}`}
                       {c.isInvestmentLike && ' · 💡 parece ser investimento (aporte/resgate)'}
                     </p>
+                    {c.pending && (
+                      <label
+                        className="mt-1.5 flex items-start gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-semibold"
+                        style={{ background: 'var(--card2)', color: c.include ? 'var(--primary)' : 'var(--muted)' }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={c.settle && c.include}
+                          disabled={!c.include}
+                          onChange={(e) => patch(i, { settle: e.target.checked })}
+                          className="mt-0.5 shrink-0"
+                        />
+                        <span>
+                          Baixar também: {c.pending.label} ({PENDING_SOURCE_LABEL[c.pending.source] ?? 'pendência'},{' '}
+                          {formatCurrency(Number(c.pending.amount))}
+                          {c.pending.status === 'overdue' ? ', vencida' : `, vence ${formatDate(c.pending.event_date)}`})
+                        </span>
+                      </label>
+                    )}
                   </div>
                 </div>
                 <div className="mt-2 flex gap-2 pl-6">
