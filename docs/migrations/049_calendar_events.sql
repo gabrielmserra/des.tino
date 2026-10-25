@@ -15,9 +15,10 @@
 -- get_balance_projection (migration 043: "vencido conta a partir de
 -- hoje"), só generalizada pra qualquer janela, não só o mês corrente.
 -- Isso é o que permite get_livre_para_gastar (próxima migração) reusar
--- esta função sem perder nenhuma pendência vencida na soma. Dívida ou
--- parcela de meta recorrente sem dia certo cadastrado (due_day null)
--- cai no dia 1 do mês como padrão visível.
+-- esta função sem perder nenhuma pendência vencida na soma. Parcela de
+-- dívida (não tem coluna de dia) ou de meta recorrente sem dia certo
+-- cadastrado (goal_installments.due_day null) cai no dia 1 do mês como
+-- padrão visível.
 --
 -- Entrada prevista do planejamento é diferente: se o dia esperado já
 -- passou dentro do mês corrente, ela NÃO entra de novo (mesma exclusão
@@ -80,8 +81,8 @@ as $$
   ),
   debts_raw as (
     select
-      make_date(di.due_year, di.due_month, least(coalesce(di.due_day, 1),
-        extract(day from (make_date(di.due_year, di.due_month, 1) + interval '1 month - 1 day'))::int)) as raw_date,
+      -- debt_installments não tem coluna de dia (só due_year/due_month)
+      make_date(di.due_year, di.due_month, 1) as raw_date,
       di.id as id, d.description as name, di.amount as amount
     from debt_installments di
     join debts d on d.id = di.debt_id
