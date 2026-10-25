@@ -411,6 +411,34 @@ produto específico.
   automaticamente" na seção 5); sem plano no mês, a simulação só
   desconta contas/dívidas/cartão e nunca soma entrada nenhuma.
 
+### 9.2 Calendário financeiro
+
+- **[Ambas]** Tela "Calendário" (desktop: botão na barra lateral; web:
+  `/calendario`) — uma **visão** sobre tudo que já tem data no app, não
+  uma tabela nova de compromissos: contas fixas, parcelas de dívida,
+  parcelas de meta, fatura de cartão (fechada e em aberto, com a data
+  de vencimento projetada pro ciclo que ainda está acumulando), parcelas
+  futuras de compra no cartão e previstos/entradas do Planejamento — tudo
+  via uma única RPC (`get_calendar_events`, migração 049).
+- **[Ambas]** Grade mensal com navegação de mês anterior/seguinte; cada
+  dia mostra o total de entradas/saídas previstas e fica destacado em
+  vermelho quando tem algo vencido. Clicar no dia abre a lista de
+  eventos daquele dia.
+- **[Ambas]** "Marcar como feito" em cada item do dia reaproveita os
+  mesmos RPCs que já existiam antes desta tela (pagar conta fixa, pagar
+  parcela de dívida, aportar parcela de meta, pagar fatura de cartão,
+  confirmar previsto) — nenhum fluxo de pagamento novo. Entrada prevista
+  do Planejamento não tem botão de ação aqui: é só projeção, se resolve
+  quando uma entrada real é lançada.
+- **[Ambas]** "+ Adicionar" dentro do dia cria um lançamento previsto
+  (`is_expectation=true`) com a data daquele dia — mesmo mecanismo de
+  previsto usado no resto do app.
+- **[Ambas]** Dívida ou parcela de meta recorrente sem dia certo
+  cadastrado (não é obrigatório) cai no dia 1 do mês como padrão
+  visível; pendência já vencida de qualquer fonte aparece no início da
+  janela que está sendo exibida, não na data real já passada (evita que
+  uma conta esquecida "desapareça" do calendário).
+
 ## 10. Dashboard
 
 - **[Ambas]** 18 cards configuráveis, cada usuário escolhe quais quer ver
@@ -906,6 +934,8 @@ recente) é listada.
 |---|---|---|
 | `get_future_commitments` | months (default 6) | Soma, mês a mês, parcelas de cartão previstas + fatura em aberto (rotulada pelo mês em que o ciclo começou) + dívidas em aberto + contas fixas pendentes. |
 | `get_balance_projection` (043) | month_id | Simula dia a dia, de hoje até o fim do mês, o saldo esperado (contas fixas + dívidas + fatura de cartão em aberto + parcelas futuras vs. entradas do Planejamento) — retorna `{day, balance, next_income_day}` do primeiro dia em que cruzaria zero, ou `null` se não é o mês corrente ou não acha nenhum dia problemático. |
+| `get_calendar_events` (049) | start, end | Visão unificada de tudo que tem data no intervalo — contas fixas, dívidas, metas, fatura de cartão (fechada e em aberto, via `_next_cycle_due_date`), parcelas futuras de cartão e previstos/renda planejada. Pendência vencida aparece no início da janela pedida (`greatest(data_real, start)`), não na data real passada. Pura leitura — nenhuma tabela nova; ver seção 9.2. |
+| `_next_cycle_due_date` (049) | closing_day, due_day | Data de vencimento projetada do ciclo de cartão **ainda aberto** (quando ele fechar e vencer) — mesma lógica de `_cycle_due_date`, um ciclo à frente. |
 
 Grants: toda função é `grant execute ... to authenticated` — nunca
 exposta a `anon`.
@@ -959,7 +989,7 @@ arquivo), metas, cartões de crédito, cartões de débito, investimentos,
 planejamento mensal, dívidas, contas fixas, benefícios VR/VA,
 exportação (`export_month_xlsx`), config do dashboard e dia de corte.
 
-**`ui/` (22 arquivos, ~10.800 linhas)** — uma tela/feature por arquivo:
+**`ui/` (23 arquivos, ~11.100 linhas)** — uma tela/feature por arquivo:
 
 | Arquivo | Classe(s) principal(is) | Tela/feature |
 |---|---|---|
@@ -986,6 +1016,7 @@ exportação (`export_month_xlsx`), config do dashboard e dia de corte.
 | `benefits.py` | `BenefitsBar`, `_BenefitDialog` | Barra de benefícios VR/VA (dentro de Saídas Variáveis) + CRUD. |
 | `commitments.py` | `CommitmentsTab` | Tela unificada Dívidas/Metas/Contas Fixas (abas). |
 | `future_commitments.py` | `FutureCommitmentsTab` | Resumo dos Compromissos (somente leitura). |
+| `calendar.py` | `CalendarTab`, `_DayEventsDialog` | Calendário financeiro: grade mensal sobre `get_calendar_events`, marcar como feito, adicionar previsto no dia. |
 | `dialogs.py` | `_ErrorDialog`, `_InfoDialog`, `ConfirmDialog` | Diálogos modais reutilizáveis (erro/info/confirmação). |
 | `report_dialog.py` | `ReportDialog` | Modal de geração do Relatório PDF por período. |
 | `settings_dialog.py` | `SettingsDialog` | Configurações: dia de corte, atalho pro relatório PDF. |
@@ -1050,6 +1081,7 @@ enquanto a aba estava aberta). Rotas antigas (`/beneficios`, `/dividas`,
 | `/compromissos` (`?tab=dividas\|metas\|contas-fixas`) | `Commitments` |
 | `/investimentos` (`?tab=carteira\|perfil\|alocacao\|ficticias`) | `Investments` |
 | `/compromissos-futuros` | `FutureCommitments` |
+| `/calendario` | `Calendar` |
 | `/importar` | `Import` (lazy) |
 | `/mais` | `More` |
 | `/configuracoes` | `Settings` |
@@ -1060,6 +1092,7 @@ enquanto a aba estava aberta). Rotas antigas (`/beneficios`, `/dividas`,
 `Investments.tsx` com `InvestmentsList.tsx`/`InvestorProfile.tsx`/
 `AllocationComparison.tsx`/`MockPortfolios.tsx` como abas (mesmo
 mecanismo `?tab=` de `Commitments.tsx`), `FutureCommitments.tsx`,
+`Calendar.tsx` (grade mensal sobre `get_calendar_events`),
 `Import.tsx`, `More.tsx`, `Settings.tsx`, mais as telas de
 autenticação `Login.tsx`/`SignUp.tsx`/`ForgotPassword.tsx`/
 `ResetPassword.tsx`).

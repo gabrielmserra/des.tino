@@ -20,6 +20,7 @@ class Sidebar(ctk.CTkFrame):
         on_commitments:  Callable = None,
         on_import:       Callable = None,
         on_future_commitments: Callable = None,
+        on_calendar:     Callable = None,
         on_cutoff_recompute: Callable = None,
         user_email:      str = "",
     ):
@@ -38,6 +39,7 @@ class Sidebar(ctk.CTkFrame):
         self.on_commitments = on_commitments or (lambda: None)
         self.on_import      = on_import or (lambda: None)
         self.on_future_commitments = on_future_commitments or (lambda: None)
+        self.on_calendar     = on_calendar or (lambda: None)
         self.on_cutoff_recompute = on_cutoff_recompute or (lambda: None)
         self.user_email     = user_email
 
@@ -47,6 +49,7 @@ class Sidebar(ctk.CTkFrame):
         self._commitments_btn: ctk.CTkButton|None = None
         self._import_btn: ctk.CTkButton|None = None
         self._future_commitments_btn: ctk.CTkButton|None = None
+        self._calendar_btn: ctk.CTkButton|None = None
 
         self._build()
 
@@ -110,6 +113,15 @@ class Sidebar(ctk.CTkFrame):
             text_color=T.TEXT, font=F(12),
         )
         self._future_commitments_btn.grid(row=3, column=0, sticky="ew", pady=(2, 0))
+
+        self._calendar_btn = ctk.CTkButton(
+            nav, text="  📅  Calendário",
+            command=self.on_calendar,
+            height=36, corner_radius=8, anchor="w",
+            fg_color="transparent", hover_color=T.CARD2,
+            text_color=T.TEXT, font=F(12),
+        )
+        self._calendar_btn.grid(row=4, column=0, sticky="ew", pady=(2, 0))
 
         # ── Lista de períodos ──────────────────────────────────────────
         scroll_wrapper = ctk.CTkFrame(self, fg_color="transparent")
@@ -314,5 +326,17 @@ class Sidebar(ctk.CTkFrame):
                 )
             else:
                 self._future_commitments_btn.configure(
+                    fg_color="transparent", text_color=T.TEXT, border_width=0,
+                )
+
+    def set_calendar_active(self, active: bool) -> None:
+        if self._calendar_btn:
+            if active:
+                self._calendar_btn.configure(
+                    fg_color=T.GOLD_DIM, text_color=T.GOLD,
+                    border_width=1, border_color=T.BORDER_L,
+                )
+            else:
+                self._calendar_btn.configure(
                     fg_color="transparent", text_color=T.TEXT, border_width=0,
                 )

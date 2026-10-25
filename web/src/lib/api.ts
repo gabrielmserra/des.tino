@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { DEFAULT_IMPORT_CUTOFF_DAY } from './format'
+import { DEFAULT_IMPORT_CUTOFF_DAY, MONTHS_PT } from './format'
 import { suggestAllocations } from './planStrategy'
 import { DEFAULT_TARGET_ALLOCATIONS } from './targetAllocationDefaults'
 import type {
@@ -707,6 +707,55 @@ export async function fetchBalanceProjection(monthId: number): Promise<BalancePr
   const { data, error } = await supabase.rpc('get_balance_projection', { p_month_id: monthId })
   if (error) throw error
   return (data ?? null) as BalanceProjection | null
+}
+
+// ── Calendário financeiro (migration 049) ────────────────────────────
+// Visão unificada sobre contas fixas, dívidas, metas, fatura de cartão
+// e previstos/renda planejada — pura leitura, nenhuma tabela nova.
+export type CalendarEvent = {
+  event_date: string
+  source: 'fixed_bill' | 'debt' | 'goal' | 'card_invoice' | 'card_invoice_open'
+    | 'card_installment' | 'expectation' | 'income'
+  ref_table: string
+  ref_id: number
+  label: string
+  amount: number
+  is_income: boolean
+  status: 'pending' | 'overdue'
+}
+
+export async function fetchCalendarEvents(startDate: string, endDate: string): Promise<CalendarEvent[]> {
+  const { data, error } = await supabase.rpc('get_calendar_events', {
+    p_start: startDate, p_end: endDate,
+  })
+  if (error) throw error
+  return (data ?? []) as CalendarEvent[]
+}
+
+// Despacha a ação de "marcar como feito" do Calendário pro RPC/fluxo que
+// já existia antes dessa tela (ref_table vem de fetchCalendarEvents).
+// Entradas previstas do planejamento (plan_income_items) não têm ação
+// aqui — são só projeção, se resolvem quando uma entrada real é lançada.
+export async function markCalendarEventDone(
+  refTable: string, refId: number, eventDate: string,
+): Promise<void> {
+  if (refTable === 'fixed_bill_instances') {
+    await payFixedBillInstance(refId)
+  } else if (refTable === 'debt_installments') {
+    await payInstallment(refId)
+  } else if (refTable === 'goal_installments') {
+    await contributeGoalInstallment(refId)
+  } else if (refTable === 'credit_cards') {
+    const d = new Date(eventDate)
+    const monthId = await ensureMonth(
+      `${MONTHS_PT[d.getMonth()]} ${d.getFullYear()}`, d.getFullYear(), d.getMonth() + 1,
+    )
+    await payCardBill(refId, monthId)
+  } else if (refTable === 'transactions') {
+    const { error } = await supabase.from('transactions')
+      .update({ is_expectation: false }).eq('id', refId)
+    if (error) throw error
+  }
 }
 
 export async function createDebt(

@@ -28,6 +28,7 @@ class FinanceApp(ctk.CTkFrame):
         self._commitments_content                      = None
         self._import_content                           = None
         self._future_commitments_content               = None
+        self._calendar_content                         = None
 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -62,6 +63,7 @@ class FinanceApp(ctk.CTkFrame):
             on_commitments = self._show_commitments,
             on_import      = self._show_import,
             on_future_commitments = self._show_future_commitments,
+            on_calendar    = self._show_calendar,
             on_cutoff_recompute = self._on_cutoff_recomputed,
             user_email     = self.user_email,
         )
@@ -117,6 +119,7 @@ class FinanceApp(ctk.CTkFrame):
         self._sidebar.set_commitments_active(False)
         self._sidebar.set_import_active(False)
         self._sidebar.set_future_commitments_active(False)
+        self._sidebar.set_calendar_active(False)
         if self._investments_content:
             self._investments_content.grid_remove()
         if self._commitments_content:
@@ -125,6 +128,8 @@ class FinanceApp(ctk.CTkFrame):
             self._import_content.grid_remove()
         if self._future_commitments_content:
             self._future_commitments_content.grid_remove()
+        if self._calendar_content:
+            self._calendar_content.grid_remove()
 
         if db.is_cached(month_id):
             self._render_month(month_id, month_name)
@@ -173,6 +178,7 @@ class FinanceApp(ctk.CTkFrame):
         self._sidebar.set_commitments_active(False)
         self._sidebar.set_import_active(False)
         self._sidebar.set_future_commitments_active(False)
+        self._sidebar.set_calendar_active(False)
         self._sidebar.clear_active_month()
         if self._main_content:
             self._main_content.grid_remove()
@@ -184,6 +190,8 @@ class FinanceApp(ctk.CTkFrame):
             self._import_content.grid_remove()
         if self._future_commitments_content:
             self._future_commitments_content.grid_remove()
+        if self._calendar_content:
+            self._calendar_content.grid_remove()
         if self._investments_content is None:
             self._investments_content = InvestmentsHub(
                 self, on_change=self._on_investments_change,
@@ -250,6 +258,7 @@ class FinanceApp(ctk.CTkFrame):
         self._sidebar.set_investments_active(False)
         self._sidebar.set_import_active(False)
         self._sidebar.set_future_commitments_active(False)
+        self._sidebar.set_calendar_active(False)
         self._sidebar.clear_active_month()
         if self._main_content:
             self._main_content.grid_remove()
@@ -261,6 +270,8 @@ class FinanceApp(ctk.CTkFrame):
             self._import_content.grid_remove()
         if self._future_commitments_content:
             self._future_commitments_content.grid_remove()
+        if self._calendar_content:
+            self._calendar_content.grid_remove()
         if self._commitments_content is None:
             self._commitments_content = CommitmentsTab(
                 self, on_change=self._on_investments_change,
@@ -276,6 +287,7 @@ class FinanceApp(ctk.CTkFrame):
         self._sidebar.set_investments_active(False)
         self._sidebar.set_commitments_active(False)
         self._sidebar.set_future_commitments_active(False)
+        self._sidebar.set_calendar_active(False)
         self._sidebar.clear_active_month()
         if self._main_content:
             self._main_content.grid_remove()
@@ -287,6 +299,8 @@ class FinanceApp(ctk.CTkFrame):
             self._commitments_content.grid_remove()
         if self._future_commitments_content:
             self._future_commitments_content.grid_remove()
+        if self._calendar_content:
+            self._calendar_content.grid_remove()
         if self._import_content is None:
             self._import_content = ImportTab(
                 self, on_change=self._on_investments_change,
@@ -304,6 +318,7 @@ class FinanceApp(ctk.CTkFrame):
         self._sidebar.set_investments_active(False)
         self._sidebar.set_commitments_active(False)
         self._sidebar.set_import_active(False)
+        self._sidebar.set_calendar_active(False)
         self._sidebar.clear_active_month()
         if self._main_content:
             self._main_content.grid_remove()
@@ -315,6 +330,8 @@ class FinanceApp(ctk.CTkFrame):
             self._commitments_content.grid_remove()
         if self._import_content:
             self._import_content.grid_remove()
+        if self._calendar_content:
+            self._calendar_content.grid_remove()
         if self._future_commitments_content is None:
             self._future_commitments_content = FutureCommitmentsTab(
                 self, on_change=self._on_investments_change,
@@ -322,6 +339,35 @@ class FinanceApp(ctk.CTkFrame):
         else:
             self._future_commitments_content.refresh()
         self._future_commitments_content.grid(row=0, column=1, sticky="nsew")
+
+    # ------------------------------------------------------------------
+    def _show_calendar(self) -> None:
+        from ui.calendar import CalendarTab
+        self._sidebar.set_calendar_active(True)
+        self._sidebar.set_investments_active(False)
+        self._sidebar.set_commitments_active(False)
+        self._sidebar.set_import_active(False)
+        self._sidebar.set_future_commitments_active(False)
+        self._sidebar.clear_active_month()
+        if self._main_content:
+            self._main_content.grid_remove()
+        if self._placeholder:
+            self._placeholder.grid_remove()
+        if self._investments_content:
+            self._investments_content.grid_remove()
+        if self._commitments_content:
+            self._commitments_content.grid_remove()
+        if self._import_content:
+            self._import_content.grid_remove()
+        if self._future_commitments_content:
+            self._future_commitments_content.grid_remove()
+        if self._calendar_content is None:
+            self._calendar_content = CalendarTab(
+                self, on_change=self._on_investments_change,
+            )
+        else:
+            self._calendar_content.refresh()
+        self._calendar_content.grid(row=0, column=1, sticky="nsew")
 
     # ------------------------------------------------------------------
     def _add_month(self) -> None:

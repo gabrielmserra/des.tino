@@ -17,6 +17,7 @@ import { Planning } from './pages/Planning'
 import { Commitments } from './pages/Commitments'
 import { Investments } from './pages/Investments'
 import { FutureCommitments } from './pages/FutureCommitments'
+import { Calendar } from './pages/Calendar'
 import { More } from './pages/More'
 import { Settings } from './pages/Settings'
 
@@ -72,6 +73,7 @@ export default function App() {
             <Route path="/contas-fixas" element={<Navigate to="/compromissos?tab=contas-fixas" replace />} />
             <Route path="/investimentos" element={<Investments />} />
             <Route path="/compromissos-futuros" element={<FutureCommitments />} />
+            <Route path="/calendario" element={<Calendar />} />
             <Route
               path="/importar"
               element={

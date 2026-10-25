@@ -1766,6 +1766,42 @@ def get_balance_projection(month_id: int) -> Optional[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Calendário financeiro (migration 049) — visão unificada sobre contas
+# fixas, dívidas, metas, fatura de cartão e previstos/renda planejada.
+# ---------------------------------------------------------------------------
+
+def get_calendar_events(start_date: date, end_date: date) -> List[dict]:
+    """Todos os eventos com data dentro de [start_date, end_date] — contas
+    fixas, dívidas, metas, fatura de cartão (fechada e em aberto),
+    parcelas futuras de cartão e previstos/renda planejada. Pura leitura
+    (migration 049, get_calendar_events) — nenhuma tabela nova."""
+    resp = get_client().rpc("get_calendar_events", {
+        "p_start": start_date.isoformat(), "p_end": end_date.isoformat(),
+    }).execute()
+    return resp.data or []
+
+
+def mark_calendar_event_done(ref_table: str, ref_id: int, event_date: date) -> None:
+    """Despacha a ação de "marcar como feito" do Calendário pro RPC/fluxo
+    que já existia antes dessa tela (ref_table vem de get_calendar_events).
+    Entradas previstas do planejamento (plan_income_items) não têm ação
+    aqui — são só projeção, se resolvem quando uma entrada real é lançada."""
+    if ref_table == "fixed_bill_instances":
+        pay_fixed_bill_instance(ref_id)
+    elif ref_table == "debt_installments":
+        pay_installment({"id": ref_id})
+    elif ref_table == "goal_installments":
+        get_client().rpc("contribute_goal_installment", {"p_inst_id": ref_id}).execute()
+    elif ref_table == "credit_cards":
+        month = _ensure_month(event_date.year, event_date.month)
+        pay_card_bill(ref_id, month["id"])
+    elif ref_table == "transactions":
+        month = _ensure_month(event_date.year, event_date.month)
+        get_client().table("transactions").update({"is_expectation": False}).eq("id", ref_id).execute()
+        _invalidate(month["id"])
+
+
+# ---------------------------------------------------------------------------
 # Benefícios (VR / VA)
 # ---------------------------------------------------------------------------
 
