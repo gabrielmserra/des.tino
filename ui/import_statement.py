@@ -30,6 +30,10 @@ class _Candidate:
         self.month_id:    Optional[int] = None
         self.month_name:  str = ""
         self.dup_label:   str = ""
+        # Pendência do Calendário que esta saída parece estar pagando (só
+        # sugestão — o usuário confirma em settle_var). Ver utils/pending_match.py.
+        self.pending:     Optional[dict] = None
+        self.settle_var:  Optional[ctk.BooleanVar] = None
 
     @property
     def is_credit_card_charge(self) -> bool:
@@ -233,6 +237,7 @@ class ImportTab(ctk.CTkFrame):
 
         # Mais recente primeiro.
         self._candidates.sort(key=lambda c: c.row.date, reverse=True)
+        _suggest_pending(self._candidates)
 
         self._render_candidates()
 
@@ -279,6 +284,19 @@ class ImportTab(ctk.CTkFrame):
         ctk.CTkLabel(
             row, text="  •  ".join(info_bits), font=F(11), text_color=info_color, anchor="w",
         ).grid(row=1, column=1, sticky="ew", padx=(0, 8), pady=(0, 8))
+
+        if cand.pending:
+            p = cand.pending
+            when = ("vencida" if p["status"] == "overdue"
+                    else f"vence {format_date_br(date.fromisoformat(str(p['event_date'])[:10]))}")
+            kind = _PENDING_SOURCE_LABEL.get(p["source"], "pendência")
+            cand.settle_var = ctk.BooleanVar(value=True)
+            ctk.CTkCheckBox(
+                row, variable=cand.settle_var, font=F(11, "bold"), text_color=T.GREEN,
+                text=f"Baixar também: {p['label']} ({kind}, "
+                     f"{format_currency(float(p['amount']))}, {when})",
+                checkbox_width=16, checkbox_height=16,
+            ).grid(row=2, column=1, sticky="w", padx=(0, 8), pady=(0, 8))
 
         if r.direction == "entrada" and not r.is_investment_like:
             default_cat = "Receita"
@@ -351,11 +369,26 @@ class ImportTab(ctk.CTkFrame):
                 "is_investment_movement": c.row.is_investment_like,
             })
 
+        to_settle = [c.pending for c in selected
+                     if c.pending and c.settle_var is not None and c.settle_var.get()]
+
         self._confirm_btn.configure(state="disabled", text="Importando…")
 
         def _work():
             try:
                 db.import_transactions_bulk(rows_payload)
+                # Baixa as pendências confirmadas — depois do import, e uma
+                # falha aqui não desfaz os lançamentos já importados.
+                errors = 0
+                for p in to_settle:
+                    try:
+                        db.mark_calendar_event_done(
+                            p["ref_table"], p["ref_id"], date.fromisoformat(str(p["event_date"])[:10]))
+                    except Exception:
+                        errors += 1
+                if errors:
+                    self.after(0, lambda: self._show_error(
+                        f"{errors} pendência(s) não puderam ser baixadas — marque \"Feito\" no Calendário."))
                 self.after(0, self._on_import_done)
             except Exception as e:
                 msg = str(e)[:200]
@@ -374,6 +407,42 @@ class ImportTab(ctk.CTkFrame):
         self._file_lbl.configure(text="Nenhum arquivo selecionado.")
         if self.on_change:
             self.on_change()
+
+
+_PENDING_SOURCE_LABEL = {
+    "fixed_bill": "conta fixa",
+    "fixed_bill_projected": "conta fixa",
+    "debt": "dívida",
+    "goal": "meta",
+    "card_invoice": "fatura",
+    "card_installment": "parcela de cartão",
+    "expectation": "previsto",
+}
+
+
+def _suggest_pending(cands: List[_Candidate]) -> None:
+    """Pendências do Calendário na janela do extrato (com folga de 5 dias
+    de cada lado, e até hoje — pendência vencida aparece em hoje). Falha
+    aqui nunca bloqueia a importação: só não sugere nada."""
+    from datetime import timedelta
+    from utils.pending_match import match_pending_to_lines
+    if not cands:
+        return
+    dates = sorted(c.row.date for c in cands)
+    end = max(dates[-1] + timedelta(days=5), date.today())
+    try:
+        events = db.get_calendar_events(dates[0] - timedelta(days=5), end)
+    except Exception:
+        return
+    matches = match_pending_to_lines(events, [{
+        "description": c.row.description,
+        "amount":      c.row.amount,
+        "date":        c.row.date,
+        "is_expense":  (c.row.direction == "saida" and not c.is_credit_card_charge
+                        and not c.dup_label),
+    } for c in cands])
+    for c, m in zip(cands, matches):
+        c.pending = m
 
 
 _DUPLICATE_DESC_RATIO_MIN = 0.6

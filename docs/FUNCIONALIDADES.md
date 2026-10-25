@@ -644,6 +644,27 @@ dívidas) e mostra até 3 cartões, sempre nesta ordem de prioridade:
   importação com a data em que o salário cai.
 - **[Ambas]** Detecção automática de aporte/resgate de investimento durante
   a importação.
+- **[Ambas]** **Baixa automática de pendências** (Fase 4 do calendário):
+  cada saída do extrato que parece pagar uma pendência do Calendário
+  (conta fixa — inclusive a projetada —, parcela de dívida, parcela de
+  meta, fatura de cartão fechada ou previsto) ganha, na tela de revisão,
+  um "**Baixar também: …**" já marcado. Ao confirmar a importação, a
+  pendência é marcada como paga/aportada pelo mesmo fluxo do botão
+  "Feito" do Calendário. Nunca baixa sozinho: é só desmarcar. Critério
+  (`utils/pending_match.py` ↔ `web/src/lib/pendingMatch.ts`):
+  - o nome da pendência precisa estar contido na descrição do extrato
+    (trecho contínuo cobrindo ≥70% do nome, sem acento/maiúscula);
+  - valor até 20% diferente (conta de luz varia mês a mês);
+  - pendência ainda não vencida: data do extrato até 5 dias do
+    vencimento; pendência vencida (aparece em "hoje" no Calendário):
+    qualquer data;
+  - só saídas, nunca compra no cartão (que vai pra fatura) nem linha
+    marcada como possível duplicata; cada pendência casa com no máximo
+    uma linha.
+  Nome no extrato muito diferente do cadastrado (ex.: "Claude Pro" ×
+  "CLAUDE.AI SUBSCRIPTION") não casa — aí a baixa é manual no Calendário.
+  Falha ao buscar/baixar pendências nunca bloqueia nem desfaz a
+  importação.
 
 ## 12. Exportação
 
@@ -1238,6 +1259,9 @@ N dias no próprio cliente; `utils/investor_profile_quiz.py` ↔
 `web/src/lib/allocationStrategy.ts`; `utils/asset_classes.py` ↔
 `web/src/lib/assetClasses.ts`; `utils/target_allocation_defaults.py` ↔
 `web/src/lib/targetAllocationDefaults.ts`; `utils/portfolio_io.py` ↔
-`web/src/lib/portfolioIo.ts`). Mudar uma dessas regras exige lembrar de
+`web/src/lib/portfolioIo.ts`; `utils/pending_match.py` ↔
+`web/src/lib/pendingMatch.ts` — baixa automática na importação; o
+Calendário/"Livre para gastar" em si é SQL centralizado,
+`get_calendar_events`/`get_livre_para_gastar`). Mudar uma dessas regras exige lembrar de
 replicar no par — não há teste automatizado que garanta a sincronia, é
 convenção mantida manualmente.
