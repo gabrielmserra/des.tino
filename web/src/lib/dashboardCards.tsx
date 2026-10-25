@@ -684,6 +684,75 @@ function SaldoEvolucaoCard() {
 }
 
 // ── Livre para gastar (migration 051) ────────────────────────────────────
+function parseBRL(raw: string): number {
+  const n = parseFloat(raw.trim().replace(/\./g, '').replace(',', '.'))
+  return isNaN(n) ? 0 : Math.max(0, n)
+}
+
+// Simulação "e se eu gastar R$ X hoje?" — não grava nada (migração 053).
+function LivreSimulacao() {
+  const [raw, setRaw] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ text: string; color: string } | null>(null)
+
+  const simulate = async () => {
+    const amount = parseBRL(raw)
+    if (amount <= 0) return setResult(null)
+    setBusy(true)
+    try {
+      const s = await fetchLivreParaGastar(45, amount)
+      if (!s) {
+        setResult({ text: 'Não deu pra simular agora.', color: 'var(--muted)' })
+      } else if (s.saldo_minimo < 0) {
+        const [, m, day] = s.dia_critico.slice(0, 10).split('-')
+        setResult({
+          text: `⚠ Não cabe: o saldo ficaria negativo em ${day}/${m} (${formatCurrency(s.saldo_minimo)}).`,
+          color: 'var(--red)',
+        })
+      } else {
+        setResult({
+          text: `Cabe. Sobraria ${formatCurrency(s.livre)} livre (${formatCurrency(s.limite_dia)}/dia).`,
+          color: 'var(--primary)',
+        })
+      }
+    } catch {
+      setResult({ text: 'Não deu pra simular agora.', color: 'var(--muted)' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-bold" style={{ color: 'var(--muted)' }}>E se eu gastar hoje R$</span>
+        <input
+          value={raw}
+          onChange={(e) => setRaw(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && simulate()}
+          inputMode="decimal"
+          placeholder="0,00"
+          className="w-24 rounded-lg border px-2 py-1 text-sm outline-none"
+          style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+        />
+        <button
+          onClick={simulate}
+          disabled={busy}
+          className="rounded-lg border px-3 py-1 text-xs font-bold disabled:opacity-60"
+          style={{ borderColor: 'var(--border-l)', color: 'var(--text)' }}
+        >
+          {busy ? '…' : 'Simular'}
+        </button>
+      </div>
+      {result && (
+        <p className="mt-1.5 text-xs font-bold" style={{ color: result.color }}>
+          {result.text}
+        </p>
+      )}
+    </div>
+  )
+}
+
 function LivreParaGastarCard() {
   const q = useQuery({ queryKey: ['livreParaGastar', 45], queryFn: () => fetchLivreParaGastar(45) })
   const d = q.data
@@ -731,6 +800,7 @@ function LivreParaGastarCard() {
           <Link to="/calendario" className="mt-1 inline-block text-xs font-bold" style={{ color: 'var(--primary)' }}>
             Ver no calendário →
           </Link>
+          <LivreSimulacao />
         </>
       )}
     </div>

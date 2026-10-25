@@ -1826,12 +1826,19 @@ def mark_calendar_event_done(ref_table: str, ref_id: int, event_date: date) -> N
         _invalidate(month["id"])
 
 
-def get_livre_para_gastar(horizon_days: int = 45) -> Optional[dict]:
+def get_livre_para_gastar(horizon_days: int = 45, extra_amount: float = 0.0,
+                          extra_date: Optional[date] = None) -> Optional[dict]:
     """Card "Livre para gastar" (migration 051): saldo real de hoje
     simulado dia a dia pelos próximos horizon_days sobre
     get_calendar_events — livre = menor saldo do período, limite_dia =
-    menor saldo(t)/t. None se o usuário ainda não tem nenhum mês."""
-    resp = get_client().rpc("get_livre_para_gastar", {"p_horizon_days": horizon_days}).execute()
+    menor saldo(t)/t. None se o usuário ainda não tem nenhum mês.
+    extra_amount/extra_date (053): simula uma saída hipotética ("e se eu
+    gastar R$ X?") sem gravar nada."""
+    params: dict = {"p_horizon_days": horizon_days}
+    if extra_amount > 0:
+        params["p_extra_amount"] = extra_amount
+        params["p_extra_date"] = extra_date.isoformat() if extra_date else None
+    resp = get_client().rpc("get_livre_para_gastar", params).execute()
     return resp.data or None
 
 

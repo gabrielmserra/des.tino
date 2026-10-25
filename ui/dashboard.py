@@ -74,6 +74,7 @@ class Dashboard(ctk.CTkScrollableFrame):
     def _build(self) -> None:
         self._card_lbls = {}
         for attr in ("_livre_value_lbl", "_livre_day_lbl", "_livre_detail_lbl",
+                     "_livre_sim_entry", "_livre_sim_lbl",
                      "_saldo_proj_lbl", "_saldo_delta_lbl", "_pie_host", "_bar_host", "_pm_host",
                      "_savings_pct", "_savings_bar_bg", "_savings_bar_fill",
                      "_savings_label", "_goals_frame", "_goals_count_lbl",
@@ -233,8 +234,62 @@ class Dashboard(ctk.CTkScrollableFrame):
         self._livre_day_lbl.grid(row=2, column=0, sticky="w", padx=24)
         self._livre_detail_lbl = ctk.CTkLabel(card, text="", font=F(11), text_color=T.MUTED,
                                               anchor="w", justify="left", wraplength=640)
-        self._livre_detail_lbl.grid(row=3, column=0, sticky="w", padx=24, pady=(6, 18))
+        self._livre_detail_lbl.grid(row=3, column=0, sticky="w", padx=24, pady=(6, 8))
+
+        # Simulação "e se eu gastar R$ X hoje?" — não grava nada (migração 053).
+        sim = ctk.CTkFrame(card, fg_color="transparent")
+        sim.grid(row=4, column=0, sticky="w", padx=24, pady=(0, 16))
+        ctk.CTkLabel(sim, text="E se eu gastar hoje  R$", font=F(11, "bold"),
+                     text_color=T.MUTED).pack(side="left")
+        self._livre_sim_entry = ctk.CTkEntry(sim, width=100, placeholder_text="0,00",
+                                             fg_color=T.CARD2, border_color=T.BORDER_L,
+                                             text_color=T.TEXT, corner_radius=8)
+        self._livre_sim_entry.pack(side="left", padx=6)
+        self._livre_sim_entry.bind("<Return>", lambda _e: self._simulate_livre())
+        ctk.CTkButton(sim, text="Simular", width=80, height=28, corner_radius=8,
+                      fg_color=T.CARD2, hover_color=T.BORDER_L, text_color=T.TEXT,
+                      font=F(11, "bold"), command=self._simulate_livre).pack(side="left")
+        self._livre_sim_lbl = ctk.CTkLabel(sim, text="", font=F(11, "bold"),
+                                           text_color=T.MUTED, anchor="w")
+        self._livre_sim_lbl.pack(side="left", padx=(10, 0))
         return card
+
+    def _simulate_livre(self) -> None:
+        import threading
+        from ui.debts import _parse_amount
+        amount = _parse_amount(self._livre_sim_entry.get())
+        if amount <= 0:
+            self._livre_sim_lbl.configure(text="")
+            return
+        self._livre_sim_lbl.configure(text="calculando…", text_color=T.MUTED)
+
+        def _work():
+            try:
+                data = db.get_livre_para_gastar(45, amount)
+            except Exception:
+                data = None
+            self.after(0, lambda: self._show_livre_sim(data))
+
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _show_livre_sim(self, data: Optional[dict]) -> None:
+        if not hasattr(self, "_livre_sim_lbl"):
+            return
+        if not data:
+            self._livre_sim_lbl.configure(text="Não deu pra simular agora.", text_color=T.MUTED)
+            return
+        livre = float(data.get("livre") or 0)
+        limite = float(data.get("limite_dia") or 0)
+        minimo = float(data.get("saldo_minimo") or 0)
+        if minimo < 0:
+            y, m, d = str(data.get("dia_critico"))[:10].split("-")
+            self._livre_sim_lbl.configure(
+                text=f"⚠ Não cabe: o saldo ficaria negativo em {d}/{m} ({format_currency(minimo)}).",
+                text_color=T.RED)
+        else:
+            self._livre_sim_lbl.configure(
+                text=f"Cabe. Sobraria {format_currency(livre)} livre ({format_currency(limite)}/dia).",
+                text_color=T.GREEN)
 
     def _update_livre_para_gastar(self, data: Optional[dict]) -> None:
         if not hasattr(self, "_livre_value_lbl"):

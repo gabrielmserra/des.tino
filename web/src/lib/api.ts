@@ -740,8 +740,17 @@ export type LivreParaGastar = {
 // Card "Livre para gastar" (migration 051): saldo real de hoje simulado
 // dia a dia pelos próximos `days` dias sobre get_calendar_events — livre =
 // menor saldo do período, limite_dia = menor saldo(t)/t.
-export async function fetchLivreParaGastar(days = 45): Promise<LivreParaGastar | null> {
-  const { data, error } = await supabase.rpc('get_livre_para_gastar', { p_horizon_days: days })
+// extraAmount/extraDate (migração 053): simula uma saída hipotética ("e se
+// eu gastar R$ X?") sem gravar nada.
+export async function fetchLivreParaGastar(
+  days = 45, extraAmount = 0, extraDate: string | null = null,
+): Promise<LivreParaGastar | null> {
+  const params: Record<string, unknown> = { p_horizon_days: days }
+  if (extraAmount > 0) {
+    params.p_extra_amount = extraAmount
+    params.p_extra_date = extraDate
+  }
+  const { data, error } = await supabase.rpc('get_livre_para_gastar', params)
   if (error) throw error
   return (data ?? null) as LivreParaGastar | null
 }
