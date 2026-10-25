@@ -198,6 +198,7 @@ export function Planning() {
       const incomeItems: PlanIncomeItemInput[] = v.incomeItems.map((it) => ({
         amount: it.amount,
         expected_day: it.expected_day,
+        is_last_business_day: it.is_last_business_day,
       }))
       return { kind: 'review', incomeItems, rows, nHist: -1 }
     })

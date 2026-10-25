@@ -243,7 +243,7 @@ class _DayEventsDialog(_BaseDialog):
                      anchor="w").pack(anchor="w")
         sub = _SOURCE_LABELS.get(e["source"], e["source"])
         if e["status"] == "overdue":
-            sub += "  ·  vencido"
+            sub += "  ·  atrasada" if e["is_income"] else "  ·  vencido"
         ctk.CTkLabel(info, text=sub, font=F(10), text_color=T.RED if e["status"] == "overdue" else T.MUTED,
                      anchor="w").pack(anchor="w")
 

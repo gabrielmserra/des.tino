@@ -276,6 +276,17 @@ class GoalsTab(ctk.CTkFrame):
                 text_color=T.RED, border_width=1, border_color=T.RED,
             ).pack(side="left", padx=(0, 8))
 
+        if is_recurring:
+            due_day = goal.get("due_day")
+            ctk.CTkButton(
+                actions, text=f"📅 dia {due_day}" if due_day else "📅 dia",
+                command=lambda g=goal: self._set_due_day(g),
+                height=32, width=80, corner_radius=8,
+                fg_color="transparent", hover_color=T.CARD2,
+                border_width=1, border_color=T.BORDER_L,
+                text_color=T.TEXT if due_day else T.MUTED,
+            ).pack(side="left", padx=(0, 8))
+
         ctk.CTkButton(
             actions, text="✎ Editar",
             command=lambda g=goal: self._edit_goal(g),
@@ -472,6 +483,21 @@ class GoalsTab(ctk.CTkFrame):
             except Exception as e:
                 from ui.dialogs import show_error
                 show_error(self.winfo_toplevel(), "Erro ao editar", str(e))
+
+    def _set_due_day(self, goal: dict) -> None:
+        from ui.debts import DueDayDialog
+        dlg = DueDayDialog(self.winfo_toplevel(), goal["name"], goal.get("due_day"))
+        self.winfo_toplevel().wait_window(dlg)
+        if not dlg.confirmed:
+            return
+        try:
+            db.set_goal_due_day(goal["id"], dlg.day)
+            self.refresh()
+            if self._on_change:
+                self._on_change()
+        except Exception as e:
+            from ui.dialogs import show_error
+            show_error(self.winfo_toplevel(), "Erro ao salvar o dia", str(e))
 
     def _delete_goal(self, goal_id: int) -> None:
         from ui.dialogs import ConfirmDialog, show_error

@@ -12,7 +12,9 @@ import {
   undoGoalInstallmentContribution,
   updateGoalInstallmentAmount,
   deleteGoalInstallment,
+  setGoalDueDay,
 } from '../lib/api'
+import { DueDayDialog } from '../components/DueDayDialog'
 import { formatCurrency, MONTHS_PT } from '../lib/format'
 import { Skeleton } from '../components/Skeleton'
 import { ContributionDialog, EditGoalDialog, GenerateMoreGoalDialog, AddCustomInstallmentDialog, ConfirmDialog } from '../components/GoalDialogs'
@@ -64,6 +66,7 @@ const inputStyle = { background: 'var(--card2)', borderColor: 'var(--border-l)',
 type PendingAction =
   | { kind: 'contribute'; mode: 'aporte' | 'saque'; goal: Goal }
   | { kind: 'edit'; goal: Goal }
+  | { kind: 'dueDay'; goal: Goal }
   | { kind: 'delete'; goal: Goal }
   | { kind: 'generateMore'; goal: Goal }
   | { kind: 'addCustomInst'; goal: Goal }
@@ -91,6 +94,8 @@ export function Goals() {
     Promise.all([
       qc.invalidateQueries({ queryKey: ['goals'] }),
       qc.invalidateQueries({ queryKey: ['goalInstallments'] }),
+      qc.invalidateQueries({ queryKey: ['calendarEvents'] }),
+      qc.invalidateQueries({ queryKey: ['livreParaGastar'] }),
     ])
 
   const create = async () => {
@@ -243,6 +248,15 @@ export function Goals() {
                       </button>
                     </>
                   )}
+                  {isRecurring && (
+                    <button
+                      onClick={() => setAction({ kind: 'dueDay', goal: g })}
+                      className="rounded-lg border px-3 py-1.5 text-xs font-semibold"
+                      style={{ borderColor: 'var(--border-l)', color: g.due_day ? 'var(--text)' : 'var(--muted)' }}
+                    >
+                      📅 {g.due_day ? `dia ${g.due_day}` : 'dia'}
+                    </button>
+                  )}
                   <button
                     onClick={() => setAction({ kind: 'edit', goal: g })}
                     className="rounded-lg border px-3 py-1.5 text-xs font-semibold"
@@ -362,6 +376,14 @@ export function Goals() {
           targetAmount={action.goal.target_amount}
           onClose={() => setAction(null)}
           onConfirm={(n, t) => run(() => updateGoal(action.goal.id, n, t))}
+        />
+      )}
+      {action?.kind === 'dueDay' && (
+        <DueDayDialog
+          name={action.goal.name}
+          current={action.goal.due_day}
+          onClose={() => setAction(null)}
+          onConfirm={(day) => run(() => setGoalDueDay(action.goal.id, day))}
         />
       )}
       {action?.kind === 'delete' && (

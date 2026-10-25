@@ -9,6 +9,10 @@ from ui.theme import F
 from utils.helpers import format_currency, apply_app_icon, PLAN_CATEGORIES
 from utils.plan_strategy import suggest_allocations, estimate_income, INVESTMENT_CAP_PCT
 
+# Opção do campo "dia" das entradas de renda: resolve pro último dia útil
+# do mês (sexta se cair no fim de semana) — ver migração 052.
+_LAST_BUSINESS_DAY = "Último dia útil"
+
 
 def _parse_amount(raw: str) -> float:
     raw = raw.strip().replace(".", "").replace(",", ".") if raw.count(",") else raw.strip().replace(",", ".")
@@ -696,7 +700,7 @@ class _IncomeItemsDialog(ctk.CTkToplevel):
 
     def _center(self, parent) -> None:
         self.update_idletasks()
-        w, h = 440, 480
+        w, h = 480, 480
         px = parent.winfo_x() + (parent.winfo_width()  - w) // 2
         py = parent.winfo_y() + (parent.winfo_height() - h) // 2
         self.geometry(f"{w}x{h}+{px}+{py}")
@@ -726,7 +730,8 @@ class _IncomeItemsDialog(ctk.CTkToplevel):
         self._rows_frame.grid(row=3, column=0, sticky="ew", padx=20)
 
         for it in items:
-            self._add_row(it.get("amount"), it.get("expected_day"))
+            self._add_row(it.get("amount"),
+                          _LAST_BUSINESS_DAY if it.get("is_last_business_day") else it.get("expected_day"))
         if not items:
             self._add_row(suggested if suggested > 0 else None, None)
             if suggested > 0:
@@ -771,13 +776,15 @@ class _IncomeItemsDialog(ctk.CTkToplevel):
             amount_entry.insert(0, f"{float(amount):.2f}".replace(".", ","))
         amount_entry.bind("<KeyRelease>", lambda _: self._update_total())
 
-        day_entry = ctk.CTkEntry(
-            row, placeholder_text="1-31", width=60, justify="center",
-            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT, corner_radius=8,
+        day_entry = ctk.CTkComboBox(
+            row, values=[_LAST_BUSINESS_DAY] + [str(d) for d in range(1, 32)], width=150,
+            fg_color=T.CARD2, border_color=T.BORDER_L, text_color=T.TEXT,
+            button_color=T.CARD2, button_hover_color=T.BORDER_L,
+            dropdown_fg_color=T.CARD2, dropdown_text_color=T.TEXT,
+            dropdown_hover_color=T.BORDER_L, corner_radius=8, state="readonly",
         )
         day_entry.pack(side="left", padx=(0, 6))
-        if day is not None:
-            day_entry.insert(0, str(int(day)))
+        day_entry.set("" if day is None else (day if day == _LAST_BUSINESS_DAY else str(int(day))))
 
         ctk.CTkButton(
             row, text="✕", width=30, height=28, corner_radius=6,
@@ -809,15 +816,17 @@ class _IncomeItemsDialog(ctk.CTkToplevel):
             if not amount_raw and not day_raw:
                 continue  # linha em branco, ignora
             amount = _parse_amount(amount_raw)
+            last_bd = day_raw == _LAST_BUSINESS_DAY
             try:
-                day = int(day_raw)
+                day = 31 if last_bd else int(day_raw)
             except ValueError:
                 day = 0
             if amount <= 0 or not (1 <= day <= 31):
                 self._error_lbl.configure(
-                    text="⚠  Preencha valor e dia (1-31) em todas as entradas.")
+                    text="⚠  Preencha valor e dia em todas as entradas.")
                 return
-            result.append({"amount": amount, "expected_day": day})
+            result.append({"amount": amount, "expected_day": day,
+                           "is_last_business_day": last_bd})
 
         self.income_items = result
         self.destroy()

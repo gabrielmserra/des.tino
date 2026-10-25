@@ -118,12 +118,14 @@ export type PlanIncomeItem = {
   plan_id: number
   amount: number
   expected_day: number
+  is_last_business_day: boolean
   created_at: string
 }
 
 export type PlanIncomeItemInput = {
   amount: number
   expected_day: number
+  is_last_business_day?: boolean
 }
 
 export type BenefitOverview = {
@@ -179,6 +181,7 @@ export type Debt = {
   category: string | null
   notes: string | null
   interest_rate: number | null
+  due_day: number | null
   created_at: string
 }
 
@@ -306,6 +309,7 @@ export type Goal = {
   target_amount: number | null
   saved_amount: number
   monthly_amount: number | null
+  due_day: number | null
   schedule_type: string | null
   created_at: string
 }

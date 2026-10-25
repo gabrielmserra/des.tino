@@ -421,7 +421,8 @@ class FinanceApp(ctk.CTkFrame):
             prev_income_items = db.get_plan_income_items(prev_plan["id"])
             if not prev_income_items:
                 return
-            income_items = [{"amount": float(it["amount"]), "expected_day": int(it["expected_day"])}
+            income_items = [{"amount": float(it["amount"]), "expected_day": int(it["expected_day"]),
+                             "is_last_business_day": bool(it.get("is_last_business_day"))}
                             for it in prev_income_items]
             income = sum(it["amount"] for it in income_items)
 

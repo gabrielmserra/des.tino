@@ -9,7 +9,9 @@ import {
   rescheduleInstallment,
   updateInstallmentAmount,
   deleteInstallment,
+  setDebtDueDay,
 } from '../lib/api'
+import { DueDayDialog } from '../components/DueDayDialog'
 import { installmentStatus } from '../lib/debtStatus'
 import { Skeleton } from '../components/Skeleton'
 import { formatCurrency, MONTHS_PT } from '../lib/format'
@@ -48,6 +50,7 @@ export function Debts() {
   const qc = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [editDebt, setEditDebt] = useState<Debt | null>(null)
+  const [dueDayDebt, setDueDayDebt] = useState<Debt | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('todas')
   const [creditorFilter, setCreditorFilter] = useState('todos')
   const [action, setAction] = useState<PendingAction | null>(null)
@@ -71,6 +74,8 @@ export function Debts() {
       qc.invalidateQueries({ queryKey: ['debtOverview'] }),
       qc.invalidateQueries({ queryKey: ['transactions'] }),
       qc.invalidateQueries({ queryKey: ['summary'] }),
+      qc.invalidateQueries({ queryKey: ['calendarEvents'] }),
+      qc.invalidateQueries({ queryKey: ['livreParaGastar'] }),
     ])
   }
 
@@ -197,7 +202,21 @@ export function Debts() {
           statusFilter={statusFilter}
           creditorFilter={creditorFilter}
           onEdit={setEditDebt}
+          onDueDay={setDueDayDebt}
           onAction={setAction}
+        />
+      )}
+
+      {dueDayDebt && (
+        <DueDayDialog
+          name={dueDayDebt.description}
+          current={dueDayDebt.due_day}
+          onClose={() => setDueDayDebt(null)}
+          onConfirm={(day) => {
+            const id = dueDayDebt.id
+            setDueDayDebt(null)
+            run(() => setDebtDueDay(id, day))
+          }}
         />
       )}
 
@@ -279,6 +298,7 @@ function DebtsList({
   statusFilter,
   creditorFilter,
   onEdit,
+  onDueDay,
   onAction,
 }: {
   debts: Debt[]
@@ -286,6 +306,7 @@ function DebtsList({
   statusFilter: StatusFilter
   creditorFilter: string
   onEdit: (d: Debt) => void
+  onDueDay: (d: Debt) => void
   onAction: (a: PendingAction) => void
 }) {
   const cards = debts
@@ -337,9 +358,18 @@ function DebtsList({
                   {debt.category ?? 'Dívidas'}
                 </span>
               </div>
-              <button onClick={() => onEdit(debt)} className="shrink-0 text-sm" style={{ color: 'var(--muted)' }}>
-                Editar
-              </button>
+              <div className="flex shrink-0 items-center gap-3">
+                <button
+                  onClick={() => onDueDay(debt)}
+                  className="text-sm"
+                  style={{ color: debt.due_day ? 'var(--text)' : 'var(--muted)' }}
+                >
+                  📅 {debt.due_day ? `dia ${debt.due_day}` : 'dia'}
+                </button>
+                <button onClick={() => onEdit(debt)} className="text-sm" style={{ color: 'var(--muted)' }}>
+                  Editar
+                </button>
+              </div>
             </div>
 
             <p className="mb-3 text-sm font-bold" style={{ color: 'var(--primary)' }}>

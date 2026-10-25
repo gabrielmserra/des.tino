@@ -263,6 +263,12 @@ class DebtsTab(ctk.CTkFrame):
 
         actions = ctk.CTkFrame(hdr, fg_color="transparent")
         actions.grid(row=0, column=2, sticky="e", padx=(10, 0))
+        due_day = debt.get("due_day")
+        ctk.CTkButton(actions, text=f"📅 dia {due_day}" if due_day else "📅 dia",
+                      width=64, height=26, corner_radius=6,
+                      fg_color="transparent", hover_color=T.CARD2,
+                      text_color=T.TEXT if due_day else T.SUBTLE, font=F(11),
+                      command=lambda d=debt: self._set_due_day(d)).pack(side="left", padx=2)
         ctk.CTkButton(actions, text="✎", width=28, height=26, corner_radius=6,
                       fg_color="transparent", hover_color=T.CARD2,
                       text_color=T.SUBTLE, font=F(11),
@@ -409,6 +415,13 @@ class DebtsTab(ctk.CTkFrame):
             debt["id"], r["description"], r["creditor"],
             r["category"], r["notes"], r.get("interest_rate")), months)
 
+    def _set_due_day(self, debt: dict) -> None:
+        dlg = DueDayDialog(self.winfo_toplevel(), debt["description"], debt.get("due_day"))
+        self.winfo_toplevel().wait_window(dlg)
+        if not dlg.confirmed:
+            return
+        self._run(lambda: db.set_debt_due_day(debt["id"], dlg.day), set())
+
     def _delete_debt(self, debt: dict) -> None:
         from ui.dialogs import ConfirmDialog
         insts = [i for i in self._insts if i["debt_id"] == debt["id"]]
@@ -533,6 +546,46 @@ class _BaseDialog(ctk.CTkToplevel):
         if width:
             kw["width"] = width
         return ctk.CTkComboBox(parent, **kw)
+
+
+_NO_DAY = "Sem dia certo (dia 1)"
+
+
+class DueDayDialog(_BaseDialog):
+    """Dia de vencimento opcional de uma dívida ou meta recorrente — vale
+    pra todas as parcelas (inclusive as geradas depois); só muda em que dia
+    elas aparecem no Calendário e no "Livre para gastar". Usado também
+    por ui/goals.py."""
+
+    def __init__(self, parent, name: str, current: Optional[int]):
+        self.confirmed = False
+        self.day: Optional[int] = current
+        super().__init__(parent, "Dia do vencimento", 380, 250)
+        self.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(self, text="Dia do vencimento", font=F(15, "bold"),
+                     text_color=T.TEXT).grid(row=0, column=0, pady=(20, 2))
+        ctk.CTkLabel(self, text=name, font=F(12), text_color=T.MUTED).grid(row=1, column=0)
+        ctk.CTkLabel(self, text="Vale pra todas as parcelas. Só muda o dia em que\n"
+                                "elas aparecem no Calendário — nada mais.",
+                     font=F(10), text_color=T.SUBTLE, justify="center").grid(row=2, column=0, pady=(6, 8))
+        self._day_combo = self._combo(self, [_NO_DAY] + [str(d) for d in range(1, 32)])
+        self._day_combo.set(str(current) if current else _NO_DAY)
+        self._day_combo.grid(row=3, column=0, padx=40, sticky="ew")
+        btns = ctk.CTkFrame(self, fg_color="transparent")
+        btns.grid(row=4, column=0, pady=16)
+        ctk.CTkButton(btns, text="Cancelar", width=110,
+                      fg_color=T.CARD2, hover_color=T.BORDER_L,
+                      border_width=1, border_color=T.BORDER_L,
+                      text_color=T.MUTED, command=self.destroy).pack(side="left", padx=6)
+        ctk.CTkButton(btns, text="Salvar", width=110,
+                      fg_color=T.BLUE, hover_color=T.BLUE_HOVER,
+                      text_color="#ffffff", command=self._save).pack(side="left", padx=6)
+
+    def _save(self) -> None:
+        val = self._day_combo.get()
+        self.day = None if val == _NO_DAY else int(val)
+        self.confirmed = True
+        self.destroy()
 
 
 class _DebtFormDialog(_BaseDialog):

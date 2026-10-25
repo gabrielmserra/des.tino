@@ -66,7 +66,9 @@ function EventRow({ event, onDone }: { event: CalendarEvent; onDone: (e: Calenda
         <p className="truncate text-sm font-semibold">{event.label}</p>
         <p className="text-xs" style={{ color: 'var(--muted)' }}>
           {SOURCE_LABELS[event.source] ?? event.source}
-          {event.status === 'overdue' && <span style={{ color: 'var(--red)' }}> · vencido</span>}
+          {event.status === 'overdue' && (
+            <span style={{ color: 'var(--red)' }}>{event.is_income ? ' · atrasada' : ' · vencido'}</span>
+          )}
         </p>
       </div>
       <span className="shrink-0 text-sm font-bold" style={{ color }}>

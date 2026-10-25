@@ -596,6 +596,13 @@ def create_recurring_goal(name: str, target_amount: Optional[float],
     return goal
 
 
+def set_goal_due_day(goal_id: int, day: Optional[int]) -> None:
+    """Dia de vencimento opcional da meta recorrente (migração 052) — vale
+    pra todas as parcelas sem dia próprio; só muda o dia em que aparecem
+    no Calendário. None = sem dia certo (cai no dia 1)."""
+    get_client().table("goals").update({"due_day": day}).eq("id", goal_id).execute()
+
+
 def add_goal_installments(goal_id: int, installments: List[dict]) -> None:
     """Gera mais parcelas pra uma meta recorrente já existente, ou
     adiciona uma parcela avulsa a uma meta de cronograma personalizado.
@@ -1298,6 +1305,7 @@ def save_plan(month_id: int, income: float, items: List[dict],
         "user_id":      user_id,
         "amount":       float(it["amount"]),
         "expected_day": int(it["expected_day"]),
+        "is_last_business_day": bool(it.get("is_last_business_day")),
     } for it in (income_items or [])]
     if income_rows:
         client.table("plan_income_items").insert(income_rows).execute()
@@ -1481,6 +1489,14 @@ def reschedule_installment(inst_id: int, year: int, month: int) -> None:
     get_client().table("debt_installments").update({
         "due_year": year, "due_month": month,
     }).eq("id", inst_id).execute()
+    _invalidate_debts()
+
+
+def set_debt_due_day(debt_id: int, day: Optional[int]) -> None:
+    """Dia de vencimento opcional da dívida (migração 052) — vale pra todas
+    as parcelas; só muda o dia em que aparecem no Calendário. None = sem
+    dia certo (cai no dia 1)."""
+    get_client().table("debts").update({"due_day": day}).eq("id", debt_id).execute()
     _invalidate_debts()
 
 

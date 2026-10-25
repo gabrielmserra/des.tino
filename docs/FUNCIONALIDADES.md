@@ -450,6 +450,23 @@ produto específico.
   último plano)") — assim que o plano do mês é criado, ele passa a
   valer. Meses passados nunca são projetados.
 
+- **[Ambas]** Regras de renda (migração 052):
+  - Entrada do Planejamento pode ter dia **"Último dia útil"** (opção no
+    campo de dia): último dia do mês, recuando pra sexta se cair no fim
+    de semana (feriados ainda não são considerados).
+  - **Recebimento antecipado ou atrasado, sem ação manual:** a entrada
+    prevista some quando já existe um lançamento real de entrada até 7
+    dias antes ou depois da data prevista, com valor até 20% diferente
+    (renda variável). Se a data já passou há até 7 dias e nada foi
+    lançado, ela aparece **hoje** marcada como "atrasada" (e conta no
+    "Livre para gastar"). Mais antiga que isso, fica na data original.
+  - Aporte/resgate de investimento nunca conta como recebimento.
+- **[Ambas]** Dívidas e metas recorrentes ganham um botão **"📅 dia"**
+  pra definir o dia de vencimento (opcional) — vale pra todas as
+  parcelas, inclusive as geradas depois; só muda o dia em que aparecem
+  no Calendário e no "Livre para gastar". Sem dia definido, continuam no
+  dia 1 do mês. Meta de cronograma personalizado já tem dia por parcela.
+
 ### 9.3 Card "Livre para gastar"
 
 - **[Ambas]** Card do Dashboard que responde "quanto posso gastar agora
@@ -817,7 +834,9 @@ R$ no modo `absolute`, fração 0-1 no modo `percentage` (conforme
 `mock_portfolios.value_mode`).
 
 **`goals`** — `id, user_id, name, target_amount, saved_amount,
-created_at, monthly_amount, schedule_type`. `target_amount` é opcional
+created_at, monthly_amount, schedule_type, due_day`. `due_day` (052):
+dia de vencimento opcional da meta recorrente, herdado pelas parcelas
+sem dia próprio. `target_amount` é opcional
 (meta recorrente "sem fim"); `monthly_amount` (022) marca meta recorrente
 mensal; `schedule_type='custom'` (026) marca meta de cronograma
 personalizado — sem nenhum dos dois, é uma meta simples (aporte avulso).
@@ -839,13 +858,18 @@ o usuário não edita o valor livremente enquanto a dívida existir.
 
 **`plan_income_items`** (migração 031) — cada entrada de renda esperada
 do plano (várias por plano, com dia do mês). `id, plan_id, user_id,
-amount, expected_day, created_at`. `monthly_plans.income` continua
-existindo como o total (soma destes itens).
+amount, expected_day, created_at, is_last_business_day`.
+`monthly_plans.income` continua existindo como o total (soma destes
+itens). `is_last_business_day` (052): a data vira o último dia útil do
+mês (sexta se cair no fim de semana); `expected_day` fica 31 só por
+compatibilidade.
 
 **`debts`** — `id, user_id, description, creditor, total_amount,
-category, notes, created_at, interest_rate` (interest_rate na migração
-023, opcional, só armazenada pra exibição — quem calcula a Tabela Price é
-o client antes de chamar `create_debt`).
+category, notes, created_at, interest_rate, due_day` (interest_rate na
+migração 023, opcional, só armazenada pra exibição — quem calcula a
+Tabela Price é o client antes de chamar `create_debt`; `due_day` na 052,
+dia de vencimento opcional de todas as parcelas, só usado pelo
+Calendário/"Livre para gastar").
 
 **`debt_installments`** — `id, debt_id, user_id, installment_number,
 amount, due_year, due_month, paid_at, expense_id`. Sem coluna de status:
@@ -927,7 +951,7 @@ recente) é listada.
 **Planejamento**
 | Função | Parâmetros | O que faz |
 |---|---|---|
-| `save_plan` | month_id, income, items (jsonb), income_items (jsonb) | Cria/atualiza o plano do mês e substitui seus itens; fecha planos `ativo` de meses anteriores. |
+| `save_plan` | month_id, income, items (jsonb), income_items (jsonb) | Cria/atualiza o plano do mês e substitui seus itens; fecha planos `ativo` de meses anteriores. Desde a 052 grava `is_last_business_day` de cada entrada (chave opcional). |
 | `get_month_income` | month_id, include_expectations? | Soma de entradas do mês (usada no histórico de sugestão). |
 
 **Dívidas**
@@ -975,7 +999,8 @@ recente) é listada.
 | `get_future_commitments` | months (default 6) | Soma, mês a mês, parcelas de cartão previstas + fatura em aberto (rotulada pelo mês em que o ciclo começou) + dívidas em aberto + contas fixas pendentes. |
 | `get_balance_projection` (043) | month_id | Simula dia a dia, de hoje até o fim do mês, o saldo esperado (contas fixas + dívidas + fatura de cartão em aberto + parcelas futuras vs. entradas do Planejamento) — retorna `{day, balance, next_income_day}` do primeiro dia em que cruzaria zero, ou `null` se não é o mês corrente ou não acha nenhum dia problemático. |
 | `get_livre_para_gastar` (051) | horizon_days (default 45) | Saldo acumulado real de hoje simulado dia a dia sobre `get_calendar_events`; retorna `{saldo_atual, livre, limite_dia, saldo_minimo, dia_critico, entradas, saidas, dias, sem_renda}` — livre = menor saldo do período, limite_dia = menor saldo(t)/t. Ver seção 9.3. |
-| `get_calendar_events` (049, redefinida na 050 e na 051) | start, end | Visão unificada de tudo que tem data no intervalo — contas fixas, dívidas, metas, fatura de cartão (fechada e em aberto, via `_next_cycle_due_date`), parcelas futuras de cartão e previstos/renda planejada. Saída vencida e não paga aparece em `current_date` (mesma regra da 043); entrada fica na data real. Pura leitura — nenhuma tabela nova; ver seção 9.2. |
+| `_last_business_day` (052) | year, month | Último dia útil do mês (sexta se o último dia cair no fim de semana). |
+| `get_calendar_events` (049, redefinida na 050, 051 e 052) | start, end | Visão unificada de tudo que tem data no intervalo — contas fixas, dívidas, metas, fatura de cartão (fechada e em aberto, via `_next_cycle_due_date`), parcelas futuras de cartão e previstos/renda planejada. Saída vencida e não paga aparece em `current_date` (mesma regra da 043); entrada fica na data real. Pura leitura — nenhuma tabela nova; ver seção 9.2. |
 | `_next_cycle_due_date` (049) | closing_day, due_day | Data de vencimento projetada do ciclo de cartão **ainda aberto** (quando ele fechar e vencer) — mesma lógica de `_cycle_due_date`, um ciclo à frente. |
 
 Grants: toda função é `grant execute ... to authenticated` — nunca

@@ -2,6 +2,10 @@ import { useState } from 'react'
 import { formatCurrency } from '../lib/format'
 import type { PlanIncomeItemInput } from '../lib/types'
 
+// Opção do campo "dia": resolve pro último dia útil do mês (sexta se cair
+// no fim de semana) — ver migração 052.
+const LAST_BUSINESS_DAY = 'ultimo_util'
+
 type Row = { amount: string; day: string }
 
 type Props = {
@@ -21,7 +25,7 @@ function toRows(items?: PlanIncomeItemInput[], suggested?: number): Row[] {
   if (items && items.length > 0) {
     return items.map((it) => ({
       amount: String(it.amount).replace('.', ','),
-      day: String(it.expected_day),
+      day: it.is_last_business_day ? LAST_BUSINESS_DAY : String(it.expected_day),
     }))
   }
   if (suggested && suggested > 0) {
@@ -52,12 +56,13 @@ export function IncomeDialog({ items, suggested = 0, onCancel, onConfirm }: Prop
     for (const r of rows) {
       if (!r.amount.trim() && !r.day.trim()) continue // linha em branco, ignora
       const amount = parseAmount(r.amount)
-      const day = parseInt(r.day, 10)
+      const lastBd = r.day === LAST_BUSINESS_DAY
+      const day = lastBd ? 31 : parseInt(r.day, 10)
       if (amount <= 0 || !Number.isInteger(day) || day < 1 || day > 31) {
-        setError('Preencha valor e dia (1-31) em todas as entradas.')
+        setError('Preencha valor e dia em todas as entradas.')
         return
       }
-      result.push({ amount, expected_day: day })
+      result.push({ amount, expected_day: day, is_last_business_day: lastBd })
     }
     onConfirm(result)
   }
@@ -83,7 +88,7 @@ export function IncomeDialog({ items, suggested = 0, onCancel, onConfirm }: Prop
           <span className="flex-1 text-[10px] font-bold" style={{ color: 'var(--muted)' }}>
             VALOR (R$)
           </span>
-          <span className="w-16 text-[10px] font-bold" style={{ color: 'var(--muted)' }}>
+          <span className="w-32 text-[10px] font-bold" style={{ color: 'var(--muted)' }}>
             DIA
           </span>
           <span className="w-7" />
@@ -96,17 +101,23 @@ export function IncomeDialog({ items, suggested = 0, onCancel, onConfirm }: Prop
                 onChange={(e) => updateRow(idx, 'amount', e.target.value)}
                 inputMode="decimal"
                 placeholder="0,00"
-                className="flex-1 rounded-lg border px-3 py-2 text-base outline-none"
+                className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-base outline-none"
                 style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
               />
-              <input
+              <select
                 value={r.day}
                 onChange={(e) => updateRow(idx, 'day', e.target.value)}
-                inputMode="numeric"
-                placeholder="1-31"
-                className="w-16 rounded-lg border px-2 py-2 text-center text-base outline-none"
+                className="w-32 rounded-lg border px-2 py-2 text-sm outline-none"
                 style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
-              />
+              >
+                <option value="">Dia…</option>
+                <option value={LAST_BUSINESS_DAY}>Último dia útil</option>
+                {Array.from({ length: 31 }, (_, i) => (
+                  <option key={i + 1} value={String(i + 1)}>
+                    {i + 1}
+                  </option>
+                ))}
+              </select>
               <button
                 onClick={() => removeRow(idx)}
                 className="w-7 shrink-0 text-lg"

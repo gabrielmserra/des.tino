@@ -626,6 +626,7 @@ export async function autoGeneratePlan(months: Month[], newMonth: Month): Promis
     const incomeItems: PlanIncomeItemInput[] = prevIncomeItems.map((it) => ({
       amount: it.amount,
       expected_day: it.expected_day,
+      is_last_business_day: it.is_last_business_day,
     }))
     const income = incomeItems.reduce((a, i) => a + i.amount, 0)
 
@@ -839,6 +840,18 @@ export async function updateInstallmentAmount(instId: number, amount: number): P
     p_inst_id: instId,
     p_amount: amount,
   })
+  if (error) throw error
+}
+
+// Dia de vencimento opcional da dívida/meta recorrente (migração 052) —
+// vale pra todas as parcelas; só muda o dia em que aparecem no Calendário.
+export async function setDebtDueDay(debtId: number, day: number | null): Promise<void> {
+  const { error } = await supabase.from('debts').update({ due_day: day }).eq('id', debtId)
+  if (error) throw error
+}
+
+export async function setGoalDueDay(goalId: number, day: number | null): Promise<void> {
+  const { error } = await supabase.from('goals').update({ due_day: day }).eq('id', goalId)
   if (error) throw error
 }
 
