@@ -5,7 +5,7 @@ compromissos. Marcar como feito reaproveita os RPCs que já existiam
 antes desta tela (ver database.py:mark_calendar_event_done)."""
 import calendar as _pycalendar
 import threading
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Callable, Optional
 
 import customtkinter as ctk
@@ -194,7 +194,7 @@ class _DayEventsDialog(_BaseDialog):
         self.changed = False
         self._year, self._month, self._day = year, month, day
         self._events = events
-        super().__init__(parent, f"{day} de {MONTHS_PT[month - 1]}", 440, 560)
+        super().__init__(parent, f"{day} de {MONTHS_PT[month - 1]}", 460, 640)
         self._build()
 
     def _build(self) -> None:
@@ -305,16 +305,45 @@ class _DayEventsDialog(_BaseDialog):
         self._amount = self._entry(parent, "Valor (R$)")
         self._amount.grid(row=3, column=0, columnspan=2, padx=12, pady=(8, 0), sticky="ew")
 
+        # Despesa dividida: parte volta pra você depois — cria junto uma
+        # entrada prevista com esse valor, na data informada.
+        self._split_var = ctk.BooleanVar(value=False)
+        self._split_chk = ctk.CTkCheckBox(
+            parent, text="Despesa dividida — vou receber parte de volta",
+            variable=self._split_var, font=F(10), text_color=T.MUTED,
+            checkbox_width=16, checkbox_height=16, command=self._toggle_split)
+        self._split_chk.grid(row=4, column=0, columnspan=2, padx=12, pady=(8, 0), sticky="w")
+        self._split_box = ctk.CTkFrame(parent, fg_color="transparent")
+        self._split_box.grid_columnconfigure((0, 1), weight=1)
+        self._back_amount = self._entry(self._split_box, "Volta (padrão: metade)")
+        self._back_amount.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        back_default = date(self._year, self._month, self._day) + timedelta(days=7)
+        self._back_date = self._entry(self._split_box, "dd/mm/aaaa")
+        self._back_date.insert(0, back_default.strftime("%d/%m/%Y"))
+        self._back_date.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+
         self._add_err = ctk.CTkLabel(parent, text="", font=F(10), text_color=T.RED)
-        self._add_err.grid(row=4, column=0, columnspan=2, padx=12, pady=(4, 0), sticky="w")
+        self._add_err.grid(row=6, column=0, columnspan=2, padx=12, pady=(4, 0), sticky="w")
 
         ctk.CTkButton(parent, text="Adicionar", height=32, corner_radius=8,
                       fg_color=T.BLUE, hover_color=T.BLUE_HOVER, text_color="#ffffff",
                       font=F(12, "bold"), command=self._submit_add).grid(
-            row=5, column=0, columnspan=2, padx=12, pady=(8, 12), sticky="ew")
+            row=7, column=0, columnspan=2, padx=12, pady=(8, 12), sticky="ew")
+
+    def _toggle_split(self) -> None:
+        if self._split_var.get() and self._type_var.get() == "saida_variavel":
+            self._split_box.grid(row=5, column=0, columnspan=2, padx=12, pady=(6, 0), sticky="ew")
+        else:
+            self._split_box.grid_remove()
 
     def _set_type(self, type_: str) -> None:
         self._type_var.set(type_)
+        if hasattr(self, "_split_chk"):
+            if type_ == "saida_variavel":
+                self._split_chk.grid()
+            else:
+                self._split_chk.grid_remove()
+            self._toggle_split()
         self._btn_saida.configure(
             fg_color=T.RED if type_ == "saida_variavel" else "transparent",
             text_color="#ffffff" if type_ == "saida_variavel" else T.MUTED,
@@ -335,10 +364,28 @@ class _DayEventsDialog(_BaseDialog):
         tx_type = self._type_var.get()
         day_date = date(self._year, self._month, self._day)
 
+        is_split = self._split_var.get() and tx_type == "saida_variavel"
+        back, back_date = 0.0, None
+        if is_split:
+            raw_back = self._back_amount.get().strip()
+            back = _parse_amount(raw_back) if raw_back else amount / 2
+            try:
+                back_date = datetime.strptime(self._back_date.get().strip(), "%d/%m/%Y").date()
+            except ValueError:
+                back_date = None
+            if back <= 0 or back > amount or back_date is None:
+                self._add_err.configure(text="Informe quanto volta (até o valor gasto) e a data dd/mm/aaaa.")
+                return
+
         def op():
             month = db._ensure_month(self._year, self._month)
             db.add_transaction(month["id"], tx_type, desc, amount, "Outros",
                                 is_expectation=True, payment_date=day_date)
+            if is_split:
+                back_month = db._ensure_month(back_date.year, back_date.month)
+                db.add_transaction(back_month["id"], "entrada_variavel",
+                                    f"{desc} (parte que volta)", round(back, 2), "Receita",
+                                    is_expectation=True, payment_date=back_date)
 
         def _work():
             err = None
@@ -356,6 +403,8 @@ class _DayEventsDialog(_BaseDialog):
             return
         self._desc.delete(0, "end")
         self._amount.delete(0, "end")
+        self._split_var.set(False)
+        self._toggle_split()
         self._add_err.configure(text="")
         self.changed = True
         ctk.CTkLabel(self._scroll, text="Adicionado — feche e reabra o dia pra ver na lista.",

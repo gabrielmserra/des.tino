@@ -91,13 +91,29 @@ function AddExpectationForm({ year, month, day, onAdded }: { year: number; month
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
   const [type, setType] = useState<'saida_variavel' | 'entrada_variavel'>('saida_variavel')
+  // Despesa dividida: parte volta pra você depois (ex.: rachou a conta) —
+  // cria junto uma entrada prevista com esse valor, na data informada.
+  const [split, setSplit] = useState(false)
+  const [backAmount, setBackAmount] = useState('')
+  const [backDate, setBackDate] = useState(() => {
+    const d = new Date(year, month - 1, day + 7)
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
+  const parseValue = (raw: string) => Number(raw.trim().replace(/\./g, '').replace(',', '.'))
+
   const submit = async () => {
-    const value = Number(amount.replace(',', '.'))
+    const value = parseValue(amount)
     if (!description.trim() || !value || value <= 0) {
       setError('Preencha a descrição e um valor positivo.')
+      return
+    }
+    const isSplit = split && type === 'saida_variavel'
+    const back = isSplit ? (backAmount.trim() ? parseValue(backAmount) : value / 2) : 0
+    if (isSplit && (!back || back <= 0 || back > value || !backDate)) {
+      setError('Informe quanto volta (até o valor gasto) e quando.')
       return
     }
     setBusy(true)
@@ -112,8 +128,23 @@ function AddExpectationForm({ year, month, day, onAdded }: { year: number; month
         is_expectation: true,
         payment_date: `${year}-${pad(month)}-${pad(day)}`,
       })
+      if (isSplit) {
+        const by = Number(backDate.slice(0, 4))
+        const bm = Number(backDate.slice(5, 7))
+        const backMonthId = await ensureMonth(`${MONTHS_PT[bm - 1]} ${by}`, by, bm)
+        await addTransaction(backMonthId, {
+          type: 'entrada_variavel',
+          description: `${description.trim()} (parte que volta)`,
+          amount: Math.round(back * 100) / 100,
+          category: 'Receita',
+          is_expectation: true,
+          payment_date: backDate,
+        })
+      }
       setDescription('')
       setAmount('')
+      setSplit(false)
+      setBackAmount('')
       onAdded()
     } catch (e) {
       setError('Erro ao adicionar: ' + (e as Error).message)
@@ -156,6 +187,31 @@ function AddExpectationForm({ year, month, day, onAdded }: { year: number; month
         className="mb-2 w-full rounded-lg border px-3 py-2 text-sm outline-none"
         style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
       />
+      {type === 'saida_variavel' && (
+        <label className="mb-2 flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--muted)' }}>
+          <input type="checkbox" checked={split} onChange={(e) => setSplit(e.target.checked)} />
+          Despesa dividida — vou receber parte de volta
+        </label>
+      )}
+      {split && type === 'saida_variavel' && (
+        <div className="mb-2 flex gap-2">
+          <input
+            value={backAmount}
+            onChange={(e) => setBackAmount(e.target.value)}
+            placeholder="Volta (padrão: metade)"
+            inputMode="decimal"
+            className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm outline-none"
+            style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+          />
+          <input
+            type="date"
+            value={backDate}
+            onChange={(e) => setBackDate(e.target.value)}
+            className="rounded-lg border px-2 py-2 text-sm outline-none"
+            style={{ background: 'var(--card2)', borderColor: 'var(--border-l)', color: 'var(--text)' }}
+          />
+        </div>
+      )}
       {error && <p className="mb-2 text-xs" style={{ color: 'var(--red)' }}>{error}</p>}
       <button
         onClick={submit}
