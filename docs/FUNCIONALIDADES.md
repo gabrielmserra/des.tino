@@ -435,9 +435,12 @@ produto específico.
   previsto usado no resto do app.
 - **[Ambas]** Dívida ou parcela de meta recorrente sem dia certo
   cadastrado (não é obrigatório) cai no dia 1 do mês como padrão
-  visível; pendência já vencida de qualquer fonte aparece no início da
-  janela que está sendo exibida, não na data real já passada (evita que
-  uma conta esquecida "desapareça" do calendário).
+  visível. Saída já vencida e não paga (de qualquer fonte, de qualquer
+  mês) aparece **em hoje**, marcada como vencida — mesma regra do
+  alerta de saldo projetado (9.1): aparece uma vez só, no mês corrente,
+  e meses futuros mostram só o que vence neles (migração 050). Entrada
+  prevista atrasada fica na data original (não conta como dinheiro
+  entrando hoje).
 
 ## 10. Dashboard
 
@@ -934,7 +937,7 @@ recente) é listada.
 |---|---|---|
 | `get_future_commitments` | months (default 6) | Soma, mês a mês, parcelas de cartão previstas + fatura em aberto (rotulada pelo mês em que o ciclo começou) + dívidas em aberto + contas fixas pendentes. |
 | `get_balance_projection` (043) | month_id | Simula dia a dia, de hoje até o fim do mês, o saldo esperado (contas fixas + dívidas + fatura de cartão em aberto + parcelas futuras vs. entradas do Planejamento) — retorna `{day, balance, next_income_day}` do primeiro dia em que cruzaria zero, ou `null` se não é o mês corrente ou não acha nenhum dia problemático. |
-| `get_calendar_events` (049) | start, end | Visão unificada de tudo que tem data no intervalo — contas fixas, dívidas, metas, fatura de cartão (fechada e em aberto, via `_next_cycle_due_date`), parcelas futuras de cartão e previstos/renda planejada. Pendência vencida aparece no início da janela pedida (`greatest(data_real, start)`), não na data real passada. Pura leitura — nenhuma tabela nova; ver seção 9.2. |
+| `get_calendar_events` (049, redefinida na 050) | start, end | Visão unificada de tudo que tem data no intervalo — contas fixas, dívidas, metas, fatura de cartão (fechada e em aberto, via `_next_cycle_due_date`), parcelas futuras de cartão e previstos/renda planejada. Saída vencida e não paga aparece em `current_date` (mesma regra da 043); entrada fica na data real. Pura leitura — nenhuma tabela nova; ver seção 9.2. |
 | `_next_cycle_due_date` (049) | closing_day, due_day | Data de vencimento projetada do ciclo de cartão **ainda aberto** (quando ele fechar e vencer) — mesma lógica de `_cycle_due_date`, um ciclo à frente. |
 
 Grants: toda função é `grant execute ... to authenticated` — nunca
