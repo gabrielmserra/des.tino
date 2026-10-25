@@ -399,6 +399,12 @@ produto específico.
   Silêncio total quando não encontra nenhum dia problemático, e só
   simula quando o mês selecionado é o mês corrente de verdade (não faz
   sentido projetar um mês passado ou futuro).
+- **[Ambas]** Desde a migração 054, a simulação é **a mesma do card
+  "Livre para gastar"** (9.3) — mesmo saldo de partida e mesmos eventos
+  do Calendário (9.2), com todas as regras de lá —, só que limitada a
+  hoje → fim do mês corrente. Assim o alerta e o card nunca se
+  contradizem: se o alerta acusa um dia negativo, o card também mostra.
+  As regras abaixo continuam valendo, agora vindas do Calendário.
 - **[Ambas]** Contas fixas e fatura de cartão têm dia certo; se já
   venceram e continuam não pagas, contam como devidas **hoje** na
   simulação. Parcela de dívida não tem dia certo cadastrado (só
@@ -1031,7 +1037,7 @@ recente) é listada.
 | Função | Parâmetros | O que faz |
 |---|---|---|
 | `get_future_commitments` | months (default 6) | Soma, mês a mês, parcelas de cartão previstas + fatura em aberto (rotulada pelo mês em que o ciclo começou) + dívidas em aberto + contas fixas pendentes. |
-| `get_balance_projection` (043) | month_id | Simula dia a dia, de hoje até o fim do mês, o saldo esperado (contas fixas + dívidas + fatura de cartão em aberto + parcelas futuras vs. entradas do Planejamento) — retorna `{day, balance, next_income_day}` do primeiro dia em que cruzaria zero, ou `null` se não é o mês corrente ou não acha nenhum dia problemático. |
+| `get_balance_projection` (043, redefinida na 054) | month_id | Simula dia a dia, de hoje até o fim do mês, o saldo esperado — desde a 054 com o mesmo cálculo do `get_livre_para_gastar` (saldo acumulado + `get_calendar_events`) — retorna `{day, balance, next_income_day}` do primeiro dia em que cruzaria zero, ou `null` se não é o mês corrente ou não acha nenhum dia problemático. |
 | `get_livre_para_gastar` (051, redefinida na 053) | horizon_days (default 45), extra_amount?, extra_date? | Saldo acumulado real de hoje simulado dia a dia sobre `get_calendar_events`; retorna `{saldo_atual, livre, limite_dia, saldo_minimo, dia_critico, entradas, saidas, dias, sem_renda}` — livre = menor saldo do período, limite_dia = menor saldo(t)/t. `extra_amount`/`extra_date` simulam uma saída hipotética ("e se?") sem gravar. Ver seção 9.3. |
 | `get_livre_para_gastar_as` (053) | user_id, horizon_days | Mesmo cálculo pra um usuário específico — **só a role `service_role`** pode executar (usada pela Edge Function `quick-tx`, que roda com a chave de serviço); fixa o usuário na transação e chama `get_livre_para_gastar`. |
 | `_last_business_day` (052) | year, month | Último dia útil do mês (sexta se o último dia cair no fim de semana). |
