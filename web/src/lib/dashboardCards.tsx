@@ -25,6 +25,7 @@ import {
   fetchDailySpending,
   fetchDebtOverview,
   fetchFixedBillWatchData,
+  fetchLivreParaGastar,
   payCardBill,
   type MonthSeriesPoint,
 } from './api'
@@ -682,6 +683,60 @@ function SaldoEvolucaoCard() {
   )
 }
 
+// ── Livre para gastar (migration 051) ────────────────────────────────────
+function LivreParaGastarCard() {
+  const q = useQuery({ queryKey: ['livreParaGastar', 45], queryFn: () => fetchLivreParaGastar(45) })
+  const d = q.data
+  const todayIso = (() => {
+    const t = new Date()
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`
+  })()
+
+  let critical = ''
+  if (d && d.dia_critico && d.dia_critico.slice(0, 10) !== todayIso) {
+    const [, m, day] = d.dia_critico.slice(0, 10).split('-')
+    critical = d.saldo_minimo < 0
+      ? `⚠ Pelos compromissos, o saldo fica negativo em ${day}/${m} (${formatCurrency(d.saldo_minimo)}).`
+      : `Ponto mais apertado: ${day}/${m} (saldo de ${formatCurrency(d.saldo_minimo)}).`
+  }
+
+  return (
+    <div className="rounded-2xl border p-5" style={CARD_STYLE}>
+      <p className="text-[11px] font-bold" style={{ color: 'var(--muted)' }}>LIVRE PARA GASTAR</p>
+      {q.isLoading ? (
+        <p className="mt-1 text-3xl font-bold" style={{ color: 'var(--muted)' }}>…</p>
+      ) : !d ? (
+        <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>Não foi possível calcular agora.</p>
+      ) : (
+        <>
+          <p className="mt-1 text-3xl font-bold" style={{ color: d.livre > 0 ? 'var(--primary)' : 'var(--red)' }}>
+            {formatCurrency(d.livre)}
+          </p>
+          <p className="text-sm font-bold">
+            {formatCurrency(d.limite_dia)} por dia nos próximos {d.dias} dias
+          </p>
+          {critical && (
+            <p className="mt-2 text-xs" style={{ color: d.saldo_minimo < 0 ? 'var(--red)' : 'var(--muted)' }}>
+              {critical}
+            </p>
+          )}
+          {d.sem_renda && (
+            <p className="mt-1 text-xs" style={{ color: 'var(--accent)' }}>
+              Nenhuma entrada prevista nos próximos {d.dias} dias — cadastre as entradas no Planejamento.
+            </p>
+          )}
+          <p className="mt-2 text-[11px]" style={{ color: 'var(--muted)' }}>
+            Saldo hoje {formatCurrency(d.saldo_atual)} · saídas previstas {formatCurrency(d.saidas)} · entradas previstas {formatCurrency(d.entradas)}
+          </p>
+          <Link to="/calendario" className="mt-1 inline-block text-xs font-bold" style={{ color: 'var(--primary)' }}>
+            Ver no calendário →
+          </Link>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Gastos dos últimos 7 dias ───────────────────────────────────────────
 function GastosUltimos7DiasCard() {
   const dailyQ = useQuery({ queryKey: ['dailySpending', 7], queryFn: () => fetchDailySpending(7) })
@@ -901,6 +956,7 @@ export type CardDef = {
 
 export const CARD_REGISTRY: CardDef[] = [
   { id: 'saldo_mes', label: 'Saldo acumulado (destaque)', size: 'full', Component: SaldoMesCard },
+  { id: 'livre_para_gastar', label: 'Livre para gastar', size: 'full', Component: LivreParaGastarCard },
   { id: 'kpi_entradas', label: 'Entradas', size: 'compact', Component: KpiEntradasCard },
   { id: 'kpi_saidas', label: 'Saídas', size: 'compact', Component: KpiSaidasCard },
   { id: 'kpi_saldo_vrva', label: 'Saldo VR/VA', size: 'compact', Component: KpiSaldoVrVaCard },

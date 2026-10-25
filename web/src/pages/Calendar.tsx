@@ -13,6 +13,7 @@ const WEEKDAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
 
 const SOURCE_LABELS: Record<CalendarEvent['source'], string> = {
   fixed_bill: 'Conta fixa',
+  fixed_bill_projected: 'Conta fixa (prevista)',
   debt: 'Dívida',
   goal: 'Meta',
   card_invoice: 'Fatura de cartão',
@@ -20,6 +21,7 @@ const SOURCE_LABELS: Record<CalendarEvent['source'], string> = {
   card_installment: 'Parcela de cartão',
   expectation: 'Previsto',
   income: 'Entrada prevista',
+  income_projected: 'Entrada prevista (repete o último plano)',
 }
 
 function pad(n: number): string {
@@ -250,7 +252,10 @@ export function Calendar() {
 
   const isToday = (d: number) => year === today.getFullYear() && month === today.getMonth() + 1 && d === today.getDate()
 
-  const refresh = () => qc.invalidateQueries({ queryKey: ['calendarEvents'] })
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['calendarEvents'] })
+    qc.invalidateQueries({ queryKey: ['livreParaGastar'] })
+  }
 
   return (
     <div className="p-4 pb-8">

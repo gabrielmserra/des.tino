@@ -441,15 +441,52 @@ produto específico.
   e meses futuros mostram só o que vence neles (migração 050). Entrada
   prevista atrasada fica na data original (não conta como dinheiro
   entrando hoje).
+- **[Ambas]** Projeções pra meses que ainda não têm os dados criados
+  (migração 051): conta fixa de mês (corrente ou futuro) cuja parcela
+  mensal ainda não foi gerada aparece pelo valor esperado e dia de
+  vencimento do cadastro ("Conta fixa (prevista)"; "Feito" cria a
+  parcela do mês e marca paga). Mês sem planejamento de renda repete as
+  entradas do último mês que tem plano ("Entrada prevista (repete o
+  último plano)") — assim que o plano do mês é criado, ele passa a
+  valer. Meses passados nunca são projetados.
+
+### 9.3 Card "Livre para gastar"
+
+- **[Ambas]** Card do Dashboard que responde "quanto posso gastar agora
+  sem faltar dinheiro pra nada que já está previsto". Simula o saldo dia
+  a dia pelos próximos 45 dias (`get_livre_para_gastar`, migração 051),
+  em cima dos mesmos eventos do Calendário (9.2): parte do saldo
+  acumulado real de hoje, soma as entradas e subtrai as saídas previstas
+  em cada dia.
+  - **Livre para gastar** = o menor saldo do período (nunca abaixo de 0).
+    Não é "saldo − contas até a próxima entrada": pega o ponto mais
+    apertado de todo o horizonte, mesmo que ele venha depois de uma
+    entrada.
+  - **Por dia** = o menor valor de saldo(t) ÷ t — o ritmo que dá pra
+    manter sem que algum dia fique negativo.
+  - Mostra o **ponto mais apertado** (data e saldo previsto nesse dia), em
+    vermelho quando o saldo previsto fica negativo; aviso quando não há
+    nenhuma entrada prevista no período; e a conta resumida (saldo hoje,
+    saídas e entradas previstas).
+- **[Ambas]** Entrada de valor variável (ex.: a do último dia útil, que
+  muda com atraso no ponto) entra pelo valor cadastrado no Planejamento.
+- **[Ambas]** Parcelas de meta e contas fixas pendentes contam como saída
+  até serem marcadas como feitas, mesmo sendo só checklist (não mexem no
+  saldo) — se o dinheiro já saiu da conta e você não marcou, o card
+  desconta duas vezes; marque "Feito" no Calendário.
+- **[Ambas]** O alerta de saldo projetado negativo (9.1) continua
+  existindo em paralelo.
 
 ## 10. Dashboard
 
-- **[Ambas]** 18 cards configuráveis, cada usuário escolhe quais quer ver
-  e em que ordem:
+- **[Ambas]** 20 cards configuráveis, cada usuário escolhe quais quer ver
+  e em que ordem (card novo entra no fim da lista de quem já tinha
+  personalizado o Dashboard — dá pra mover em "Editar Dashboard"):
 
   | Card | Tipo |
   |---|---|
   | Saldo acumulado (destaque) | KPI grande |
+  | Livre para gastar | KPI grande (ver 9.3) |
   | Entradas | KPI |
   | Saídas | KPI |
   | Saldo VR/VA | KPI |
@@ -937,7 +974,8 @@ recente) é listada.
 |---|---|---|
 | `get_future_commitments` | months (default 6) | Soma, mês a mês, parcelas de cartão previstas + fatura em aberto (rotulada pelo mês em que o ciclo começou) + dívidas em aberto + contas fixas pendentes. |
 | `get_balance_projection` (043) | month_id | Simula dia a dia, de hoje até o fim do mês, o saldo esperado (contas fixas + dívidas + fatura de cartão em aberto + parcelas futuras vs. entradas do Planejamento) — retorna `{day, balance, next_income_day}` do primeiro dia em que cruzaria zero, ou `null` se não é o mês corrente ou não acha nenhum dia problemático. |
-| `get_calendar_events` (049, redefinida na 050) | start, end | Visão unificada de tudo que tem data no intervalo — contas fixas, dívidas, metas, fatura de cartão (fechada e em aberto, via `_next_cycle_due_date`), parcelas futuras de cartão e previstos/renda planejada. Saída vencida e não paga aparece em `current_date` (mesma regra da 043); entrada fica na data real. Pura leitura — nenhuma tabela nova; ver seção 9.2. |
+| `get_livre_para_gastar` (051) | horizon_days (default 45) | Saldo acumulado real de hoje simulado dia a dia sobre `get_calendar_events`; retorna `{saldo_atual, livre, limite_dia, saldo_minimo, dia_critico, entradas, saidas, dias, sem_renda}` — livre = menor saldo do período, limite_dia = menor saldo(t)/t. Ver seção 9.3. |
+| `get_calendar_events` (049, redefinida na 050 e na 051) | start, end | Visão unificada de tudo que tem data no intervalo — contas fixas, dívidas, metas, fatura de cartão (fechada e em aberto, via `_next_cycle_due_date`), parcelas futuras de cartão e previstos/renda planejada. Saída vencida e não paga aparece em `current_date` (mesma regra da 043); entrada fica na data real. Pura leitura — nenhuma tabela nova; ver seção 9.2. |
 | `_next_cycle_due_date` (049) | closing_day, due_day | Data de vencimento projetada do ciclo de cartão **ainda aberto** (quando ele fechar e vencer) — mesma lógica de `_cycle_due_date`, um ciclo à frente. |
 
 Grants: toda função é `grant execute ... to authenticated` — nunca
@@ -1122,7 +1160,7 @@ excluir carteira fictícia + export/import), `Disclaimer.tsx`,
 - `tips.ts` — motor do Guru Financeiro (porte fiel de
   `ui/dashboard.py:_build_tips`, ver seção 10.1).
 - `dashboardCards.tsx` (~870 linhas) — registro + implementação dos
-  ~19 cards do Dashboard (gráficos via `recharts`).
+  ~20 cards do Dashboard (gráficos via `recharts`).
 - `format.ts`, `constants.ts` — formatação (moeda, datas) e listas
   estáticas (categorias, formas de pagamento).
 - `month.tsx`, `auth.tsx`, `theme.tsx`, `txform.tsx` — contexts React

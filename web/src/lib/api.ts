@@ -714,14 +714,35 @@ export async function fetchBalanceProjection(monthId: number): Promise<BalancePr
 // e previstos/renda planejada — pura leitura, nenhuma tabela nova.
 export type CalendarEvent = {
   event_date: string
-  source: 'fixed_bill' | 'debt' | 'goal' | 'card_invoice' | 'card_invoice_open'
-    | 'card_installment' | 'expectation' | 'income'
+  source: 'fixed_bill' | 'fixed_bill_projected' | 'debt' | 'goal' | 'card_invoice' | 'card_invoice_open'
+    | 'card_installment' | 'expectation' | 'income' | 'income_projected'
   ref_table: string
   ref_id: number
   label: string
   amount: number
   is_income: boolean
   status: 'pending' | 'overdue'
+}
+
+export type LivreParaGastar = {
+  saldo_atual: number
+  livre: number
+  limite_dia: number
+  saldo_minimo: number
+  dia_critico: string
+  entradas: number
+  saidas: number
+  dias: number
+  sem_renda: boolean
+}
+
+// Card "Livre para gastar" (migration 051): saldo real de hoje simulado
+// dia a dia pelos próximos `days` dias sobre get_calendar_events — livre =
+// menor saldo do período, limite_dia = menor saldo(t)/t.
+export async function fetchLivreParaGastar(days = 45): Promise<LivreParaGastar | null> {
+  const { data, error } = await supabase.rpc('get_livre_para_gastar', { p_horizon_days: days })
+  if (error) throw error
+  return (data ?? null) as LivreParaGastar | null
 }
 
 export async function fetchCalendarEvents(startDate: string, endDate: string): Promise<CalendarEvent[]> {
@@ -741,15 +762,24 @@ export async function markCalendarEventDone(
 ): Promise<void> {
   if (refTable === 'fixed_bill_instances') {
     await payFixedBillInstance(refId)
+  } else if (refTable === 'fixed_bills') {
+    // Conta fixa projetada (mês sem instância ainda): cria a instância do
+    // mês e paga ela.
+    const year = Number(eventDate.slice(0, 4))
+    const month = Number(eventDate.slice(5, 7))
+    await ensureFixedBillInstances(year, month)
+    const { data, error } = await supabase.from('fixed_bill_instances').select('id')
+      .eq('bill_id', refId).eq('due_year', year).eq('due_month', month)
+    if (error) throw error
+    if (data && data.length > 0) await payFixedBillInstance(data[0].id as number)
   } else if (refTable === 'debt_installments') {
     await payInstallment(refId)
   } else if (refTable === 'goal_installments') {
     await contributeGoalInstallment(refId)
   } else if (refTable === 'credit_cards') {
-    const d = new Date(eventDate)
-    const monthId = await ensureMonth(
-      `${MONTHS_PT[d.getMonth()]} ${d.getFullYear()}`, d.getFullYear(), d.getMonth() + 1,
-    )
+    const year = Number(eventDate.slice(0, 4))
+    const month = Number(eventDate.slice(5, 7))
+    const monthId = await ensureMonth(`${MONTHS_PT[month - 1]} ${year}`, year, month)
     await payCardBill(refId, monthId)
   } else if (refTable === 'transactions') {
     const { error } = await supabase.from('transactions')

@@ -20,6 +20,7 @@ _WEEKDAYS = ["D", "S", "T", "Q", "Q", "S", "S"]
 
 _SOURCE_LABELS = {
     "fixed_bill": "Conta fixa",
+    "fixed_bill_projected": "Conta fixa (prevista)",
     "debt": "Dívida",
     "goal": "Meta",
     "card_invoice": "Fatura de cartão",
@@ -27,6 +28,7 @@ _SOURCE_LABELS = {
     "card_installment": "Parcela de cartão",
     "expectation": "Previsto",
     "income": "Entrada prevista",
+    "income_projected": "Entrada prevista (repete o último plano)",
 }
 
 

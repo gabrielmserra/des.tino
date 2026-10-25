@@ -1788,6 +1788,15 @@ def mark_calendar_event_done(ref_table: str, ref_id: int, event_date: date) -> N
     aqui — são só projeção, se resolvem quando uma entrada real é lançada."""
     if ref_table == "fixed_bill_instances":
         pay_fixed_bill_instance(ref_id)
+    elif ref_table == "fixed_bills":
+        # Conta fixa projetada (mês sem instância ainda): cria a instância
+        # do mês e paga ela.
+        ensure_fixed_bill_instances(event_date.year, event_date.month)
+        resp = get_client().table("fixed_bill_instances").select("id") \
+            .eq("bill_id", ref_id).eq("due_year", event_date.year) \
+            .eq("due_month", event_date.month).execute()
+        if resp.data:
+            pay_fixed_bill_instance(resp.data[0]["id"])
     elif ref_table == "debt_installments":
         pay_installment({"id": ref_id})
     elif ref_table == "goal_installments":
@@ -1799,6 +1808,15 @@ def mark_calendar_event_done(ref_table: str, ref_id: int, event_date: date) -> N
         month = _ensure_month(event_date.year, event_date.month)
         get_client().table("transactions").update({"is_expectation": False}).eq("id", ref_id).execute()
         _invalidate(month["id"])
+
+
+def get_livre_para_gastar(horizon_days: int = 45) -> Optional[dict]:
+    """Card "Livre para gastar" (migration 051): saldo real de hoje
+    simulado dia a dia pelos próximos horizon_days sobre
+    get_calendar_events — livre = menor saldo do período, limite_dia =
+    menor saldo(t)/t. None se o usuário ainda não tem nenhum mês."""
+    resp = get_client().rpc("get_livre_para_gastar", {"p_horizon_days": horizon_days}).execute()
+    return resp.data or None
 
 
 # ---------------------------------------------------------------------------

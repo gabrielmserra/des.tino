@@ -19,6 +19,7 @@ from utils.helpers import format_currency, MONTHS_PT, PAYMENT_METHODS
 # ── Catálogo de cards (mesmos ids/ordem padrão do site) ─────────────────
 CARD_CATALOG = [
     {"id": "saldo_mes",                              "label": "Saldo acumulado (destaque)",            "size": "full"},
+    {"id": "livre_para_gastar",                      "label": "Livre para gastar",                     "size": "full"},
     {"id": "kpi_entradas",                           "label": "Entradas",                              "size": "compact"},
     {"id": "kpi_saidas",                             "label": "Saídas",                                "size": "compact"},
     {"id": "kpi_saldo_vrva",                         "label": "Saldo VR/VA",                           "size": "compact"},
@@ -72,7 +73,8 @@ class Dashboard(ctk.CTkScrollableFrame):
     # ------------------------------------------------------------------
     def _build(self) -> None:
         self._card_lbls = {}
-        for attr in ("_saldo_proj_lbl", "_saldo_delta_lbl", "_pie_host", "_bar_host", "_pm_host",
+        for attr in ("_livre_value_lbl", "_livre_day_lbl", "_livre_detail_lbl",
+                     "_saldo_proj_lbl", "_saldo_delta_lbl", "_pie_host", "_bar_host", "_pm_host",
                      "_savings_pct", "_savings_bar_bg", "_savings_bar_fill",
                      "_savings_label", "_goals_frame", "_goals_count_lbl",
                      "_credit_frame", "_tips_frame", "_saldo_evo_host", "_gastos7d_host",
@@ -215,6 +217,58 @@ class Dashboard(ctk.CTkScrollableFrame):
                                             text_color=T.GOLD, anchor="w",
                                             wraplength=430, justify="left")
         return wrapper
+
+    def _build_card_livre_para_gastar(self, parent) -> ctk.CTkFrame:
+        card = ctk.CTkFrame(parent, fg_color=T.CARD, corner_radius=14,
+                            border_width=1, border_color=T.BORDER)
+        card.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(card, text="LIVRE PARA GASTAR", font=F(11, "bold"),
+                     text_color=T.MUTED, anchor="w").grid(
+            row=0, column=0, sticky="w", padx=24, pady=(18, 0))
+        self._livre_value_lbl = ctk.CTkLabel(card, text="...", font=F(28, "bold"),
+                                             text_color=T.GREEN, anchor="w")
+        self._livre_value_lbl.grid(row=1, column=0, sticky="w", padx=24, pady=(2, 0))
+        self._livre_day_lbl = ctk.CTkLabel(card, text="", font=F(13, "bold"),
+                                           text_color=T.TEXT, anchor="w")
+        self._livre_day_lbl.grid(row=2, column=0, sticky="w", padx=24)
+        self._livre_detail_lbl = ctk.CTkLabel(card, text="", font=F(11), text_color=T.MUTED,
+                                              anchor="w", justify="left", wraplength=640)
+        self._livre_detail_lbl.grid(row=3, column=0, sticky="w", padx=24, pady=(6, 18))
+        return card
+
+    def _update_livre_para_gastar(self, data: Optional[dict]) -> None:
+        if not hasattr(self, "_livre_value_lbl"):
+            return
+        if not data:
+            self._livre_value_lbl.configure(text="—", text_color=T.MUTED)
+            self._livre_day_lbl.configure(text="")
+            self._livre_detail_lbl.configure(text="Não foi possível calcular agora.")
+            return
+        livre = float(data.get("livre") or 0)
+        limite = float(data.get("limite_dia") or 0)
+        minimo = float(data.get("saldo_minimo") or 0)
+        dias = int(data.get("dias") or 45)
+        self._livre_value_lbl.configure(text=format_currency(livre),
+                                        text_color=T.GREEN if livre > 0 else T.RED)
+        self._livre_day_lbl.configure(text=f"{format_currency(limite)} por dia nos próximos {dias} dias")
+
+        lines = []
+        dia = data.get("dia_critico")
+        if dia and str(dia) != date.today().isoformat():
+            y, m, d = str(dia)[:10].split("-")
+            if minimo < 0:
+                lines.append(f"⚠ Pelos compromissos, o saldo fica negativo em {d}/{m} "
+                             f"({format_currency(minimo)}).")
+            else:
+                lines.append(f"Ponto mais apertado: {d}/{m} (saldo de {format_currency(minimo)}).")
+        if data.get("sem_renda"):
+            lines.append(f"Nenhuma entrada prevista nos próximos {dias} dias — "
+                         "cadastre as entradas no Planejamento.")
+        lines.append(f"Saldo hoje {format_currency(float(data.get('saldo_atual') or 0))}  ·  "
+                     f"saídas previstas {format_currency(float(data.get('saidas') or 0))}  ·  "
+                     f"entradas previstas {format_currency(float(data.get('entradas') or 0))}")
+        self._livre_detail_lbl.configure(
+            text="\n".join(lines), text_color=T.RED if minimo < 0 else T.MUTED)
 
     def _make_kpi_card(self, parent, key: str, label: str, color: str,
                          bind_investments: bool = False, info: str = None) -> ctk.CTkFrame:
@@ -652,6 +706,14 @@ class Dashboard(ctk.CTkScrollableFrame):
                 except Exception:
                     return None
 
+            def fetch_livre():
+                if not hasattr(self, "_livre_value_lbl"):
+                    return None
+                try:
+                    return db.get_livre_para_gastar(45)
+                except Exception:
+                    return None
+
             def fetch_plan_block():
                 try:
                     plan          = db.get_plan(month_id)
@@ -696,7 +758,8 @@ class Dashboard(ctk.CTkScrollableFrame):
                 except Exception:
                     return []
 
-            with cf.ThreadPoolExecutor(max_workers=14) as ex:
+            with cf.ThreadPoolExecutor(max_workers=15) as ex:
+                fut_livre   = ex.submit(fetch_livre)
                 fut_pie     = ex.submit(fetch_pie)
                 fut_pm      = ex.submit(fetch_pm)
                 fut_inv     = ex.submit(fetch_total_inv)
@@ -743,6 +806,7 @@ class Dashboard(ctk.CTkScrollableFrame):
                 plan, plan_items, plan_realized     = fut_plan.result()
                 daily                                = fut_daily.result()
                 top_expenses                         = fut_top.result()
+                livre                                = fut_livre.result()
 
             # ── Fase 2: montagem dos gráficos — matplotlib/Tk não é
             # thread-safe, então sempre em série, só depois que todos os
@@ -823,6 +887,8 @@ class Dashboard(ctk.CTkScrollableFrame):
                        self._update_plan_alert(p, it, pr))
             self.after(0, lambda w=card_warning: self._update_card_alert(w))
             self.after(0, lambda bp=balance_projection: self._update_balance_alert(bp))
+            if hasattr(self, "_livre_value_lbl"):
+                self.after(0, lambda lv=livre: self._update_livre_para_gastar(lv))
             if pie_fig is not None:
                 self.after(0, lambda: self._embed_pie(pie_fig))
             if bar_fig is not None:
@@ -1464,6 +1530,7 @@ class Dashboard(ctk.CTkScrollableFrame):
     # Dispatch id do catálogo → construtor (definido após os métodos acima)
     _CARD_BUILDERS = {
         "saldo_mes":                           _build_card_saldo_mes,
+        "livre_para_gastar":                   _build_card_livre_para_gastar,
         "kpi_entradas":                        _build_card_kpi_entradas,
         "kpi_saidas":                          _build_card_kpi_saidas,
         "kpi_saldo_vrva":                      _build_card_kpi_saldo_vrva,
