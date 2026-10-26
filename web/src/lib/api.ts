@@ -731,6 +731,7 @@ export type LivreParaGastar = {
   limite_dia: number
   saldo_minimo: number
   dia_critico: string
+  primeiro_negativo?: string | null
   entradas: number
   saidas: number
   dias: number

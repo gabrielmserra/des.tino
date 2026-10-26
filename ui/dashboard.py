@@ -282,10 +282,8 @@ class Dashboard(ctk.CTkScrollableFrame):
         limite = float(data.get("limite_dia") or 0)
         minimo = float(data.get("saldo_minimo") or 0)
         if minimo < 0:
-            y, m, d = str(data.get("dia_critico"))[:10].split("-")
             self._livre_sim_lbl.configure(
-                text=f"⚠ Não cabe: o saldo ficaria negativo em {d}/{m} ({format_currency(minimo)}).",
-                text_color=T.RED)
+                text="⚠ Não cabe: " + _negative_balance_text(data, would=True), text_color=T.RED)
         else:
             self._livre_sim_lbl.configure(
                 text=f"Cabe. Sobraria {format_currency(livre)} livre ({format_currency(limite)}/dia).",
@@ -309,13 +307,11 @@ class Dashboard(ctk.CTkScrollableFrame):
 
         lines = []
         dia = data.get("dia_critico")
-        if dia and str(dia) != date.today().isoformat():
+        if minimo < 0:
+            lines.append("⚠ Pelos compromissos, " + _negative_balance_text(data))
+        elif dia and str(dia) != date.today().isoformat():
             y, m, d = str(dia)[:10].split("-")
-            if minimo < 0:
-                lines.append(f"⚠ Pelos compromissos, o saldo fica negativo em {d}/{m} "
-                             f"({format_currency(minimo)}).")
-            else:
-                lines.append(f"Ponto mais apertado: {d}/{m} (saldo de {format_currency(minimo)}).")
+            lines.append(f"Ponto mais apertado: {d}/{m} (saldo de {format_currency(minimo)}).")
         if data.get("sem_renda"):
             lines.append(f"Nenhuma entrada prevista nos próximos {dias} dias — "
                          "cadastre as entradas no Planejamento.")
@@ -1802,6 +1798,23 @@ class EditDashboardDialog(ctk.CTkToplevel):
 
 
 # ──────────────────────────────────────────────────────────────────────
+def _negative_balance_text(data: dict, would: bool = False) -> str:
+    """Frase do saldo negativo do "Livre para gastar": primeiro dia em que
+    fica negativo + pior ponto, quando são dias diferentes (migração 055).
+    Sem 'primeiro_negativo' (antes da 055) cai no pior dia. Réplica de
+    negativeBalanceText em web/src/lib/dashboardCards.tsx."""
+    def br(iso) -> str:
+        y, m, d = str(iso)[:10].split("-")
+        return f"{d}/{m}"
+    verb = "ficaria" if would else "fica"
+    minimo = format_currency(float(data.get("saldo_minimo") or 0))
+    crit = data.get("dia_critico")
+    first = data.get("primeiro_negativo") or crit
+    if first and crit and str(first)[:10] != str(crit)[:10]:
+        return f"o saldo {verb} negativo a partir de {br(first)} (pior ponto: {minimo} em {br(crit)})."
+    return f"o saldo {verb} negativo em {br(crit)} ({minimo})."
+
+
 def _credit_safety(pct_used: float, days_due: int, spent: float,
                    saldo: float, avail) -> tuple:
     """Retorna (mensagem, cor) do indicador de segurança do cartão."""

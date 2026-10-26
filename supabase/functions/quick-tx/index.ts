@@ -281,8 +281,14 @@ Deno.serve(async (req) => {
     if (lv) {
       const crit = String(lv.dia_critico ?? "").slice(0, 10);
       const critBr = crit ? `${crit.slice(8, 10)}/${crit.slice(5, 7)}` : "";
+      // Primeiro dia negativo + pior ponto quando diferem (migração 055).
+      const first = String(lv.primeiro_negativo ?? lv.dia_critico ?? "").slice(0, 10);
+      const firstBr = first ? `${first.slice(8, 10)}/${first.slice(5, 7)}` : "";
+      const minBr = formatBRL(Number(lv.saldo_minimo));
       livreMsg = Number(lv.saldo_minimo) < 0
-        ? `\n⚠ Pelos compromissos, o saldo fica negativo em ${critBr} (${formatBRL(Number(lv.saldo_minimo))}).`
+        ? (first && first !== crit
+          ? `\n⚠ Pelos compromissos, o saldo fica negativo a partir de ${firstBr} (pior ponto: ${minBr} em ${critBr}).`
+          : `\n⚠ Pelos compromissos, o saldo fica negativo em ${critBr} (${minBr}).`)
         : `\nRestam ${formatBRL(Number(lv.limite_dia))} pra hoje e ${formatBRL(Number(lv.livre))} livres `
           + (crit && crit !== todayInSaoPaulo() ? `até ${critBr}.` : "nos próximos 45 dias.");
     }

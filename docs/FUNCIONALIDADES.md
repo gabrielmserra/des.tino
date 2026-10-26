@@ -490,10 +490,14 @@ produto específico.
     entrada.
   - **Por dia** = o menor valor de saldo(t) ÷ t — o ritmo que dá pra
     manter sem que algum dia fique negativo.
-  - Mostra o **ponto mais apertado** (data e saldo previsto nesse dia), em
-    vermelho quando o saldo previsto fica negativo; aviso quando não há
-    nenhuma entrada prevista no período; e a conta resumida (saldo hoje,
-    saídas e entradas previstas).
+  - Mostra o **ponto mais apertado** (data e saldo previsto nesse dia).
+    Quando o saldo previsto fica negativo, o aviso em vermelho diz o
+    **primeiro dia** em que isso acontece e, se for outro dia, o pior
+    ponto: *"o saldo fica negativo a partir de 28/10 (pior ponto:
+    −R$ 1.487,90 em 10/11)"* — o mesmo primeiro dia que o alerta de saldo
+    projetado (9.1) mostra (migração 055). Também avisa quando não há
+    nenhuma entrada prevista no período, e mostra a conta resumida (saldo
+    hoje, saídas e entradas previstas).
 - **[Ambas]** Entrada de valor variável (ex.: a do último dia útil, que
   muda com atraso no ponto) entra pelo valor cadastrado no Planejamento.
 - **[Ambas]** Parcelas de meta e contas fixas pendentes contam como saída
@@ -1038,7 +1042,7 @@ recente) é listada.
 |---|---|---|
 | `get_future_commitments` | months (default 6) | Soma, mês a mês, parcelas de cartão previstas + fatura em aberto (rotulada pelo mês em que o ciclo começou) + dívidas em aberto + contas fixas pendentes. |
 | `get_balance_projection` (043, redefinida na 054) | month_id | Simula dia a dia, de hoje até o fim do mês, o saldo esperado — desde a 054 com o mesmo cálculo do `get_livre_para_gastar` (saldo acumulado + `get_calendar_events`) — retorna `{day, balance, next_income_day}` do primeiro dia em que cruzaria zero, ou `null` se não é o mês corrente ou não acha nenhum dia problemático. |
-| `get_livre_para_gastar` (051, redefinida na 053) | horizon_days (default 45), extra_amount?, extra_date? | Saldo acumulado real de hoje simulado dia a dia sobre `get_calendar_events`; retorna `{saldo_atual, livre, limite_dia, saldo_minimo, dia_critico, entradas, saidas, dias, sem_renda}` — livre = menor saldo do período, limite_dia = menor saldo(t)/t. `extra_amount`/`extra_date` simulam uma saída hipotética ("e se?") sem gravar. Ver seção 9.3. |
+| `get_livre_para_gastar` (051, redefinida na 053 e 055) | horizon_days (default 45), extra_amount?, extra_date? | Saldo acumulado real de hoje simulado dia a dia sobre `get_calendar_events`; retorna `{saldo_atual, livre, limite_dia, saldo_minimo, dia_critico, primeiro_negativo, entradas, saidas, dias, sem_renda}` — livre = menor saldo do período, limite_dia = menor saldo(t)/t, dia_critico = dia do menor saldo, primeiro_negativo (055) = primeiro dia abaixo de zero ou null. `extra_amount`/`extra_date` simulam uma saída hipotética ("e se?") sem gravar. Ver seção 9.3. |
 | `get_livre_para_gastar_as` (053) | user_id, horizon_days | Mesmo cálculo pra um usuário específico — **só a role `service_role`** pode executar (usada pela Edge Function `quick-tx`, que roda com a chave de serviço); fixa o usuário na transação e chama `get_livre_para_gastar`. |
 | `_last_business_day` (052) | year, month | Último dia útil do mês (sexta se o último dia cair no fim de semana). |
 | `get_calendar_events` (049, redefinida na 050, 051 e 052) | start, end | Visão unificada de tudo que tem data no intervalo — contas fixas, dívidas, metas, fatura de cartão (fechada e em aberto, via `_next_cycle_due_date`), parcelas futuras de cartão e previstos/renda planejada. Saída vencida e não paga aparece em `current_date` (mesma regra da 043); entrada fica na data real. Pura leitura — nenhuma tabela nova; ver seção 9.2. |

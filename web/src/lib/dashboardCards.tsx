@@ -26,6 +26,7 @@ import {
   fetchDebtOverview,
   fetchFixedBillWatchData,
   fetchLivreParaGastar,
+  type LivreParaGastar,
   payCardBill,
   type MonthSeriesPoint,
 } from './api'
@@ -684,6 +685,20 @@ function SaldoEvolucaoCard() {
 }
 
 // ── Livre para gastar (migration 051) ────────────────────────────────────
+// Frase do saldo negativo: primeiro dia em que fica negativo + pior ponto,
+// quando são dias diferentes (migração 055). Sem primeiro_negativo (antes
+// da 055) cai no pior dia. Réplica de ui/dashboard.py:_negative_balance_text.
+function negativeBalanceText(d: LivreParaGastar, would = false): string {
+  const br = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
+  const verb = would ? 'ficaria' : 'fica'
+  const crit = d.dia_critico?.slice(0, 10) ?? ''
+  const first = (d.primeiro_negativo ?? d.dia_critico)?.slice(0, 10) ?? ''
+  if (first && crit && first !== crit) {
+    return `o saldo ${verb} negativo a partir de ${br(first)} (pior ponto: ${formatCurrency(d.saldo_minimo)} em ${br(crit)}).`
+  }
+  return `o saldo ${verb} negativo em ${br(crit)} (${formatCurrency(d.saldo_minimo)}).`
+}
+
 function parseBRL(raw: string): number {
   const n = parseFloat(raw.trim().replace(/\./g, '').replace(',', '.'))
   return isNaN(n) ? 0 : Math.max(0, n)
@@ -704,11 +719,7 @@ function LivreSimulacao() {
       if (!s) {
         setResult({ text: 'Não deu pra simular agora.', color: 'var(--muted)' })
       } else if (s.saldo_minimo < 0) {
-        const [, m, day] = s.dia_critico.slice(0, 10).split('-')
-        setResult({
-          text: `⚠ Não cabe: o saldo ficaria negativo em ${day}/${m} (${formatCurrency(s.saldo_minimo)}).`,
-          color: 'var(--red)',
-        })
+        setResult({ text: `⚠ Não cabe: ${negativeBalanceText(s, true)}`, color: 'var(--red)' })
       } else {
         setResult({
           text: `Cabe. Sobraria ${formatCurrency(s.livre)} livre (${formatCurrency(s.limite_dia)}/dia).`,
@@ -762,11 +773,11 @@ function LivreParaGastarCard() {
   })()
 
   let critical = ''
-  if (d && d.dia_critico && d.dia_critico.slice(0, 10) !== todayIso) {
+  if (d && d.saldo_minimo < 0) {
+    critical = `⚠ Pelos compromissos, ${negativeBalanceText(d)}`
+  } else if (d && d.dia_critico && d.dia_critico.slice(0, 10) !== todayIso) {
     const [, m, day] = d.dia_critico.slice(0, 10).split('-')
-    critical = d.saldo_minimo < 0
-      ? `⚠ Pelos compromissos, o saldo fica negativo em ${day}/${m} (${formatCurrency(d.saldo_minimo)}).`
-      : `Ponto mais apertado: ${day}/${m} (saldo de ${formatCurrency(d.saldo_minimo)}).`
+    critical = `Ponto mais apertado: ${day}/${m} (saldo de ${formatCurrency(d.saldo_minimo)}).`
   }
 
   return (
