@@ -436,6 +436,16 @@ produto específico.
   confirmar previsto) — nenhum fluxo de pagamento novo. Entrada prevista
   do Planejamento não tem botão de ação aqui: é só projeção, se resolve
   quando uma entrada real é lançada.
+- **[Ambas]** Entrada prevista do Planejamento tem botão **"Recebido"**
+  (migração 056): pra quando o dinheiro cai de um jeito que a regra
+  automática não reconhece (ex.: salário dividido em dois Pix, 1.700 +
+  2.000). Grava a data prevista + valor em `plan_income_receipts` e a
+  entrada some da projeção. Chaveado por data+valor (não pelo item do
+  plano), porque salvar o Planejamento recria os itens de renda.
+- **[Ambas]** Previsto lançado num **cartão de crédito** (ex.: parcela
+  futura de compra parcelada) aparece no **vencimento da fatura** do
+  ciclo em que cai (`_card_due_for`, migração 056) — é quando o dinheiro
+  sai —, não na data da compra.
 - **[Ambas]** "+ Adicionar" dentro do dia cria um lançamento previsto
   (`is_expectation=true`) com a data daquele dia — mesmo mecanismo de
   previsto usado no resto do app. Numa saída, a opção **"Despesa
@@ -675,9 +685,17 @@ dívidas) e mostra até 3 cartões, sempre nesta ordem de prioridade:
   - pendência ainda não vencida: data do extrato até 5 dias do
     vencimento; pendência vencida (aparece em "hoje" no Calendário):
     qualquer data;
-  - só saídas, nunca compra no cartão (que vai pra fatura) nem linha
-    marcada como possível duplicata; cada pendência casa com no máximo
-    uma linha.
+  - só saídas, nunca linha marcada como possível duplicata; compra no
+    cartão só com parcela de cartão prevista; cada pendência casa com no
+    máximo uma linha.
+  **Previsto casado é absorvido** (desde a v4.7.6): quando a linha casa
+  com um lançamento previsto (ex.: "KaBuM parcela 2/10" prevista no
+  cartão), a revisão mostra "Confirmar o previsto (sem duplicar)" e, ao
+  confirmar, o previsto vira real com os dados da linha (data, descrição,
+  valor, mês, cartão) — **nenhum lançamento novo é criado**. Compra no
+  cartão só casa com parcela de cartão prevista (sem critério de data,
+  porque o previsto fica no vencimento da fatura), e "parcela n/m" só
+  casa com o mesmo n/m. A detecção de duplicata ignora previstos.
   Nome no extrato muito diferente do cadastrado (ex.: "Claude Pro" ×
   "CLAUDE.AI SUBSCRIPTION") não casa — aí a baixa é manual no Calendário.
   Falha ao buscar/baixar pendências nunca bloqueia nem desfaz a
@@ -908,6 +926,10 @@ itens). `is_last_business_day` (052): a data vira o último dia útil do
 mês (sexta se cair no fim de semana); `expected_day` fica 31 só por
 compatibilidade.
 
+**`plan_income_receipts`** (migração 056) — entrada prevista marcada como
+recebida no Calendário (botão "Recebido"). `id, user_id, expected_date,
+amount, received_at`, único por `(user_id, expected_date, amount)`.
+
 **`debts`** — `id, user_id, description, creditor, total_amount,
 category, notes, created_at, interest_rate, due_day` (interest_rate na
 migração 023, opcional, só armazenada pra exibição — quem calcula a
@@ -1044,8 +1066,9 @@ recente) é listada.
 | `get_balance_projection` (043, redefinida na 054) | month_id | Simula dia a dia, de hoje até o fim do mês, o saldo esperado — desde a 054 com o mesmo cálculo do `get_livre_para_gastar` (saldo acumulado + `get_calendar_events`) — retorna `{day, balance, next_income_day}` do primeiro dia em que cruzaria zero, ou `null` se não é o mês corrente ou não acha nenhum dia problemático. |
 | `get_livre_para_gastar` (051, redefinida na 053 e 055) | horizon_days (default 45), extra_amount?, extra_date? | Saldo acumulado real de hoje simulado dia a dia sobre `get_calendar_events`; retorna `{saldo_atual, livre, limite_dia, saldo_minimo, dia_critico, primeiro_negativo, entradas, saidas, dias, sem_renda}` — livre = menor saldo do período, limite_dia = menor saldo(t)/t, dia_critico = dia do menor saldo, primeiro_negativo (055) = primeiro dia abaixo de zero ou null. `extra_amount`/`extra_date` simulam uma saída hipotética ("e se?") sem gravar. Ver seção 9.3. |
 | `get_livre_para_gastar_as` (053) | user_id, horizon_days | Mesmo cálculo pra um usuário específico — **só a role `service_role`** pode executar (usada pela Edge Function `quick-tx`, que roda com a chave de serviço); fixa o usuário na transação e chama `get_livre_para_gastar`. |
+| `_card_due_for` (056) | closing_day, due_day, date | Vencimento da fatura do ciclo que contém a data (compra a partir do dia de fechamento cai no ciclo seguinte). |
 | `_last_business_day` (052) | year, month | Último dia útil do mês (sexta se o último dia cair no fim de semana). |
-| `get_calendar_events` (049, redefinida na 050, 051 e 052) | start, end | Visão unificada de tudo que tem data no intervalo — contas fixas, dívidas, metas, fatura de cartão (fechada e em aberto, via `_next_cycle_due_date`), parcelas futuras de cartão e previstos/renda planejada. Saída vencida e não paga aparece em `current_date` (mesma regra da 043); entrada fica na data real. Pura leitura — nenhuma tabela nova; ver seção 9.2. |
+| `get_calendar_events` (049, redefinida na 050, 051, 052 e 056) | start, end | Devolve também `raw_date` (data original, antes de "vencido → hoje"; 056). Visão unificada de tudo que tem data no intervalo — contas fixas, dívidas, metas, fatura de cartão (fechada e em aberto, via `_next_cycle_due_date`), parcelas futuras de cartão e previstos/renda planejada. Saída vencida e não paga aparece em `current_date` (mesma regra da 043); entrada fica na data real. Pura leitura — nenhuma tabela nova; ver seção 9.2. |
 | `_next_cycle_due_date` (049) | closing_day, due_day | Data de vencimento projetada do ciclo de cartão **ainda aberto** (quando ele fechar e vencer) — mesma lógica de `_cycle_due_date`, um ciclo à frente. |
 
 Grants: toda função é `grant execute ... to authenticated` — nunca

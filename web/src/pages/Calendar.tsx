@@ -59,7 +59,7 @@ function Sheet({ children, onClose }: { children: React.ReactNode; onClose: () =
 
 function EventRow({ event, onDone }: { event: CalendarEvent; onDone: (e: CalendarEvent) => void }) {
   const color = event.is_income ? 'var(--primary)' : 'var(--red)'
-  const canMark = event.ref_table !== 'plan_income_items'
+  const isPlanIncome = event.ref_table === 'plan_income_items'
   return (
     <div className="flex items-center justify-between gap-2 border-b py-2.5 last:border-b-0" style={{ borderColor: 'var(--border)' }}>
       <div className="min-w-0 flex-1">
@@ -74,15 +74,13 @@ function EventRow({ event, onDone }: { event: CalendarEvent; onDone: (e: Calenda
       <span className="shrink-0 text-sm font-bold" style={{ color }}>
         {event.is_income ? '+' : '-'}{formatCurrency(Number(event.amount))}
       </span>
-      {canMark && (
-        <button
-          onClick={() => onDone(event)}
-          className="shrink-0 rounded-lg border px-2.5 py-1.5 text-xs font-bold"
-          style={{ borderColor: 'var(--primary)', color: 'var(--primary)' }}
-        >
-          Feito
-        </button>
-      )}
+      <button
+        onClick={() => onDone(event)}
+        className="shrink-0 rounded-lg border px-2.5 py-1.5 text-xs font-bold"
+        style={{ borderColor: 'var(--primary)', color: 'var(--primary)' }}
+      >
+        {isPlanIncome ? 'Recebido' : 'Feito'}
+      </button>
     </div>
   )
 }
@@ -240,7 +238,7 @@ function DayDialog({
     setBusyId(event.ref_id)
     setError('')
     try {
-      await markCalendarEventDone(event.ref_table, event.ref_id, event.event_date)
+      await markCalendarEventDone(event.ref_table, event.ref_id, event.event_date, event.raw_date, Number(event.amount))
       onChanged()
     } catch (e) {
       setError('Erro ao confirmar: ' + (e as Error).message)

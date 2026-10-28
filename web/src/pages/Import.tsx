@@ -4,7 +4,7 @@ import { detectAndParse } from '../lib/parsers/registry'
 import type { NormalizedRow } from '../lib/parsers/types'
 import {
   ensureMonth, importTransactionsBulk, fetchMonths, fetchTransactions, fetchImportCutoffDay, fetchCardsBasic,
-  autoGeneratePlan, fetchCalendarEvents, markCalendarEventDone, type CalendarEvent,
+  autoGeneratePlan, fetchCalendarEvents, markCalendarEventDone, absorbExpectation, type CalendarEvent,
 } from '../lib/api'
 import { matchPendingToLines } from '../lib/pendingMatch'
 import { formatCurrency, formatDate, MONTHS_PT, billingMonth } from '../lib/format'
@@ -70,7 +70,8 @@ async function suggestPending(cands: Candidate[]): Promise<void> {
       description: c.description,
       amount: c.amount,
       date: c.date,
-      isExpense: c.direction === 'saida' && !c.isCreditCardCharge && !c.dupLabel,
+      isExpense: c.direction === 'saida' && !c.dupLabel,
+      isCard: c.isCreditCardCharge,
     })),
   )
   matches.forEach((m, i) => {
@@ -93,6 +94,9 @@ const DUPLICATE_DESC_RATIO_MIN = 0.6
 // extrato parar de ser reconhecido como duplicata.
 function findDuplicate(row: NormalizedRow, existing: Transaction[]): string {
   for (const tx of existing) {
+    // Previsto não é duplicata: se a linha casar com ele, a importação o
+    // absorve (ver suggestPending/absorbExpectation).
+    if (tx.is_expectation) continue
     if (Math.abs(tx.amount - row.amount) > 0.01) continue
     const txDateRaw = tx.payment_date || tx.created_at
     if (!txDateRaw) continue
@@ -235,28 +239,33 @@ export function Import() {
     setImporting(true)
     setStatus('')
     try {
-      await importTransactionsBulk(
-        selected.map((c) => ({
-          month_id: c.monthId!,
-          type: c.direction === 'entrada' ? 'entrada_variavel' : 'saida_variavel',
-          description: c.description.trim() || 'Lançamento importado',
-          amount: c.amount,
-          category: c.category || 'Outros',
-          payment_method: c.isCreditCardCharge ? 'credito' : c.paymentMethod,
-          payment_date: c.date,
-          payment_time: c.time ?? null,
-          card_id: c.isCreditCardCharge ? cardId : null,
-          import_raw: c.importRaw,
-          is_investment_movement: c.isInvestmentLike,
-        })),
-      )
-      // Baixa as pendências que o usuário confirmou — depois do import, e
-      // uma falha aqui não desfaz os lançamentos já importados.
+      const toRow = (c: Candidate) => ({
+        month_id: c.monthId!,
+        type: c.direction === 'entrada' ? 'entrada_variavel' : 'saida_variavel',
+        description: c.description.trim() || 'Lançamento importado',
+        amount: c.amount,
+        category: c.category || 'Outros',
+        payment_method: c.isCreditCardCharge ? 'credito' : c.paymentMethod,
+        payment_date: c.date,
+        payment_time: c.time ?? null,
+        card_id: c.isCreditCardCharge ? cardId : null,
+        import_raw: c.importRaw,
+        is_investment_movement: c.isInvestmentLike,
+      })
+      // Linha que casou com um PREVISTO (ex.: parcela de cartão) e o usuário
+      // manteve marcada: confirma o previsto com os dados reais da linha, em
+      // vez de criar um lançamento novo — senão contaria em dobro.
+      const absorbs = (c: Candidate) => c.settle && c.pending?.ref_table === 'transactions'
+      await importTransactionsBulk(selected.filter((c) => !absorbs(c)).map(toRow))
       let settleErrors = 0
       for (const c of selected) {
         if (!c.settle || !c.pending) continue
         try {
-          await markCalendarEventDone(c.pending.ref_table, c.pending.ref_id, c.pending.event_date)
+          if (absorbs(c)) {
+            await absorbExpectation(c.pending.ref_id, toRow(c))
+          } else {
+            await markCalendarEventDone(c.pending.ref_table, c.pending.ref_id, c.pending.event_date)
+          }
         } catch {
           settleErrors += 1
         }
@@ -420,7 +429,10 @@ export function Import() {
                           className="mt-0.5 shrink-0"
                         />
                         <span>
-                          Baixar também: {c.pending.label} ({PENDING_SOURCE_LABEL[c.pending.source] ?? 'pendência'},{' '}
+                          {c.pending.ref_table === 'transactions'
+                            ? 'Confirmar o previsto (sem duplicar): '
+                            : 'Baixar também: '}
+                          {c.pending.label} ({PENDING_SOURCE_LABEL[c.pending.source] ?? 'pendência'},{' '}
                           {formatCurrency(Number(c.pending.amount))}
                           {c.pending.status === 'overdue' ? ', vencida' : `, vence ${formatDate(c.pending.event_date)}`})
                         </span>

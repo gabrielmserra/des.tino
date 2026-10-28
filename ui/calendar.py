@@ -252,15 +252,20 @@ class _DayEventsDialog(_BaseDialog):
         ctk.CTkLabel(row, text=f"{sign}{format_currency(float(e['amount']))}",
                      font=F(13, "bold"), text_color=color).grid(row=0, column=1, padx=(4, 8))
 
-        if e["ref_table"] != "plan_income_items":
-            ctk.CTkButton(row, text="Feito", width=64, height=28, corner_radius=7,
-                          fg_color=T.GREEN_DIM, hover_color=T.GREEN, text_color=T.GREEN,
-                          font=F(11, "bold"),
-                          command=lambda ev=e: self._mark_done(ev)).grid(row=0, column=2, padx=(0, 12))
+        is_plan_income = e["ref_table"] == "plan_income_items"
+        ctk.CTkButton(row, text="Recebido" if is_plan_income else "Feito",
+                      width=76 if is_plan_income else 64, height=28, corner_radius=7,
+                      fg_color=T.GREEN_DIM, hover_color=T.GREEN, text_color=T.GREEN,
+                      font=F(11, "bold"),
+                      command=lambda ev=e: self._mark_done(ev)).grid(row=0, column=2, padx=(0, 12))
 
     def _mark_done(self, e: dict) -> None:
         def op():
-            db.mark_calendar_event_done(e["ref_table"], e["ref_id"], date(self._year, self._month, self._day))
+            raw = e.get("raw_date")
+            db.mark_calendar_event_done(
+                e["ref_table"], e["ref_id"], date(self._year, self._month, self._day),
+                raw_date=date.fromisoformat(str(raw)[:10]) if raw else None,
+                amount=float(e["amount"]))
 
         def _work():
             err = None

@@ -723,6 +723,7 @@ export type CalendarEvent = {
   amount: number
   is_income: boolean
   status: 'pending' | 'overdue'
+  raw_date?: string | null
 }
 
 export type LivreParaGastar = {
@@ -766,12 +767,20 @@ export async function fetchCalendarEvents(startDate: string, endDate: string): P
 
 // Despacha a ação de "marcar como feito" do Calendário pro RPC/fluxo que
 // já existia antes dessa tela (ref_table vem de fetchCalendarEvents).
-// Entradas previstas do planejamento (plan_income_items) não têm ação
-// aqui — são só projeção, se resolvem quando uma entrada real é lançada.
+// Entrada prevista do planejamento (plan_income_items) vira "Recebido"
+// (migração 056): grava a data original + valor em plan_income_receipts e
+// ela some da projeção — pra salário que cai dividido em vários Pix.
 export async function markCalendarEventDone(
   refTable: string, refId: number, eventDate: string,
+  rawDate?: string | null, amount?: number,
 ): Promise<void> {
-  if (refTable === 'fixed_bill_instances') {
+  if (refTable === 'plan_income_items') {
+    const { error } = await supabase.from('plan_income_receipts').upsert(
+      { expected_date: (rawDate ?? eventDate).slice(0, 10), amount: Number(amount ?? 0) },
+      { onConflict: 'user_id,expected_date,amount' },
+    )
+    if (error) throw error
+  } else if (refTable === 'fixed_bill_instances') {
     await payFixedBillInstance(refId)
   } else if (refTable === 'fixed_bills') {
     // Conta fixa projetada (mês sem instância ainda): cria a instância do
@@ -1360,7 +1369,30 @@ export type ImportRow = {
 }
 
 export async function importTransactionsBulk(rows: ImportRow[]): Promise<number[]> {
+  if (rows.length === 0) return []
   const { data, error } = await supabase.rpc('import_transactions_bulk', { p_rows: rows })
   if (error) throw error
   return (data ?? []) as number[]
+}
+
+// Importação que casou uma linha com um PREVISTO (ex.: parcela de cartão
+// prevista): confirma o previsto com os dados reais da linha — mesmos
+// campos que um lançamento importado teria — em vez de criar um novo.
+// Réplica de database.py:absorb_expectation.
+export async function absorbExpectation(transactionId: number, row: ImportRow): Promise<void> {
+  const { error } = await supabase.from('transactions').update({
+    month_id: row.month_id,
+    description: row.description,
+    amount: row.amount,
+    category: row.category,
+    payment_method: row.payment_method,
+    payment_date: row.payment_date,
+    payment_time: row.payment_time,
+    card_id: row.card_id,
+    import_raw: row.import_raw,
+    is_investment_movement: row.is_investment_movement,
+    is_expectation: false,
+    imported: true,
+  }).eq('id', transactionId)
+  if (error) throw error
 }

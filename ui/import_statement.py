@@ -293,7 +293,8 @@ class ImportTab(ctk.CTkFrame):
             cand.settle_var = ctk.BooleanVar(value=True)
             ctk.CTkCheckBox(
                 row, variable=cand.settle_var, font=F(11, "bold"), text_color=T.GREEN,
-                text=f"Baixar também: {p['label']} ({kind}, "
+                text=("Confirmar o previsto (sem duplicar): " if p["ref_table"] == "transactions"
+                      else "Baixar também: ") + f"{p['label']} ({kind}, "
                      f"{format_currency(float(p['amount']))}, {when})",
                 checkbox_width=16, checkbox_height=16,
             ).grid(row=2, column=1, sticky="w", padx=(0, 8), pady=(0, 8))
@@ -345,9 +346,12 @@ class ImportTab(ctk.CTkFrame):
         selected_card_id = self._card_name_to_id.get(self._card_var.get())
 
         rows_payload = []
+        absorb = []   # (id do previsto, payload) — linha que casou com um PREVISTO
+        to_settle = []
         for c in selected:
             if c.month_id is None:
                 continue
+            settle = c.pending and c.settle_var is not None and c.settle_var.get()
             tx_type = "entrada_variavel" if c.row.direction == "entrada" else "saida_variavel"
             if c.is_credit_card_charge:
                 method_key = "credito"
@@ -355,7 +359,7 @@ class ImportTab(ctk.CTkFrame):
             else:
                 method_key = _LABEL_TO_METHOD_KEY.get(c.method_var.get(), "outro")
                 card_id = None
-            rows_payload.append({
+            payload = {
                 "month_id":       c.month_id,
                 "type":           tx_type,
                 "description":    c.desc_var.get().strip() or c.row.description,
@@ -367,10 +371,16 @@ class ImportTab(ctk.CTkFrame):
                 "card_id":        card_id,
                 "import_raw":     c.row.description,
                 "is_investment_movement": c.row.is_investment_like,
-            })
-
-        to_settle = [c.pending for c in selected
-                     if c.pending and c.settle_var is not None and c.settle_var.get()]
+            }
+            # Previsto casado (ex.: parcela de cartão prevista): confirma o
+            # previsto com os dados reais da linha, em vez de criar um
+            # lançamento novo — senão contaria em dobro.
+            if settle and c.pending["ref_table"] == "transactions":
+                absorb.append((c.pending["ref_id"], payload))
+            else:
+                rows_payload.append(payload)
+                if settle:
+                    to_settle.append(c.pending)
 
         self._confirm_btn.configure(state="disabled", text="Importando…")
 
@@ -380,6 +390,11 @@ class ImportTab(ctk.CTkFrame):
                 # Baixa as pendências confirmadas — depois do import, e uma
                 # falha aqui não desfaz os lançamentos já importados.
                 errors = 0
+                for tx_id, payload in absorb:
+                    try:
+                        db.absorb_expectation(tx_id, payload)
+                    except Exception:
+                        errors += 1
                 for p in to_settle:
                     try:
                         db.mark_calendar_event_done(
@@ -438,8 +453,8 @@ def _suggest_pending(cands: List[_Candidate]) -> None:
         "description": c.row.description,
         "amount":      c.row.amount,
         "date":        c.row.date,
-        "is_expense":  (c.row.direction == "saida" and not c.is_credit_card_charge
-                        and not c.dup_label),
+        "is_expense":  c.row.direction == "saida" and not c.dup_label,
+        "is_card":     c.is_credit_card_charge,
     } for c in cands])
     for c, m in zip(cands, matches):
         c.pending = m
@@ -462,6 +477,10 @@ def _find_duplicate(row: NormalizedRow, existing: List[dict]) -> str:
     lançamento já importado (uso normal do app) faz reimportar o mesmo
     extrato parar de ser reconhecido como duplicata."""
     for tx in existing:
+        # Previsto não é duplicata: se a linha casar com ele, a importação
+        # o absorve (ver _suggest_pending/absorb_expectation).
+        if tx.get("is_expectation"):
+            continue
         if abs(float(tx.get("amount") or 0) - row.amount) > 0.01:
             continue
         tx_date_raw = tx.get("payment_date") or tx.get("created_at")

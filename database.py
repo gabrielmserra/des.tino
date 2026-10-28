@@ -211,6 +211,30 @@ def update_transaction(
     _invalidate(month_id)
 
 
+def absorb_expectation(transaction_id: int, row: dict) -> None:
+    """Importação que casou uma linha com um PREVISTO (ex.: parcela de
+    cartão prevista): confirma o previsto com os dados reais da linha —
+    mesmos campos que um lançamento importado teria — em vez de criar um
+    novo. Réplica de api.ts:absorbExpectation."""
+    pd = row.get("payment_date")
+    pt = row.get("payment_time")
+    get_client().table("transactions").update({
+        "month_id":       row["month_id"],
+        "description":    row["description"],
+        "amount":         row["amount"],
+        "category":       row.get("category") or "Outros",
+        "payment_method": row.get("payment_method"),
+        "payment_date":   pd.isoformat() if pd else None,
+        "payment_time":   pt.isoformat() if pt else None,
+        "card_id":        row.get("card_id"),
+        "import_raw":     row.get("import_raw"),
+        "is_investment_movement": bool(row.get("is_investment_movement")),
+        "is_expectation": False,
+        "imported":       True,
+    }).eq("id", transaction_id).execute()
+    _tx_cache.clear()
+
+
 def import_transactions_bulk(rows: List[dict]) -> None:
     """Confirma uma importação de extrato/fatura: chama add_transaction pra
     cada linha já revisada pelo usuário. Cada dict precisa ter month_id,
@@ -1797,12 +1821,20 @@ def get_calendar_events(start_date: date, end_date: date) -> List[dict]:
     return resp.data or []
 
 
-def mark_calendar_event_done(ref_table: str, ref_id: int, event_date: date) -> None:
+def mark_calendar_event_done(ref_table: str, ref_id: int, event_date: date,
+                             raw_date: Optional[date] = None, amount: Optional[float] = None) -> None:
     """Despacha a ação de "marcar como feito" do Calendário pro RPC/fluxo
     que já existia antes dessa tela (ref_table vem de get_calendar_events).
-    Entradas previstas do planejamento (plan_income_items) não têm ação
-    aqui — são só projeção, se resolvem quando uma entrada real é lançada."""
-    if ref_table == "fixed_bill_instances":
+    Entrada prevista do planejamento (plan_income_items) vira "Recebido"
+    (migração 056): grava a data original + valor em plan_income_receipts
+    e ela some da projeção — pra salário que cai dividido em vários Pix,
+    que a regra automática não reconhece."""
+    if ref_table == "plan_income_items":
+        get_client().table("plan_income_receipts").upsert({
+            "expected_date": (raw_date or event_date).isoformat(),
+            "amount": float(amount or 0),
+        }, on_conflict="user_id,expected_date,amount").execute()
+    elif ref_table == "fixed_bill_instances":
         pay_fixed_bill_instance(ref_id)
     elif ref_table == "fixed_bills":
         # Conta fixa projetada (mês sem instância ainda): cria a instância
